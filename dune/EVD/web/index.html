@@ -1,1 +1,97 @@
-evd.html
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>eeveedee</title>
+    <style>
+      body { margin: 0; }
+      canvas { margin : 0;}
+      div { margin : 0;}
+      button { background-color: black; color : green; border-color: green; height : 2em;}
+
+      select {  background-color: black; color : green; border-color: green; height : 2em;
+      /* Hide the dropdown arrow */
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      -ms-appearance: none;
+       -o-appearance: none;
+      appearance: none;
+ }
+
+
+.dropbtn {
+  background-color: black;
+  color: green;
+}
+
+/* The container <div> - needed to position the dropdown content */
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+/* Dropdown Content (Hidden by Default) */
+.dropdown-content {
+  display: none;
+  position: absolute;
+  background-color: black; // #f1f1f1;
+  z-index: 1;
+}
+
+/* Links inside the dropdown */
+.dropdown-content a {
+  color: green; // black;
+  text-decoration: none;
+  display: block;
+}
+
+/* Change color of dropdown links on hover */
+.dropdown-content a:hover {color: black; background-color: green;}
+
+/* Show the dropdown menu on hover */
+.dropdown:hover .dropdown-content {display: block;}
+
+/* Change the background color of the dropdown button when the dropdown content is shown */
+.dropdown:hover .dropbtn {color: black; background-color: green;}
+    </style>
+
+
+    <script src="./three.js-master/build/three.js"></script>
+    <script src="./three.js-master/examples/js/controls/OrbitControls.js"></script>
+
+    <script src="coords.js"></script>
+
+  </head>
+  <body bgcolor="black">
+    <!-- "Float" buttons over the display -->
+    <div style="position:absolute">
+      <button type="button" onclick="ZView()">Z</button>
+      <button type="button" onclick="UView()">U</button>
+      <button type="button" onclick="VView()">V</button>
+      <button type="button" onclick="LightDark(event)">Light</button>
+      <button type="button" onclick="ToggleRawDigits(event)">Hide RawDigits</button>
+      <button type="button" onclick="ToggleWires(event)">Show Wires</button>
+      <button type="button" onclick="ToggleHits(event)">Show Hits</button>
+      <!-- <button type="button" onclick="ToggleSpacePoints(event)">Show SpacePoints</button> -->
+
+<!--       <div class="dropdown"> -->
+<!--         <button class="dropbtn">Dropdown</button> -->
+<!--         <div class="dropdown-content"> -->
+<!--           <a href="#">Link 1</a> -->
+<!--           <a href="#">Link 2</a> -->
+<!--           <a href="#">Link 3</a> -->
+<!--           <button type="button">Button</a> -->
+<!--         </div> -->
+<!--       </div> -->
+
+<!-- <select> -->
+<!--   <option value="volvo">Volvo</option> -->
+<!--   <option value="saab">Saab</option> -->
+<!--   <option value="opel">Opel</option> -->
+<!--   <option value="audi">Audi</option> -->
+<!-- </select> -->
+
+    </div> <!-- position:absolute -->
+    <script src="evd.js"></script>
+  </body>
+</html>

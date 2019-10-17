@@ -3,11 +3,11 @@
 
 var scene = new THREE.Scene();
 
-//var camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1e6 );
+var camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1e6 );
 
-var camera = new THREE.OrthographicCamera( -512, +512,
-                                           -512*window.innerHeight/window.innerWidth, +512*window.innerHeight/window.innerWidth,
-                                           0.1, 1000 );
+//var camera = new THREE.OrthographicCamera( -512, +512,
+//                                           -512*window.innerHeight/window.innerWidth, +512*window.innerHeight/window.innerWidth,
+//                                           0.1, 1000 );
 
 var renderer = new THREE.WebGLRenderer();
 // I have no idea why these 4 pixels are necessary
@@ -19,6 +19,125 @@ renderer.alpha = true;
 renderer.antialias = true;
 
 document.body.appendChild( renderer.domElement );
+
+function ArrToVec(arr)
+{
+    return new THREE.Vector3(arr[0], arr[1], arr[2]);
+}
+
+var mat_lin = new THREE.LineBasicMaterial({color: 'gray'});
+
+var mat_hit = new THREE.MeshBasicMaterial( { color: 0xffffff, side: THREE.DoubleSide } );
+
+function TextureMaterial(fname, col){
+    var mat = new THREE.MeshBasicMaterial( { color: col, side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
+    var tex = new THREE.TextureLoader().load(fname,
+                                             undefined, //function(t){console.log('loaded', fname);},
+                                             undefined,
+                                             function(err){console.log('error loading', fname, err);});
+    tex.flipY = false; // some disagreement between conventions...
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.LinearFilter;
+    //    tex.generateMipmaps = false;
+    mat.alphaMap = tex;
+    return mat;
+}
+
+
+var outlines = new THREE.Group();
+var digs = new THREE.Group();
+var wires = new THREE.Group();
+var hits = new THREE.Group();
+
+scene.add(outlines);
+scene.add(digs);
+scene.add(wires);
+scene.add(hits);
+
+for(key in planes){
+    var plane = planes[key];
+    var c = ArrToVec(plane.center);
+    var a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
+    var d = ArrToVec(plane.normal).multiplyScalar(plane.nticks*Math.abs(plane.tick_pitch)/2.); // drift direction
+
+    c.add(d); // center of the drift direction too
+
+    //    console.log('C, A, D: ', c, a, d);
+
+    var p1 = c.clone(); var p2 = c.clone(); var p3 = c.clone(); var p4 = c.clone();
+
+    p1.add(a);
+    p2.add(a);
+    p2.add(d);
+    p3.add(d);
+    p3.addScaledVector(a, -1);
+    p4.addScaledVector(a, -1);
+    p1.addScaledVector(d, -1);
+    p4.addScaledVector(d, -1);
+
+    /*
+    var p1 = c.addScaledVector(a, +1).addScaledVector(d, -1);
+    var p2 = c.addScaledVector(a, +1).addScaledVector(d, +1);
+    var p3 = c.addScaledVector(a, -1).addScaledVector(d, +1);
+    var p4 = c.addScaledVector(a, -1).addScaledVector(d, -1);
+    */
+
+    //    console.log('Ps: ', p1, p2, p3, p4);
+
+    var geom = new THREE.BufferGeometry();
+    var vertices = new Float32Array( [p1.x, p1.y, p1.z,
+                                      p2.x, p2.y, p2.z,
+                                      p3.x, p3.y, p3.z,
+
+                                      p1.x, p1.y, p1.z,
+                                      p3.x, p3.y, p3.z,
+                                      p4.x, p4.y, p4.z]);
+
+    // TODO think carefully about geometry
+    var uvs = new Float32Array( [1, 0,
+                                 1, 1,
+                                 0, 1,
+
+                                 1, 0,
+                                 0, 1,
+                                 0, 0] );
+
+    // itemSize = 3 because there are 3 values (components) per vertex
+    geom.addAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
+
+    geom.addAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
+
+    for(var sign = -1; sign <= +1; sign += 2){
+        var mat = TextureMaterial("digits/"+key+(sign < 0 ? "_neg" : "_pos")+".png",
+                                  (sign < 0 ? 0x0000ff : 0xff0000));
+
+        var d = new THREE.Mesh( geom, mat );
+        d.layers.set(plane.view);
+        digs.add(d);
+    }
+
+    mat = TextureMaterial("wires/"+key+".png", 0x008000);
+    var w = new THREE.Mesh( geom, mat );
+    w.layers.set(plane.view);
+    wires.add(w);
+
+    var edges = new THREE.EdgesGeometry( geom );
+    var line = new THREE.LineSegments( edges, mat_lin );
+
+    outlines.add(line);
+
+    line.layers.set(plane.view);
+}
+
+camera.position.x = 200;
+camera.position.y = 200;
+camera.position.z = 500;
+
+
+if(false){
+
+
+
 
 // Only looks good on initial page load :(
 //renderer.domElement.style.width = '100%';
@@ -197,21 +316,6 @@ for(var x = 0; x < wires.length; ++x){
 // scene.add(wire_mesh);
 
 
-var mat_lin = new THREE.LineBasicMaterial( { color: 'gray'});
-
-var mat_hit = new THREE.MeshBasicMaterial( { color: 0xffffff, side: THREE.DoubleSide } );
-
-function TextureMaterial(fname, col){
-    var mat = new THREE.MeshBasicMaterial( { color: col, side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
-    var tex = new THREE.TextureLoader().load(fname, function(t){console.log('loaded', fname);}, undefined, function(err){console.log('error loading', fname, err);});
-    tex.flipY = false; // some disagreement between conventions...
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.LinearFilter;
-    //    tex.generateMipmaps = false;
-    mat.alphaMap = tex;
-    return mat;
-}
-
 function MakePlane(plane, name, outlines, digs, wires, hits){
     var N = plane.nwires;
     var pitch = plane.pitch;
@@ -295,13 +399,17 @@ scene.add(hits);
 //outlines[0].visible = false;
 //outlines[1].visible = false;
 
+} // end hacked IF
+
 var controls = new THREE.OrbitControls( camera, renderer.domElement );
 //controls.target = group;
 //controls.autoRotate = true;
 //controls.enableDamping = true;
 //camera.position.set( 0, 20, 100 );
-camera.position.z = 500;
 
+//camera.position.z = 500;
+
+/*
 controls.target.set( 0, 0, 0 ); // view direction perpendicular to XY-plane
 //controls.enableRotate = false;
 controls.enableZoom = true;
@@ -311,6 +419,7 @@ controls.mouseButtons = {
     MIDDLE: THREE.MOUSE.DOLLY,
     RIGHT: THREE.MOUSE.ROTATE
 }
+*/
 
 console.log(controls.touches);
 
@@ -322,13 +431,14 @@ console.log(controls.touches);
 
 console.log(controls.touches);
 
-controls.screenSpacePanning = true;
+//controls.screenSpacePanning = true;
 
 controls.update();
 
 //camera.lookAt(mx, my, mz);
 
-camera.layers.set(2); // only Z view
+//camera.layers.set(2); // only Z view
+
 
 function animate() {
     requestAnimationFrame( animate );
@@ -351,13 +461,17 @@ function ToggleWires(event){Toggle(wires, event, 'Wires');}
 function ToggleHits(event){Toggle(hits, event, 'Hits');}
 function ToggleSpacePoints(event){Toggle(group, event, 'SpacePoints');}
 
+digs.visible = false;
 wires.visible = false;
 hits.visible = false;
-group.visible = false;
+//group.visible = false;
+
+ThreeDView();
 
 function ZView(){camera.layers.set(2);}
 function UView(){camera.layers.set(0);}
 function VView(){camera.layers.set(1);}
+function ThreeDView(){camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2);}
 
 function LightDark(event)
 {
@@ -387,6 +501,10 @@ function onWindowResize() {
     // Keep aspect ratio correct
     camera.top = -512*window.innerHeight/window.innerWidth;
     camera.bottom = +512*window.innerHeight/window.innerWidth;
+
+    // For 3D camera
+    camera.aspect = window.innerWidth / window.innerHeight;
+
     camera.updateProjectionMatrix();
 }
 

@@ -296,7 +296,10 @@ void WebEVD::analyze(const art::Event& evt)
     const unsigned int nwires = planegeo.Nwires();
     const double pitch = planegeo.WirePitch();
     const TVector3 c = planegeo.GetCenter();
-    //    const auto d = planegeo.GetIncreasingWireDirection();
+
+    const auto d = planegeo.GetIncreasingWireDirection();
+    //    const auto dwire = planegeo.GetWireDirection();
+    const TVector3 n = planegeo.GetNormalDirection();
 
     const int nticks = height; // HACK from earlier
     const double tick_pitch = detprop->ConvertTicksToX(1, plane) - detprop->ConvertTicksToX(0, plane);
@@ -308,6 +311,8 @@ void WebEVD::analyze(const art::Event& evt)
          << "nticks: " << nticks << ", "
          << "tick_pitch: " << tick_pitch << ", "
          << "center: [" << c.X() << ", " << c.Y() << ", " << c.Z() << "], "
+         << "across: [" << d.X() << ", " << d.Y() << ", " << d.Z() << "], "
+         << "normal: [" << n.X() << ", " << n.Y() << ", " << n.Z() << "], "
          << "hits: [";
     for(const recob::Hit& hit: plane_hits[plane]){
       outf << "{wire: " << geo::WireID(hit.WireID()).Wire

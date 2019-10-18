@@ -479,7 +479,8 @@ function animate() {
 
 function Toggle(col, event, str){
     col.visible = !col.visible;
-    event.target.innerHTML = (col.visible ? 'Hide ' : 'Show ')+str;
+    // Tick and Cross emojis respectively
+    event.target.innerHTML = (col.visible ? '&#x2705 ' : '&#x274c ')+str;
 }
 
 function ToggleRawDigits(event){Toggle(digs, event, 'RawDigits');}
@@ -503,14 +504,14 @@ function UView(){camera.layers.set(0);}
 function VView(){camera.layers.set(1);}
 function ThreeDView(){camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2);}
 
-function Theme(newCol)
+function Theme(theme)
 {
-    renderer.setClearColor(newCol);
-    document.body.style.backgroundColor = newCol;
+    document.body.className = theme;
 
-    for(let elem of document.querySelectorAll('button')){
-        elem.style.backgroundColor = newCol;
-    }
+    // Doesn't work
+    // renderer.setClearColor(window.getComputedStyle(document.body, null).getPropertyValue('backgroundColor'));
+
+    if(theme == 'darktheme') renderer.setClearColor('black'); else renderer.setClearColor('white');
 }
 
 window.addEventListener( 'resize', onWindowResize, false );

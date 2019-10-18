@@ -7,11 +7,14 @@
       body { margin: 0; }
       canvas { margin : 0;}
       div { margin : 0;}
-      button {
-      background-color: black; color : green; border-color: green; height : 2em;
-      }
 
-      select {  background-color: black; color : green; border-color: green; height : 2em;
+      body.darktheme { background-color: black; }
+      body.lighttheme { background-color: white; }
+
+      .darktheme button { background-color: black; color : green; border-color: green; height : 2em; }
+      .lighttheme button { background-color: white; border-color: gray; height : 2em; }
+
+      .darktheme select { background-color: black; color : green; border-color: green; height : 2em;
 
       /* Hide the dropdown arrow */
       -webkit-appearance: none;
@@ -49,9 +52,13 @@
     <script src="coords.js"></script>
 
   </head>
-  <body bgcolor="black">
+
+  <body class="darktheme">
     <!-- "Float" buttons over the display -->
     <div style="position:absolute">
+
+      <button onclick="location.reload(true)">&#x1f504 Reload</button>
+
       <div class="dropdown">
         <button>View...</button>
         <div class="dropdown-content">
@@ -65,19 +72,17 @@
       <div class="dropdown">
         <button>Theme...</button>
         <div class="dropdown-content">
-          <button onclick="Theme('black')">Dark</button>
-          <button onclick="Theme('white')">Light</button>
+          <button onclick="Theme('darktheme')">Dark</button>
+          <button onclick="Theme('lighttheme')">Light</button>
         </div>
       </div>
 
-      <button type="button" onclick="ToggleRawDigits(event)">Hide RawDigits</button>
-      <button type="button" onclick="ToggleWires(event)">Show Wires</button>
-      <button type="button" onclick="ToggleHits(event)">Show Hits</button>
-      <button type="button" onclick="ToggleTracks(event)">Hide Tracks</button>
-      <button type="button" onclick="ToggleTruth(event)">Show Truth</button>
+      <button onclick="ToggleRawDigits(event)">RawDigits</button>
+      <button onclick="ToggleWires(event)">Wires</button>
+      <button onclick="ToggleHits(event)">Hits</button>
+      <button onclick="ToggleTracks(event)">Tracks</button>
+      <button onclick="ToggleTruth(event)">Truth</button>
       <!-- <button type="button" onclick="ToggleSpacePoints(event)">Show SpacePoints</button> -->
-
-
       
 
 <!-- <select> -->

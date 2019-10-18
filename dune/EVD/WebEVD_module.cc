@@ -14,6 +14,7 @@
 #include "lardataobj/RecoBase/Hit.h"
 #include "lardataobj/RecoBase/SpacePoint.h"
 #include "lardataobj/RecoBase/Wire.h"
+#include "lardataobj/RecoBase/Track.h"
 
 #include "larsim/MCCheater/BackTrackerService.h"
 
@@ -322,6 +323,38 @@ void WebEVD::analyze(const art::Event& evt)
     outf << "]}," << std::endl;
   }
   outf << "};" << std::endl;
+
+  art::Handle<std::vector<recob::Track>> tracks;
+  evt.getByLabel("pandora", tracks);
+
+  outf << "tracks = [" << std::endl;
+  for(const recob::Track& track: *tracks){
+    outf << "  [\n    ";
+    const recob::TrackTrajectory& traj = track.Trajectory();
+    for(unsigned int j = traj.FirstValidPoint(); j <= traj.LastValidPoint(); ++j){
+      const geo::Point_t pt = traj.LocationAtPoint(j);
+      outf << "[" << pt.X() << ", " << pt.Y() << ", " << pt.Z() << "], ";
+    }
+    outf << "\n  ]," << std::endl;
+  }
+  outf << "];" << std::endl;
+
+
+  art::Handle<std::vector<simb::MCParticle>> parts;
+  evt.getByLabel("largeant", parts);
+
+  outf << "truth_trajs = [" << std::endl;
+  for(const simb::MCParticle& part: *parts){
+    const int apdg = abs(part.PdgCode());
+    if(apdg == 12 || apdg == 14 || apdg == 16) continue; // decay neutrinos
+    outf << "  [\n    ";
+    for(unsigned int j = 0; j < part.NumberTrajectoryPoints(); ++j){
+      outf << "[" << part.Vx(j) << ", " << part.Vy(j) << ", " << part.Vz(j) << "], ";
+    }
+    outf << "\n  ]," << std::endl;
+  }
+  outf << "];" << std::endl;
+
 
   for(auto it: plane_dig_imgs_pos) WriteToPNG("digits/"+it.first.toString()+"_pos.png", *it.second);
   for(auto it: plane_dig_imgs_neg) WriteToPNG("digits/"+it.first.toString()+"_neg.png", *it.second);

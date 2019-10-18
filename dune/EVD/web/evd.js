@@ -48,11 +48,15 @@ var outlines = new THREE.Group();
 var digs = new THREE.Group();
 var wires = new THREE.Group();
 var hits = new THREE.Group();
+var reco_tracks = new THREE.Group();
+var truth = new THREE.Group();
 
 scene.add(outlines);
 scene.add(digs);
 scene.add(wires);
 scene.add(hits);
+scene.add(reco_tracks);
+scene.add(truth);
 
 for(key in planes){
     var plane = planes[key];
@@ -128,6 +132,28 @@ for(key in planes){
 
     line.layers.set(plane.view);
 }
+
+colors = ['red', 'blue', 'green', 'orange', 'purple', 'skyblue'];
+
+function add_tracks(trajs, group){
+    var i = 0;
+    for(let track of trajs){
+        col = colors[i%colors.length];
+        i += 1;
+        var mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
+        var trkgeom = new THREE.BufferGeometry();
+        ptarr = [];
+        for(let pt of track) ptarr = ptarr.concat(pt);
+        trkgeom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
+
+        var trkline = new THREE.Line(trkgeom, mat_trk);
+        trkline.layers.enable(0); trkline.layers.enable(1); trkline.layers.enable(2);
+        group.add(trkline);
+    }
+}
+
+add_tracks(tracks, reco_tracks);
+add_tracks(truth_trajs, truth);
 
 camera.position.x = 200;
 camera.position.y = 200;
@@ -460,10 +486,14 @@ function ToggleRawDigits(event){Toggle(digs, event, 'RawDigits');}
 function ToggleWires(event){Toggle(wires, event, 'Wires');}
 function ToggleHits(event){Toggle(hits, event, 'Hits');}
 function ToggleSpacePoints(event){Toggle(group, event, 'SpacePoints');}
+function ToggleTracks(event){Toggle(reco_tracks, event, 'Tracks');}
+function ToggleTruth(event){Toggle(truth, event, 'Truth');}
 
-digs.visible = false;
+digs.visible = false; //true;
 wires.visible = false;
 hits.visible = false;
+reco_tracks.visible = true;
+truth.visible = false;
 //group.visible = false;
 
 ThreeDView();

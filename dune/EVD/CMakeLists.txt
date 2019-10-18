@@ -38,6 +38,7 @@ art_make( BASENAME_ONLY
                         ${ROOT_GDML}
 			${ROOT_BASIC_LIB_LIST}
                         png
+                        nusimdata_SimulationBase
         )
 
 install_headers()

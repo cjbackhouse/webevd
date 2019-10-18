@@ -503,24 +503,14 @@ function UView(){camera.layers.set(0);}
 function VView(){camera.layers.set(1);}
 function ThreeDView(){camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2);}
 
-function LightDark(event)
+function Theme(newCol)
 {
-    if(document.body.style.backgroundColor != 'white'){
-        newCol = 'white';
-        event.target.innerHTML = 'Dark';
-    }
-    else{
-        newCol = 'black'
-        event.target.innerHTML = 'Light';
-    }
-
     renderer.setClearColor(newCol);
     document.body.style.backgroundColor = newCol;
 
     for(let elem of document.querySelectorAll('button')){
         elem.style.backgroundColor = newCol;
     }
-
 }
 
 window.addEventListener( 'resize', onWindowResize, false );

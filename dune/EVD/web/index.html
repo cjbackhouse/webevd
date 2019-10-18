@@ -58,6 +58,7 @@
     <div style="position:absolute">
 
       <button onclick="location.reload(true)">&#x1f504 Reload</button>
+      <!-- <button onclick="document.documentElement.requestFullscreen();">Fullscreen</button> -->
 
       <div class="dropdown">
         <button>View...</button>
@@ -77,12 +78,12 @@
         </div>
       </div>
 
-      <button onclick="ToggleRawDigits(event)">RawDigits</button>
-      <button onclick="ToggleWires(event)">Wires</button>
-      <button onclick="ToggleHits(event)">Hits</button>
-      <button onclick="ToggleTracks(event)">Tracks</button>
-      <button onclick="ToggleTruth(event)">Truth</button>
-      <!-- <button type="button" onclick="ToggleSpacePoints(event)">Show SpacePoints</button> -->
+      <button id="rawdigits" onclick="ToggleRawDigits()"></button>
+      <button id="wires" onclick="ToggleWires()"></button>
+      <button id="hits" onclick="ToggleHits()"></button>
+      <button id="tracks" onclick="ToggleTracks()"></button>
+      <button id="truth" onclick="ToggleTruth()"></button>
+      <!-- <button type="button" onclick="ToggleSpacePoints()">Show SpacePoints</button> -->
       
 
 <!-- <select> -->

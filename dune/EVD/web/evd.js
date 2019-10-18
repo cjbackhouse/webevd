@@ -477,25 +477,29 @@ function animate() {
     return;
 }
 
-function Toggle(col, event, str){
-    col.visible = !col.visible;
+function SetVisibility(col, state, id, str)
+{
+    col.visible = state;
     // Tick and Cross emojis respectively
-    event.target.innerHTML = (col.visible ? '&#x2705 ' : '&#x274c ')+str;
+    document.getElementById(id).innerHTML = (state ? '&#x2705 ' : '&#x274c ')+str;
 }
 
-function ToggleRawDigits(event){Toggle(digs, event, 'RawDigits');}
-function ToggleWires(event){Toggle(wires, event, 'Wires');}
-function ToggleHits(event){Toggle(hits, event, 'Hits');}
-function ToggleSpacePoints(event){Toggle(group, event, 'SpacePoints');}
-function ToggleTracks(event){Toggle(reco_tracks, event, 'Tracks');}
-function ToggleTruth(event){Toggle(truth, event, 'Truth');}
+function Toggle(col, id, str){
+    SetVisibility(col, !col.visible, id, str);
+}
 
-digs.visible = false; //true;
-wires.visible = false;
-hits.visible = false;
-reco_tracks.visible = true;
-truth.visible = false;
-//group.visible = false;
+function ToggleRawDigits(){Toggle(digs, 'rawdigits', 'RawDigits');}
+function ToggleWires(){Toggle(wires, 'wires', 'Wires');}
+function ToggleHits(){Toggle(hits, 'hits', 'Hits');}
+function ToggleSpacePoints(){Toggle(group, 'spacepoints', 'SpacePoints');}
+function ToggleTracks(){Toggle(reco_tracks, 'tracks', 'Tracks');}
+function ToggleTruth(){Toggle(truth, 'truth', 'Truth');}
+
+SetVisibility(digs, false, 'rawdigits', 'RawDigits');
+SetVisibility(wires, false, 'wires', 'Wires');
+SetVisibility(hits, false, 'hits', 'Hits');
+SetVisibility(reco_tracks, false, 'tracks', 'Tracks');
+SetVisibility(truth, true, 'truth', 'Truth');
 
 ThreeDView();
 

@@ -15,6 +15,10 @@ services:
   @table::dunefd_services
 }
 
+# Faster
+services.BackTrackerService: @erase
+services.PhotonBackTrackerService: @erase
+
 physics:
 {
   analyzers:

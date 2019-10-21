@@ -480,20 +480,30 @@ controls.update();
 
 //camera.layers.set(2); // only Z view
 
+var animReentrant = false;
 
 function animate() {
-    //    requestAnimationFrame( animate );
+    if(animReentrant) return;
+    animReentrant = true;
 
-//    group.rotation.x += 0.01;
-//    group.rotation.y += 0.01;
-//    cube2.rotation.z += 0.02;
-//    camera.position.x += .01;
+    var now = performance.now(); // can be passed as an argument, but only for requestAnimationFrame callbacks
+    if(animStart != null){
+        var frac = (now-animStart)/1000.; // 1sec anim
+        if(frac > 1){
+            frac = 1;
+            animStart = null;
+        }
 
-//    controls.update();
+        console.log(now, animStart, frac);
+        animFunc(frac);
+    }
+
     renderer.render( scene, camera );
 
-    console.log(camera.position);
-    console.log(camera.quaternion);
+    if(animStart != null) requestAnimationFrame(animate);
+
+    animReentrant = false;
+
     return;
 }
 
@@ -522,38 +532,133 @@ SetVisibility(hits, false, 'hits', 'Hits');
 SetVisibility(reco_tracks, false, 'tracks', 'Tracks');
 SetVisibility(truth, true, 'truth', 'Truth');
 
+var animStart = null;
+
 ThreeDView();
 
 function ZView(){camera.layers.set(2); requestAnimationFrame(animate);}
 function UView(){camera.layers.set(0); requestAnimationFrame(animate);}
 function VView(){camera.layers.set(1); requestAnimationFrame(animate);}
-function ThreeDView(){camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2); requestAnimationFrame(animate);}
+function ThreeDView(){
+    camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2); 
+
+    camera.up.set(0, 1, 0);
+
+    Perspective();
+
+
+    controls.enableRotate = true;
+
+    controls.mouseButtons = {
+        LEFT: THREE.MOUSE.ROTATE,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.PAN
+    }
+
+    controls.update();
+
+    requestAnimationFrame(animate);
+}
+
+function ZView2D(){
+    var initPos = camera.position.clone();
+
+    var initDiff = camera.position.clone();
+    initDiff.sub(controls.target);
+    initDiff.normalize();
+
+    var targetDiff = new THREE.Vector3(0, 1, 0);
+
+    var target = controls.target.clone();
+    var dist = target.distanceTo(camera.position);
+    target.y += dist;
+
+    var initFOV = camera.fov;
+    var targetFOV = 1e-6;
+
+    var initUp = camera.up.clone();
+    var targetUp = new THREE.Vector3(1, 0, 0);
+ 
+    animStart = performance.now();
+    animFunc = function(frac){
+        var newDiff = new THREE.Vector3();
+        newDiff.addScaledVector(initDiff, 1-frac);
+        newDiff.addScaledVector(targetDiff, frac);
+        newDiff.normalize();
+
+        var mag = camera.position.distanceTo(controls.target);
+
+        camera.position.copy(controls.target);
+        camera.position.addScaledVector(newDiff, mag);
+
+        var newUp = new THREE.Vector3();
+        newUp.addScaledVector(initUp, 1-frac);
+        newUp.addScaledVector(targetUp, frac);
+        camera.up.copy(newUp);
+
+        UpdateFOV(camera, initFOV*(1-frac) + targetFOV*frac);
+
+        controls.update();
+
+        if(frac == 1) ZView();
+    }
+
+    requestAnimationFrame(animate);
+
+    //    camera.up.set(1, 0, 0);
+
+    controls.enableRotate = false;
+
+    controls.mouseButtons = {
+        LEFT: THREE.MOUSE.PAN,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: null // THREE.MOUSE.ROTATE
+    }
+
+    controls.update();
+}
 
 function UpdateFOV(cam, newFOV)
 {
+    console.log('update fov ', cam, newFOV);
+
     var diff = cam.position.clone();
     diff.sub(controls.target);
-    diff.multiplyScalar(cam.fov/newFOV); // todo trig?
+    diff.multiplyScalar(cam.fov/newFOV);//Math.sin(cam.fov*3.14/180)/Math.sin(newFOV*3.14/180));
     diff.add(controls.target);
     cam.position.copy(diff);
-    controls.update();
+    //    controls.update();
 
     cam.near *= cam.fov/newFOV;
     cam.far *= cam.fov/newFOV;
     cam.fov = newFOV;
     cam.updateProjectionMatrix();
 
-    requestAnimationFrame(animate);
+    //    requestAnimationFrame(animate);
+}
+
+function AnimateFOV(targetFOV)
+{
+    if(camera.fov != targetFOV){
+        var initFOV = camera.fov;
+ 
+        animStart = performance.now();
+        animFunc = function(frac){
+            UpdateFOV(camera, initFOV*(1-frac) + targetFOV*frac);
+        }
+
+        requestAnimationFrame(animate);
+    }
 }
 
 function Perspective()
 {
-    UpdateFOV(camera, 50);
+    AnimateFOV(50);
 }
 
 function Ortho()
 {
-    UpdateFOV(camera, 1e-6);
+    AnimateFOV(1e-6);
 }
 
 function Theme(theme)

@@ -3,7 +3,7 @@
 
 var scene = new THREE.Scene();
 
-var camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1e6 );
+var camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 0.1, 1e6 );
 
 //var camera = new THREE.OrthographicCamera( -512, +512,
 //                                           -512*window.innerHeight/window.innerWidth, +512*window.innerHeight/window.innerWidth,
@@ -58,6 +58,9 @@ scene.add(hits);
 scene.add(reco_tracks);
 scene.add(truth);
 
+var com = new THREE.Vector3();
+var nplanes = 0;
+
 for(key in planes){
     var plane = planes[key];
     var c = ArrToVec(plane.center);
@@ -66,7 +69,8 @@ for(key in planes){
 
     c.add(d); // center of the drift direction too
 
-    //    console.log('C, A, D: ', c, a, d);
+    com.add(c);
+    nplanes += 1; // javascript is silly and doesn't have any good size() method
 
     var p1 = c.clone(); var p2 = c.clone(); var p3 = c.clone(); var p4 = c.clone();
 
@@ -133,6 +137,8 @@ for(key in planes){
     line.layers.set(plane.view);
 }
 
+com.divideScalar(nplanes);
+
 colors = ['red', 'blue', 'green', 'orange', 'purple', 'skyblue'];
 
 function add_tracks(trajs, group){
@@ -154,11 +160,6 @@ function add_tracks(trajs, group){
 
 add_tracks(tracks, reco_tracks);
 add_tracks(truth_trajs, truth);
-
-camera.position.x = 200;
-camera.position.y = 200;
-camera.position.z = 500;
-
 
 if(false){
 
@@ -428,6 +429,20 @@ scene.add(hits);
 } // end hacked IF
 
 var controls = new THREE.OrbitControls( camera, renderer.domElement );
+
+controls.target = com;
+
+camera.translateX(1000);
+console.log(camera.position);
+camera.lookAt(com);
+
+controls.screenSpacePanning = true;
+
+//controls.autoRotate = true;
+//controls.autoRotateSpeed *= 10;
+
+controls.update();
+
 //controls.target = group;
 //controls.autoRotate = true;
 //controls.enableDamping = true;
@@ -467,13 +482,18 @@ controls.update();
 
 
 function animate() {
-    requestAnimationFrame( animate );
+    //    requestAnimationFrame( animate );
+
 //    group.rotation.x += 0.01;
 //    group.rotation.y += 0.01;
 //    cube2.rotation.z += 0.02;
 //    camera.position.x += .01;
+
 //    controls.update();
     renderer.render( scene, camera );
+
+    console.log(camera.position);
+    console.log(camera.quaternion);
     return;
 }
 
@@ -486,6 +506,7 @@ function SetVisibility(col, state, id, str)
 
 function Toggle(col, id, str){
     SetVisibility(col, !col.visible, id, str);
+    requestAnimationFrame(animate);
 }
 
 function ToggleRawDigits(){Toggle(digs, 'rawdigits', 'RawDigits');}
@@ -503,10 +524,37 @@ SetVisibility(truth, true, 'truth', 'Truth');
 
 ThreeDView();
 
-function ZView(){camera.layers.set(2);}
-function UView(){camera.layers.set(0);}
-function VView(){camera.layers.set(1);}
-function ThreeDView(){camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2);}
+function ZView(){camera.layers.set(2); requestAnimationFrame(animate);}
+function UView(){camera.layers.set(0); requestAnimationFrame(animate);}
+function VView(){camera.layers.set(1); requestAnimationFrame(animate);}
+function ThreeDView(){camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2); requestAnimationFrame(animate);}
+
+function UpdateFOV(cam, newFOV)
+{
+    var diff = cam.position.clone();
+    diff.sub(controls.target);
+    diff.multiplyScalar(cam.fov/newFOV); // todo trig?
+    diff.add(controls.target);
+    cam.position.copy(diff);
+    controls.update();
+
+    cam.near *= cam.fov/newFOV;
+    cam.far *= cam.fov/newFOV;
+    cam.fov = newFOV;
+    cam.updateProjectionMatrix();
+
+    requestAnimationFrame(animate);
+}
+
+function Perspective()
+{
+    UpdateFOV(camera, 50);
+}
+
+function Ortho()
+{
+    UpdateFOV(camera, 1e-6);
+}
 
 function Theme(theme)
 {
@@ -516,6 +564,8 @@ function Theme(theme)
     // renderer.setClearColor(window.getComputedStyle(document.body, null).getPropertyValue('backgroundColor'));
 
     if(theme == 'darktheme') renderer.setClearColor('black'); else renderer.setClearColor('white');
+
+    requestAnimationFrame(animate);
 }
 
 window.addEventListener( 'resize', onWindowResize, false );
@@ -538,6 +588,8 @@ window.addEventListener('unload', function(event) {
 //    console.log( THREE.WebGLRenderer.info);
       });
 
+controls.addEventListener('change', animate);
+window.addEventListener('resize', animate);
 animate();
 
 console.log(renderer.info);

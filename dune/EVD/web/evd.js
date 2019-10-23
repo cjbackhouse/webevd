@@ -560,6 +560,15 @@ function ThreeDView(){
     requestAnimationFrame(animate);
 }
 
+// https://en.wikipedia.org/wiki/Slerp#Geometric_Slerp
+function slerp(p0, p1, t){
+    var omega = Math.acos(p0.dot(p1));
+    var ret = p0.clone();
+    ret.multiplyScalar(Math.sin((1-t)*omega)/Math.sin(omega));
+    ret.addScaledVector(p1, Math.sin(t*omega)/Math.sin(omega));
+    return ret;
+}
+
 function ZView2D(){
     var initPos = camera.position.clone();
 
@@ -578,25 +587,17 @@ function ZView2D(){
 
     var initUp = camera.up.clone();
     var targetUp = new THREE.Vector3(1, 0, 0);
- 
+
     animStart = performance.now();
     animFunc = function(frac){
-        var newDiff = new THREE.Vector3();
-        newDiff.addScaledVector(initDiff, 1-frac);
-        newDiff.addScaledVector(targetDiff, frac);
-        newDiff.normalize();
-
         var mag = camera.position.distanceTo(controls.target);
 
         camera.position.copy(controls.target);
-        camera.position.addScaledVector(newDiff, mag);
+        camera.position.addScaledVector(slerp(initDiff, targetDiff, frac), mag);
 
-        var newUp = new THREE.Vector3();
-        newUp.addScaledVector(initUp, 1-frac);
-        newUp.addScaledVector(targetUp, frac);
-        camera.up.copy(newUp);
+        camera.up = slerp(initUp, targetUp, frac);
 
-        UpdateFOV(camera, initFOV*(1-frac) + targetFOV*frac);
+        UpdateFOV(camera, THREE.Math.lerp(initFOV, targetFOV, frac));
 
         controls.update();
 
@@ -644,7 +645,7 @@ function AnimateFOV(targetFOV)
  
         animStart = performance.now();
         animFunc = function(frac){
-            UpdateFOV(camera, initFOV*(1-frac) + targetFOV*frac);
+            UpdateFOV(camera, THREE.Math.lerp(initFOV, targetFOV, frac));
         }
 
         requestAnimationFrame(animate);

@@ -540,9 +540,9 @@ SetVisibility(hits, false, 'hits', 'Hits');
 SetVisibility(reco_tracks, false, 'tracks', 'Tracks');
 SetVisibility(truth, true, 'truth', 'Truth');
 
-var animStart = null;
+camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2);
 
-ThreeDView();
+var animStart = null;
 
 function ZView(){camera.layers.set(2); requestAnimationFrame(animate);}
 function UView(){camera.layers.set(0); requestAnimationFrame(animate);}
@@ -550,13 +550,9 @@ function VView(){camera.layers.set(1); requestAnimationFrame(animate);}
 function ThreeDView(){
     camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2); 
 
-    camera.up.set(0, 1, 0);
-
-    Perspective();
+    AnimateTo(null, new THREE.Vector3(0, 1, 0), 50, null);
 
     ThreeDControls();
-
-    requestAnimationFrame(animate);
 }
 
 // https://en.wikipedia.org/wiki/Slerp#Geometric_Slerp

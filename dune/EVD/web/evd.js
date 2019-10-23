@@ -510,8 +510,6 @@ function animate() {
     if(animStart != null) requestAnimationFrame(animate);
 
     animReentrant = false;
-
-    return;
 }
 
 function SetVisibility(col, state, id, str)
@@ -539,17 +537,31 @@ SetVisibility(hits, false, 'hits', 'Hits');
 SetVisibility(reco_tracks, false, 'tracks', 'Tracks');
 SetVisibility(truth, true, 'truth', 'Truth');
 
-camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2);
+AllViews();
+ThreeDControls();
 
 var animStart = null;
 
 function ZView(){camera.layers.set(2); requestAnimationFrame(animate);}
 function UView(){camera.layers.set(0); requestAnimationFrame(animate);}
 function VView(){camera.layers.set(1); requestAnimationFrame(animate);}
-function ThreeDView(){
-    camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2); 
 
-    AnimateTo(null, new THREE.Vector3(0, 1, 0), 50, null);
+function AllViews(){
+    camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2);
+}
+
+function ThreeDView(){
+    AllViews();
+
+    // A hack to make sure the Z->3D transition doesn't end up completely
+    // degenerate for the camera (which leads to a strange 90 degree flip).
+    var targetDiff = camera.position.clone();
+    targetDiff.sub(controls.target);
+    targetDiff.normalize();
+    targetDiff.addScaledVector(camera.up, -1e-3);
+    targetDiff.normalize();
+
+    AnimateTo(targetDiff, new THREE.Vector3(0, 1, 0), 50, null);
 
     ThreeDControls();
 }
@@ -616,9 +628,9 @@ function AnimateTo(targetDiff, targetUp, targetFOV, endFunc){
 
         // console.log('Anim: ', frac, camera.position, camera.up, camera.fov);
 
-        controls.update();
+        if(frac == 1 && endFunc != null) endFunc();
 
-        if(frac == 1 && endFunc != null) endFunc()
+        controls.update();
     }
 
     requestAnimationFrame(animate);
@@ -653,6 +665,7 @@ function ThreeDControls(){
 }
 
 function ZView2D(){
+    camera.layers.enable(2);
     AnimateTo(new THREE.Vector3(0, 1, 0),
               new THREE.Vector3(1, 0, 0),
               1e-6, ZView);
@@ -660,11 +673,13 @@ function ZView2D(){
 }
 
 function UView2D(){
+    camera.layers.enable(0);
     AnimateTo(uperp, new THREE.Vector3(1, 0, 0), 1e-6, UView);
     TwoDControls();
 }
 
 function VView2D(){
+    camera.layers.enable(1);
     AnimateTo(vperp, new THREE.Vector3(1, 0, 0), 1e-6, VView);
     TwoDControls();
 }

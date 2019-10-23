@@ -443,7 +443,7 @@ var controls = new THREE.OrbitControls( camera, renderer.domElement );
 controls.target = com;
 
 camera.translateX(1000);
-console.log(camera.position);
+//console.log(camera.position);
 camera.lookAt(com);
 
 //controls.autoRotate = true;
@@ -502,7 +502,6 @@ function animate() {
             animStart = null;
         }
 
-        console.log(now, animStart, frac);
         animFunc(frac);
     }
 
@@ -557,6 +556,8 @@ function ThreeDView(){
 
 // https://en.wikipedia.org/wiki/Slerp#Geometric_Slerp
 function slerp(p0, p1, t){
+    if(p0.equals(p1)) return p0;
+
     var omega = Math.acos(p0.dot(p1));
     var ret = p0.clone();
     ret.multiplyScalar(Math.sin((1-t)*omega)/Math.sin(omega));
@@ -567,7 +568,7 @@ function slerp(p0, p1, t){
 
 function UpdateFOV(cam, newFOV)
 {
-    console.log('update fov ', cam, newFOV);
+    //    console.log('update fov ', cam, newFOV);
 
     var diff = cam.position.clone();
     diff.sub(controls.target);
@@ -582,8 +583,6 @@ function UpdateFOV(cam, newFOV)
 }
 
 function AnimateTo(targetDiff, targetUp, targetFOV, endFunc){
-    var initPos = camera.position.clone();
-
     var initDiff = camera.position.clone();
     initDiff.sub(controls.target);
     initDiff.normalize();
@@ -591,10 +590,13 @@ function AnimateTo(targetDiff, targetUp, targetFOV, endFunc){
     var initFOV = camera.fov;
     var initUp = camera.up.clone();
 
+    console.log('Animate from ', initDiff, initUp, initFOV, ' to ', targetDiff, targetUp, targetFOV);
+
     // May be no need to animate
     if((targetDiff == null || targetDiff.equals(initDiff)) &&
        (targetUp == null || targetUp.equals(initUp)) &&
        (targetFOV == null || targetFOV == initFOV)){
+        console.log('Requested animation is a no-op, skip');
         if(endFunc != null) endFunc();
         return;
     }
@@ -611,6 +613,8 @@ function AnimateTo(targetDiff, targetUp, targetFOV, endFunc){
         if(targetUp != null) camera.up = slerp(initUp, targetUp, frac);
 
         if(targetFOV != null) UpdateFOV(camera, THREE.Math.lerp(initFOV, targetFOV, frac));
+
+        // console.log('Anim: ', frac, camera.position, camera.up, camera.fov);
 
         controls.update();
 

@@ -61,6 +61,9 @@ scene.add(truth);
 var com = new THREE.Vector3();
 var nplanes = 0;
 
+var uperp = null;
+var vperp = null;
+
 for(key in planes){
     var plane = planes[key];
     var c = ArrToVec(plane.center);
@@ -71,6 +74,13 @@ for(key in planes){
 
     com.add(c);
     nplanes += 1; // javascript is silly and doesn't have any good size() method
+
+    if(plane.view == 0){
+        uperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
+    }
+    if(plane.view == 1){
+        vperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
+    }
 
     var p1 = c.clone(); var p2 = c.clone(); var p3 = c.clone(); var p4 = c.clone();
 
@@ -436,8 +446,6 @@ camera.translateX(1000);
 console.log(camera.position);
 camera.lookAt(com);
 
-controls.screenSpacePanning = true;
-
 //controls.autoRotate = true;
 //controls.autoRotateSpeed *= 10;
 
@@ -462,7 +470,7 @@ controls.mouseButtons = {
 }
 */
 
-console.log(controls.touches);
+//console.log(controls.touches);
 
 // Seems to hang the touch controls entirely :(
 //controls.touches = {
@@ -470,11 +478,11 @@ console.log(controls.touches);
 //    TWO: THREE.TOUCH.ROTATE
 //}
 
-console.log(controls.touches);
+//console.log(controls.touches);
 
 //controls.screenSpacePanning = true;
 
-controls.update();
+//controls.update();
 
 //camera.lookAt(mx, my, mz);
 
@@ -546,16 +554,7 @@ function ThreeDView(){
 
     Perspective();
 
-
-    controls.enableRotate = true;
-
-    controls.mouseButtons = {
-        LEFT: THREE.MOUSE.ROTATE,
-        MIDDLE: THREE.MOUSE.DOLLY,
-        RIGHT: THREE.MOUSE.PAN
-    }
-
-    controls.update();
+    ThreeDControls();
 
     requestAnimationFrame(animate);
 }
@@ -569,44 +568,64 @@ function slerp(p0, p1, t){
     return ret;
 }
 
-function ZView2D(){
+
+function UpdateFOV(cam, newFOV)
+{
+    console.log('update fov ', cam, newFOV);
+
+    var diff = cam.position.clone();
+    diff.sub(controls.target);
+    diff.multiplyScalar(cam.fov/newFOV);//Math.sin(cam.fov*3.14/180)/Math.sin(newFOV*3.14/180));
+    diff.add(controls.target);
+    cam.position.copy(diff);
+
+    cam.near *= cam.fov/newFOV;
+    cam.far *= cam.fov/newFOV;
+    cam.fov = newFOV;
+    cam.updateProjectionMatrix();
+}
+
+function AnimateTo(targetDiff, targetUp, targetFOV, endFunc){
     var initPos = camera.position.clone();
 
     var initDiff = camera.position.clone();
     initDiff.sub(controls.target);
     initDiff.normalize();
 
-    var targetDiff = new THREE.Vector3(0, 1, 0);
-
-    var target = controls.target.clone();
-    var dist = target.distanceTo(camera.position);
-    target.y += dist;
-
     var initFOV = camera.fov;
-    var targetFOV = 1e-6;
-
     var initUp = camera.up.clone();
-    var targetUp = new THREE.Vector3(1, 0, 0);
+
+    // May be no need to animate
+    if((targetDiff == null || targetDiff.equals(initDiff)) &&
+       (targetUp == null || targetUp.equals(initUp)) &&
+       (targetFOV == null || targetFOV == initFOV)){
+        if(endFunc != null) endFunc();
+        return;
+    }
 
     animStart = performance.now();
     animFunc = function(frac){
-        var mag = camera.position.distanceTo(controls.target);
+        if(targetDiff != null){
+            var mag = camera.position.distanceTo(controls.target);
 
-        camera.position.copy(controls.target);
-        camera.position.addScaledVector(slerp(initDiff, targetDiff, frac), mag);
+            camera.position.copy(controls.target);
+            camera.position.addScaledVector(slerp(initDiff, targetDiff, frac), mag);
+        }
 
-        camera.up = slerp(initUp, targetUp, frac);
+        if(targetUp != null) camera.up = slerp(initUp, targetUp, frac);
 
-        UpdateFOV(camera, THREE.Math.lerp(initFOV, targetFOV, frac));
+        if(targetFOV != null) UpdateFOV(camera, THREE.Math.lerp(initFOV, targetFOV, frac));
 
         controls.update();
 
-        if(frac == 1) ZView();
+        if(frac == 1 && endFunc != null) endFunc()
     }
 
     requestAnimationFrame(animate);
+}
 
-    //    camera.up.set(1, 0, 0);
+function TwoDControls(){
+    controls.screenSpacePanning = true;
 
     controls.enableRotate = false;
 
@@ -619,47 +638,45 @@ function ZView2D(){
     controls.update();
 }
 
-function UpdateFOV(cam, newFOV)
-{
-    console.log('update fov ', cam, newFOV);
+function ThreeDControls(){
+    controls.screenSpacePanning = true;
 
-    var diff = cam.position.clone();
-    diff.sub(controls.target);
-    diff.multiplyScalar(cam.fov/newFOV);//Math.sin(cam.fov*3.14/180)/Math.sin(newFOV*3.14/180));
-    diff.add(controls.target);
-    cam.position.copy(diff);
-    //    controls.update();
+    controls.enableRotate = true;
 
-    cam.near *= cam.fov/newFOV;
-    cam.far *= cam.fov/newFOV;
-    cam.fov = newFOV;
-    cam.updateProjectionMatrix();
+    controls.mouseButtons = {
+        LEFT: THREE.MOUSE.ROTATE,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.PAN
+    }
 
-    //    requestAnimationFrame(animate);
+    controls.update();
 }
 
-function AnimateFOV(targetFOV)
-{
-    if(camera.fov != targetFOV){
-        var initFOV = camera.fov;
- 
-        animStart = performance.now();
-        animFunc = function(frac){
-            UpdateFOV(camera, THREE.Math.lerp(initFOV, targetFOV, frac));
-        }
+function ZView2D(){
+    AnimateTo(new THREE.Vector3(0, 1, 0),
+              new THREE.Vector3(1, 0, 0),
+              1e-6, ZView);
+    TwoDControls();
+}
 
-        requestAnimationFrame(animate);
-    }
+function UView2D(){
+    AnimateTo(uperp, new THREE.Vector3(1, 0, 0), 1e-6, UView);
+    TwoDControls();
+}
+
+function VView2D(){
+    AnimateTo(vperp, new THREE.Vector3(1, 0, 0), 1e-6, VView);
+    TwoDControls();
 }
 
 function Perspective()
 {
-    AnimateFOV(50);
+    AnimateTo(null, null, 50, null);
 }
 
 function Ortho()
 {
-    AnimateFOV(1e-6);
+    AnimateTo(null, null, 1e-6, null);
 }
 
 function Theme(theme)

@@ -154,6 +154,26 @@ void WriteToPNG(const std::string& fname, const PNGBytes& bytes)
   png_destroy_write_struct(&png_ptr, &info_ptr);
 }
 
+class JSONFormatter
+{
+public:
+  JSONFormatter(std::ofstream& os) : fStream(os) {}
+
+  template<class T> JSONFormatter& operator<<(const T& x){fStream << x; return *this;}
+
+  JSONFormatter& operator<<(const TVector3& v)
+  {
+    fStream << "["
+            << v.X() << ", "
+            << v.Y() << ", "
+            << v.Z() << "]";
+    return *this;
+  }
+
+protected:
+  std::ofstream& fStream;
+};
+
 void WebEVD::analyze(const art::Event& evt)
 {
   //  const int width = 480; // TODO remove // max wire ID 512*8;
@@ -167,14 +187,15 @@ void WebEVD::analyze(const art::Event& evt)
   std::vector<recob::SpacePoint>* pts = new std::vector<recob::SpacePoint>;
 
   std::ofstream outf("coords.js");
-  outf << "var coords = [" << std::endl;
-  for(const recob::SpacePoint& p: *pts){
-    const double* xyz = p.XYZ();
-    outf << "  [" << xyz[0] << ", " << xyz[1] << ", " << xyz[2] << "]," << std::endl;
-  }
-  outf << "];" << std::endl;
+  JSONFormatter json(outf);
 
-  //      outf << "var waves = [" << std::endl;
+  json << "var coords = [\n";
+  for(const recob::SpacePoint& p: *pts){
+    json << TVector3(p.XYZ()) << ",\n";
+  }
+  json << "];\n";
+
+  //      json << "var waves = [" << std::endl;
 
   art::Handle<std::vector<raw::RawDigit>> digs;
   evt.getByLabel("daq", digs);
@@ -188,12 +209,12 @@ void WebEVD::analyze(const art::Event& evt)
     raw::RawDigit::ADCvector_t adcs(dig.Samples());
     raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
 
-    outf << "  [ ";
-    for(auto x: adcs) outf << (x ? x-dig.GetPedestal() : 0) << ", ";
-    outf << " ]," << std::endl;
+    json << "  [ ";
+    for(auto x: adcs) json << (x ? x-dig.GetPedestal() : 0) << ", ";
+    json << " ]," << std::endl;
     }
 
-    outf << "];" << std::endl;
+    json << "];" << std::endl;
   */
 
   art::ServiceHandle<geo::Geometry> geom;
@@ -284,15 +305,15 @@ void WebEVD::analyze(const art::Event& evt)
   }
 
   /*
-    outf << "var wires = [" << std::endl;
+    json << "var wires = [" << std::endl;
     
     for(const recob::Wire& wire: *wires){
-    outf << "  [ ";
-    for(auto x: wire.SignalROI()) outf << x << ", ";
-    outf << " ]," << std::endl;
+    json << "  [ ";
+    for(auto x: wire.SignalROI()) json << x << ", ";
+    json << " ]," << std::endl;
     }
 
-    outf << "];" << std::endl;
+    json << "];" << std::endl;
   */
 
   art::Handle<std::vector<recob::Hit>> hits;
@@ -308,7 +329,7 @@ void WebEVD::analyze(const art::Event& evt)
     plane_hits[plane].push_back(hit);
   }
 
-  outf << "planes = {" << std::endl;
+  json << "planes = {\n";
   for(auto it: plane_dig_imgs){
     const geo::PlaneID plane = it.first;
     const geo::PlaneGeo& planegeo = geom->Plane(plane);
@@ -324,55 +345,55 @@ void WebEVD::analyze(const art::Event& evt)
     const int nticks = height; // HACK from earlier
     const double tick_pitch = detprop->ConvertTicksToX(1, plane) - detprop->ConvertTicksToX(0, plane);
 
-    outf << "  \"" << plane << "\": {"
+    json << "  \"" << plane << "\": {"
          << "view: " << view << ", "
          << "nwires: " << nwires << ", "
          << "pitch: " << pitch << ", "
          << "nticks: " << nticks << ", "
          << "tick_pitch: " << tick_pitch << ", "
-         << "center: [" << c.X() << ", " << c.Y() << ", " << c.Z() << "], "
-         << "across: [" << d.X() << ", " << d.Y() << ", " << d.Z() << "], "
-         << "normal: [" << n.X() << ", " << n.Y() << ", " << n.Z() << "], "
+         << "center: " << c << ", "
+         << "across: " << d << ", "
+         << "normal: " << n << ", "
          << "hits: [";
     for(const recob::Hit& hit: plane_hits[plane]){
-      outf << "{wire: " << geo::WireID(hit.WireID()).Wire
+      json << "{wire: " << geo::WireID(hit.WireID()).Wire
            << ", tick: " << hit.PeakTime() << "}, ";
     }
 
-    outf << "]}," << std::endl;
+    json << "]},\n";
   }
-  outf << "};" << std::endl;
+  json << "};\n";
 
   art::Handle<std::vector<recob::Track>> tracks;
   evt.getByLabel("pandora", tracks);
 
-  outf << "tracks = [" << std::endl;
+  json << "tracks = [\n";
   for(const recob::Track& track: *tracks){
-    outf << "  [\n    ";
+    json << "  [\n    ";
     const recob::TrackTrajectory& traj = track.Trajectory();
     for(unsigned int j = traj.FirstValidPoint(); j <= traj.LastValidPoint(); ++j){
       const geo::Point_t pt = traj.LocationAtPoint(j);
-      outf << "[" << pt.X() << ", " << pt.Y() << ", " << pt.Z() << "], ";
+      json << "[" << pt.X() << ", " << pt.Y() << ", " << pt.Z() << "], ";
     }
-    outf << "\n  ]," << std::endl;
+    json << "\n  ],\n";
   }
-  outf << "];" << std::endl;
+  json << "];\n";
 
 
   art::Handle<std::vector<simb::MCParticle>> parts;
   evt.getByLabel("largeant", parts);
 
-  outf << "truth_trajs = [" << std::endl;
+  json << "truth_trajs = [\n";
   for(const simb::MCParticle& part: *parts){
     const int apdg = abs(part.PdgCode());
     if(apdg == 12 || apdg == 14 || apdg == 16) continue; // decay neutrinos
-    outf << "  [\n    ";
+    json << "  [\n    ";
     for(unsigned int j = 0; j < part.NumberTrajectoryPoints(); ++j){
-      outf << "[" << part.Vx(j) << ", " << part.Vy(j) << ", " << part.Vz(j) << "], ";
+      json << "[" << part.Vx(j) << ", " << part.Vy(j) << ", " << part.Vz(j) << "], ";
     }
-    outf << "\n  ]," << std::endl;
+    json << "\n  ],\n";
   }
-  outf << "];" << std::endl;
+  json << "];\n";
 
 
   // Very cheesy speedup to parallelize png making

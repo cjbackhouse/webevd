@@ -1,5 +1,40 @@
 // Christopher Backhouse - bckhouse@fnal.gov
 
+// art v3_03 (soon?) will inlude evt.getInputTags<>(). Until then, we can hack it in this dreadful way
+
+// These guys are dragged in and don't like private->public
+#include <any>
+#include <sstream>
+#include <mutex>
+
+#define private public
+#include "art/Framework/Principal/Event.h"
+#undef private
+
+std::vector<art::InputTag>
+getInputTags(const art::Principal& p,
+             art::ModuleContext const& mc,
+             art::WrappedTypeID const& wrapped,
+             art::SelectorBase const& sel,
+             art::ProcessTag const& processTag)
+{
+  std::vector<art::InputTag> tags;
+  cet::transform_all(p.findGroupsForProduct(mc, wrapped, sel, processTag, false), back_inserter(tags), [](auto const g) {
+      return g.result()->productDescription().inputTag();
+    });
+  return tags;
+}
+
+
+template <typename PROD> std::vector<art::InputTag>
+getInputTags(const art::Event& evt)
+{
+  return getInputTags(evt.principal_, evt.mc_, art::WrappedTypeID::make<PROD>(), art::MatchAllSelector{}, art::ProcessTag{"", evt.md_.processName()});
+}
+
+// end getInputTags hack
+
+
 #include <string>
 
 #include "fhiclcpp/ParameterSet.h"
@@ -176,6 +211,22 @@ protected:
 
 void WebEVD::analyze(const art::Event& evt)
 {
+  std::cout << getInputTags<std::vector<recob::Track>>(evt).size() << " tracks "
+            << getInputTags<std::vector<recob::Wire>>(evt).size() << " wires"
+            << std::endl;
+
+  for(auto x: getInputTags<std::vector<recob::Track>>(evt)) std::cout << x << std::endl;
+
+  // Needs art v3_03 (soon?)
+  //  std::vector<art::InputTag> tags = evt.getInputTags<recob::Track>();
+  //  evt.getInputTags<recob::Track>();
+
+  // Alternate syntax
+  //  auto const tokens = evt.getProductTokens<recob::Track>();
+  //  for (auto const& token : tokens) {
+  //    auto const h = event.getValidHandle(token);
+  //  }
+
   //  const int width = 480; // TODO remove // max wire ID 512*8;
   const int height = 4492; // TODO somewhere to look up number of ticks?
 
@@ -399,19 +450,19 @@ void WebEVD::analyze(const art::Event& evt)
   // Very cheesy speedup to parallelize png making
   for(auto it: plane_dig_imgs){
     std::cout << "Writing digits/" << it.first.toString() << std::endl;
-    if(fork() == 0){
+    if(true){//fork() == 0){
       WriteToPNG("digits/"+it.first.toString()+".png", *it.second);
       delete it.second;
-      exit(0);
+      //      exit(0);
     }
   }
 
   for(auto it: plane_wire_imgs){
     std::cout << "Writing wires/" << it.first.toString() << std::endl;
-    if(fork() == 0){
+    if(true){//fork() == 0){
       WriteToPNG("wires/"+it.first.toString()+".png", *it.second);
       delete it.second;
-      exit(0);
+      //      exit(0);
     }
   }
 }

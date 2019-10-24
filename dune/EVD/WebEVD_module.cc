@@ -103,20 +103,24 @@ struct PNGBytes
   PNGBytes(int w, int h) : width(w), height(h)
   {
     // Scale up to the next power of two
-    //    for(width = 1; width < w; width *= 2);
-    //    for(height = 1; height < h; height *= 2);
+    for(width = 1; width < w; width *= 2);
+    for(height = 1; height < h; height *= 2);
+    //    std::cout << w << "x" << h << " -> " << width << "x" << height << std::endl;
 
     data = new png_byte*[height];
     for(int i = 0; i < height; ++i){
       data[i] = new png_byte[width];
-      for(int j = 0; j < width; ++j) data[i][j] = 0;
+      for(int j = 0; j < width; ++j){
+        data[i][j] = 0;
+        if(i >= h || j >= w) data[i][j] = 128;
+      }
     }
   }
 
   ~PNGBytes()
   {
     for(int i = 0; i < height; ++i) delete[] data[i];
-    delete data;
+    delete[] data;
   }
 
   int width, height;

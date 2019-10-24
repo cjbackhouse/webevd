@@ -26,18 +26,19 @@ var mat_lin = new THREE.LineBasicMaterial({color: 'gray'});
 var mat_hit = new THREE.MeshBasicMaterial( { color: 0xffffff, side: THREE.DoubleSide } );
 
 function TextureMaterial(fname, col){
-    var mat = new THREE.MeshBasicMaterial( { color: col, side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
     var tex = new THREE.TextureLoader().load(fname,
-                                             undefined,//function(t){document.body.appendChild(tex.image);},//console.log(tex.image);},//'loaded', fname);},
+                                             undefined,
                                              undefined,
                                              function(err){console.log('error loading', fname, err);});
-    console.log(tex.image);
-    tex.flipY = false; // some disagreement between conventions...
-    tex.magFilter = THREE.NearestFilter;
-    tex.minFilter = THREE.LinearFilter;
-    //    tex.generateMipmaps = false;
-    mat.alphaMap = tex;
-    return mat;
+
+  var mat = new THREE.MeshBasicMaterial( { color: col, side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
+  tex.flipY = false; // some disagreement between conventions...
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.LinearFilter;
+  //    tex.generateMipmaps = false;
+  mat.alphaMap = tex;
+
+  return mat;
 }
 
 
@@ -99,33 +100,8 @@ for(key in planes){
                                       p3.x, p3.y, p3.z,
                                       p4.x, p4.y, p4.z]);
 
-    // TODO think carefully about geometry
-    var uvs = new Float32Array( [1, 0,
-                                 1, 1,
-                                 0, 1,
-
-                                 1, 0,
-                                 0, 1,
-                                 0, 0] );
-
     // itemSize = 3 because there are 3 values (components) per vertex
     geom.addAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
-
-    geom.addAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
-
-    for(var sign = -1; sign <= +1; sign += 2){
-        var mat = TextureMaterial("digits/"+key+(sign < 0 ? "_neg" : "_pos")+".png",
-                                  (sign < 0 ? 0x0000ff : 0xff0000));
-
-        var d = new THREE.Mesh( geom, mat );
-        d.layers.set(plane.view);
-        digs.add(d);
-    }
-
-    mat = TextureMaterial("wires/"+key+".png", 0x008000);
-    var w = new THREE.Mesh( geom, mat );
-    w.layers.set(plane.view);
-    wires.add(w);
 
     var edges = new THREE.EdgesGeometry( geom );
     var line = new THREE.LineSegments( edges, mat_lin );
@@ -133,6 +109,36 @@ for(key in planes){
     outlines.add(line);
 
     line.layers.set(plane.view);
+
+
+
+    var fw = plane.nwires/THREE.Math.ceilPowerOfTwo(plane.nwires);
+    var fh = plane.nticks/THREE.Math.ceilPowerOfTwo(plane.nticks);
+
+    // TODO think carefully about geometry
+    var uvs = new Float32Array( [fw,  0,
+                                 fw, fh,
+                                  0, fh,
+
+                                 fw,  0,
+                                  0, fh,
+                                  0,  0] );
+
+    geom.addAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
+
+    for(var sign = -1; sign <= +1; sign += 2){
+        var fname = "digits/"+key+(sign < 0 ? "_neg" : "_pos")+".png";
+        var col = (sign < 0 ? 0x0000ff : 0xff0000);
+        var mat = TextureMaterial(fname, col);
+        var d = new THREE.Mesh( geom, mat );
+        d.layers.set(plane.view);
+        digs.add(d);
+    }
+
+    var mat = TextureMaterial("wires/"+key+".png", 0x008000);
+    var w = new THREE.Mesh( geom, mat );
+    w.layers.set(plane.view);
+    wires.add(w);
 }
 
 com.divideScalar(nplanes);

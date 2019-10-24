@@ -25,18 +25,19 @@ var mat_lin = new THREE.LineBasicMaterial({color: 'gray'});
 
 var mat_hit = new THREE.MeshBasicMaterial( { color: 0xffffff, side: THREE.DoubleSide } );
 
-function TextureMaterial(fname, col){
+function TextureMaterial(fname){
     var tex = new THREE.TextureLoader().load(fname,
                                              undefined,
                                              undefined,
                                              function(err){console.log('error loading', fname, err);});
 
-  var mat = new THREE.MeshBasicMaterial( { color: col, side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
+  var mat = new THREE.MeshBasicMaterial( { color: 'white', side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
   tex.flipY = false; // some disagreement between conventions...
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.LinearFilter;
-  //    tex.generateMipmaps = false;
-  mat.alphaMap = tex;
+  tex.generateMipmaps = true;
+  //  mat.alphaMap = tex;
+  mat.map = tex;
 
   return mat;
 }
@@ -126,16 +127,12 @@ for(key in planes){
 
     geom.addAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
 
-    for(var sign = -1; sign <= +1; sign += 2){
-        var fname = "digits/"+key+(sign < 0 ? "_neg" : "_pos")+".png";
-        var col = (sign < 0 ? 0x0000ff : 0xff0000);
-        var mat = TextureMaterial(fname, col);
-        var d = new THREE.Mesh( geom, mat );
-        d.layers.set(plane.view);
-        digs.add(d);
-    }
+    var mat = TextureMaterial("digits/"+key+".png");
+    var d = new THREE.Mesh( geom, mat );
+    d.layers.set(plane.view);
+    digs.add(d);
 
-    var mat = TextureMaterial("wires/"+key+".png", 0x008000);
+    mat = TextureMaterial("wires/"+key+".png");
     var w = new THREE.Mesh( geom, mat );
     w.layers.set(plane.view);
     wires.add(w);
@@ -221,14 +218,17 @@ function ToggleSpacePoints(){Toggle(group, 'spacepoints', 'SpacePoints');}
 function ToggleTracks(){Toggle(reco_tracks, 'tracks', 'Tracks');}
 function ToggleTruth(){Toggle(truth, 'truth', 'Truth');}
 
+AllViews();
+ThreeDControls();
+
+// Try to pre-load all textures - doesn't work
+//renderer.compile(scene, camera);
+
 SetVisibility(digs, false, 'rawdigits', 'RawDigits');
 SetVisibility(wires, false, 'wires', 'Wires');
 SetVisibility(hits, false, 'hits', 'Hits');
 SetVisibility(reco_tracks, false, 'tracks', 'Tracks');
 SetVisibility(truth, true, 'truth', 'Truth');
-
-AllViews();
-ThreeDControls();
 
 var animStart = null;
 

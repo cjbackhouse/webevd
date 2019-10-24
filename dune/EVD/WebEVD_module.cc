@@ -109,12 +109,17 @@ struct PNGBytes
 
     data = new png_byte*[height];
     for(int i = 0; i < height; ++i){
-      data[i] = new png_byte[width];
-      for(int j = 0; j < width; ++j){
+      data[i] = new png_byte[width*4];
+      for(int j = 0; j < width*4; ++j){
         data[i][j] = 0;
-        if(i >= h || j >= w) data[i][j] = 128;
+        if(i >= h || j >= w*4) data[i][j] = 128;
       }
     }
+  }
+
+  png_byte& operator()(int x, int y, int c)
+  {
+    return data[y][x*4+c];
   }
 
   ~PNGBytes()
@@ -131,15 +136,22 @@ void WriteToPNG(const std::string& fname, const PNGBytes& bytes)
 {
   FILE* fp = fopen(fname.c_str(), "wb");
 
-  auto png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+  png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
   auto info_ptr = png_create_info_struct(png_ptr);
+
+  // Doesn't seem to have a huge effect
+  //  png_set_compression_level(png_ptr, 9);
+
   png_init_io(png_ptr, fp);
   png_set_IHDR(png_ptr, info_ptr, bytes.width, bytes.height,
-               8/*bit_depth*/, PNG_COLOR_TYPE_GRAY, PNG_INTERLACE_NONE,
+               8/*bit_depth*/, PNG_COLOR_TYPE_RGBA/*GRAY*/, PNG_INTERLACE_NONE,
                PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
   png_set_rows(png_ptr, info_ptr, bytes.data);
   png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
+
   fclose(fp);
+
+  png_destroy_write_struct(&png_ptr, &info_ptr);
 }
 
 void WebEVD::analyze(const art::Event& evt)
@@ -147,9 +159,7 @@ void WebEVD::analyze(const art::Event& evt)
   //  const int width = 480; // TODO remove // max wire ID 512*8;
   const int height = 4492; // TODO somewhere to look up number of ticks?
 
-  std::map<geo::PlaneID, PNGBytes*> plane_dig_imgs_pos;
-  std::map<geo::PlaneID, PNGBytes*> plane_dig_imgs_neg;
-
+  std::map<geo::PlaneID, PNGBytes*> plane_dig_imgs;
   std::map<geo::PlaneID, PNGBytes*> plane_wire_imgs;
 
   //  art::Handle<std::vector<recob::SpacePoint>> pts;
@@ -202,16 +212,14 @@ void WebEVD::analyze(const art::Event& evt)
       const geo::WireID w0 = geom->GetBeginWireID(plane);
       const unsigned int Nw = geom->Nwires(plane);
 
-      if(plane_dig_imgs_pos.count(plane) == 0){
+      if(plane_dig_imgs.count(plane) == 0){
         //            std::cout << "Create " << plane << " with " << Nw << std::endl;
-        plane_dig_imgs_pos[plane] = new PNGBytes(Nw, height);
-        plane_dig_imgs_neg[plane] = new PNGBytes(Nw, height);
+        plane_dig_imgs[plane] = new PNGBytes(Nw, height);
       }
 
       //          std::cout << "Look up " << plane << std::endl;
 
-      PNGBytes& bytes_pos = *plane_dig_imgs_pos[plane];
-      PNGBytes& bytes_neg = *plane_dig_imgs_neg[plane];
+      PNGBytes& bytes = *plane_dig_imgs[plane];
 
       //          std::cout << dig.Samples() << " and " << wire.Wire << std::endl;
       //        }
@@ -228,14 +236,18 @@ void WebEVD::analyze(const art::Event& evt)
       for(unsigned int tick = 0; tick < std::min(adcs.size(), size_t(height)); ++tick){
         const int adc = adcs[tick] ? int(adcs[tick])-dig.GetPedestal() : 0;
 
-        if(adc > 0){
-              //              dig_bytes_pos.data[tick][digIdx] = std::min(+adc, 255);
-          bytes_pos.data[tick][wire.Wire-w0.Wire] = std::min(+adc, 255);
+        if(adc != 0){
+          // alpha
+          bytes(wire.Wire-w0.Wire, tick, 3) = std::min(abs(10*adc), 255);
+          if(adc > 0){
+            // red
+            bytes(wire.Wire-w0.Wire, tick, 0) = 255;
+          }
+          else{
+            // blue
+            bytes(wire.Wire-w0.Wire, tick, 2) = 255;
+          }
         }
-        else if(adc < 0){
-          bytes_neg.data[tick][wire.Wire-w0.Wire] = std::min(-adc, 255);
-        }
-        //            else bytes.data[tick][wire.Wire-w0.Wire] = 128;
       }
     }
   }
@@ -263,7 +275,10 @@ void WebEVD::analyze(const art::Event& evt)
       const auto adcs = (*wires)[wireIdx].Signal();
       //        std::cout << "  " << adcs.size() << std::endl;
       for(unsigned int tick = 0; tick < std::min(adcs.size(), size_t(height)); ++tick){
-        bytes.data[tick][wire.Wire-w0.Wire] = std::max(0, std::min(int(10*adcs[tick]), 255));
+        // green channel
+        bytes(wire.Wire-w0.Wire, tick, 1) = 255;
+        // alpha channel
+        bytes(wire.Wire-w0.Wire, tick, 3) = std::max(0, std::min(int(2*adcs[tick]), 255));
       }
     }
   }
@@ -294,7 +309,7 @@ void WebEVD::analyze(const art::Event& evt)
   }
 
   outf << "planes = {" << std::endl;
-  for(auto it: plane_dig_imgs_pos){
+  for(auto it: plane_dig_imgs){
     const geo::PlaneID plane = it.first;
     const geo::PlaneGeo& planegeo = geom->Plane(plane);
     const int view = planegeo.View();
@@ -360,10 +375,17 @@ void WebEVD::analyze(const art::Event& evt)
   outf << "];" << std::endl;
 
 
-  for(auto it: plane_dig_imgs_pos) WriteToPNG("digits/"+it.first.toString()+"_pos.png", *it.second);
-  for(auto it: plane_dig_imgs_neg) WriteToPNG("digits/"+it.first.toString()+"_neg.png", *it.second);
+  for(auto it: plane_dig_imgs){
+    std::cout << "Writing digits/" << it.first.toString() << std::endl;
+    WriteToPNG("digits/"+it.first.toString()+".png", *it.second);
+    delete it.second;
+  }
 
-  for(auto it: plane_wire_imgs) WriteToPNG("wires/"+it.first.toString()+".png", *it.second);
+  for(auto it: plane_wire_imgs){
+    std::cout << "Writing wires/" << it.first.toString() << std::endl;
+    WriteToPNG("wires/"+it.first.toString()+".png", *it.second);
+    delete it.second;
+  }
 }
 
 } // namespace

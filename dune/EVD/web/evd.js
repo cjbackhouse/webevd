@@ -112,9 +112,9 @@ for(key in planes){
     line.layers.set(plane.view);
 
 
-
-    var fw = plane.nwires/THREE.Math.ceilPowerOfTwo(plane.nwires);
-    var fh = plane.nticks/THREE.Math.ceilPowerOfTwo(plane.nticks);
+    // Power-of-two fixup
+    var fw = 1;//plane.nwires/THREE.Math.ceilPowerOfTwo(plane.nwires);
+    var fh = 1;//plane.nticks/THREE.Math.ceilPowerOfTwo(plane.nticks);
 
     // TODO think carefully about geometry
     var uvs = new Float32Array( [fw,  0,

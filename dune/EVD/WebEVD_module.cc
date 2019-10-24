@@ -103,8 +103,8 @@ struct PNGBytes
   PNGBytes(int w, int h) : width(w), height(h)
   {
     // Scale up to the next power of two
-    for(width = 1; width < w; width *= 2);
-    for(height = 1; height < h; height *= 2);
+    //    for(width = 1; width < w; width *= 2);
+    //    for(height = 1; height < h; height *= 2);
     //    std::cout << w << "x" << h << " -> " << width << "x" << height << std::endl;
 
     data = new png_byte*[height];
@@ -238,7 +238,7 @@ void WebEVD::analyze(const art::Event& evt)
 
         if(adc != 0){
           // alpha
-          bytes(wire.Wire-w0.Wire, tick, 3) = std::min(abs(10*adc), 255);
+          bytes(wire.Wire-w0.Wire, tick, 3) = std::min(abs(4*adc), 255);
           if(adc > 0){
             // red
             bytes(wire.Wire-w0.Wire, tick, 0) = 255;
@@ -276,9 +276,9 @@ void WebEVD::analyze(const art::Event& evt)
       //        std::cout << "  " << adcs.size() << std::endl;
       for(unsigned int tick = 0; tick < std::min(adcs.size(), size_t(height)); ++tick){
         // green channel
-        bytes(wire.Wire-w0.Wire, tick, 1) = 255;
+        bytes(wire.Wire-w0.Wire, tick, 1) = 128; // dark green
         // alpha channel
-        bytes(wire.Wire-w0.Wire, tick, 3) = std::max(0, std::min(int(2*adcs[tick]), 255));
+        bytes(wire.Wire-w0.Wire, tick, 3) = std::max(0, std::min(int(10*adcs[tick]), 255));
       }
     }
   }
@@ -375,16 +375,23 @@ void WebEVD::analyze(const art::Event& evt)
   outf << "];" << std::endl;
 
 
+  // Very cheesy speedup to parallelize png making
   for(auto it: plane_dig_imgs){
     std::cout << "Writing digits/" << it.first.toString() << std::endl;
-    WriteToPNG("digits/"+it.first.toString()+".png", *it.second);
-    delete it.second;
+    if(fork() == 0){
+      WriteToPNG("digits/"+it.first.toString()+".png", *it.second);
+      delete it.second;
+      exit(0);
+    }
   }
 
   for(auto it: plane_wire_imgs){
     std::cout << "Writing wires/" << it.first.toString() << std::endl;
-    WriteToPNG("wires/"+it.first.toString()+".png", *it.second);
-    delete it.second;
+    if(fork() == 0){
+      WriteToPNG("wires/"+it.first.toString()+".png", *it.second);
+      delete it.second;
+      exit(0);
+    }
   }
 }
 

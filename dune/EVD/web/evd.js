@@ -111,7 +111,6 @@ for(key in planes){
 
     line.layers.set(plane.view);
 
-
     // Power-of-two fixup
     var fw = 1;//plane.nwires/THREE.Math.ceilPowerOfTwo(plane.nwires);
     var fh = 1;//plane.nticks/THREE.Math.ceilPowerOfTwo(plane.nticks);
@@ -136,6 +135,19 @@ for(key in planes){
     var w = new THREE.Mesh( geom, mat );
     w.layers.set(plane.view);
     wires.add(w);
+
+    if(plane.view != 2){
+        if(a.z/a.y > 0){
+            line.layers.enable(3);
+            d.layers.enable(3);
+            w.layers.enable(3);
+        }
+        else{
+            line.layers.enable(4);
+            d.layers.enable(4);
+            w.layers.enable(4);
+        }
+    }
 }
 
 com.divideScalar(nplanes);
@@ -154,7 +166,7 @@ function add_tracks(trajs, group){
         trkgeom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
 
         var trkline = new THREE.Line(trkgeom, mat_trk);
-        trkline.layers.enable(0); trkline.layers.enable(1); trkline.layers.enable(2);
+        trkline.layers.enable(0); trkline.layers.enable(1); trkline.layers.enable(2); trkline.layers.enable(3); trkline.layers.enable(4);
         group.add(trkline);
     }
 }
@@ -236,6 +248,9 @@ function ZView(){camera.layers.set(2); requestAnimationFrame(animate);}
 function UView(){camera.layers.set(0); requestAnimationFrame(animate);}
 function VView(){camera.layers.set(1); requestAnimationFrame(animate);}
 
+function UVView(){camera.layers.set(3); requestAnimationFrame(animate);}
+function VUView(){camera.layers.set(4); requestAnimationFrame(animate);}
+
 function AllViews(){
     camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2);
 }
@@ -258,7 +273,7 @@ function ThreeDView(){
 
 // https://en.wikipedia.org/wiki/Slerp#Geometric_Slerp
 function slerp(p0, p1, t){
-    if(p0.equals(p1)) return p0;
+    if(p0.equals(p1)) return p0.clone();
 
     var omega = Math.acos(p0.dot(p1));
     var ret = p0.clone();
@@ -307,7 +322,6 @@ function AnimateTo(targetDiff, targetUp, targetFOV, endFunc){
     animFunc = function(frac){
         if(targetDiff != null){
             var mag = camera.position.distanceTo(controls.target);
-
             camera.position.copy(controls.target);
             camera.position.addScaledVector(slerp(initDiff, targetDiff, frac), mag);
         }
@@ -316,7 +330,7 @@ function AnimateTo(targetDiff, targetUp, targetFOV, endFunc){
 
         if(targetFOV != null) UpdateFOV(camera, THREE.Math.lerp(initFOV, targetFOV, frac));
 
-        // console.log('Anim: ', frac, camera.position, camera.up, camera.fov);
+        //        console.log('Anim: ', frac, camera.position, camera.up, camera.fov);
 
         if(frac == 1 && endFunc != null) endFunc();
 
@@ -368,15 +382,15 @@ function ZView2D(){
     TwoDControls();
 }
 
-function UView2D(){
-    camera.layers.enable(0);
-    AnimateTo(uperp, new THREE.Vector3(1, 0, 0), 1e-6, UView);
+function UVView2D(){
+    camera.layers.enable(3);
+    AnimateTo(vperp, new THREE.Vector3(1, 0, 0), 1e-6, UVView);
     TwoDControls();
 }
 
-function VView2D(){
-    camera.layers.enable(1);
-    AnimateTo(vperp, new THREE.Vector3(1, 0, 0), 1e-6, VView);
+function VUView2D(){
+    camera.layers.enable(4);
+    AnimateTo(uperp, new THREE.Vector3(1, 0, 0), 1e-6, VUView);
     TwoDControls();
 }
 

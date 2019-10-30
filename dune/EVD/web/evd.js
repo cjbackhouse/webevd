@@ -1,4 +1,17 @@
+// TODO come up with a cool name
 // TODO learn how imports/modules work
+// TODO back/fwd buttons (need to serve differently?)
+// TODO work well on ProtoDUNE
+// TODO fix hits and SpacePoints
+// TODO fix U/V bug
+// TODO clear handling of disambiguation
+// TODO look into gallery
+// TODO plot IDEs
+// TODO plot photons
+// TODO blur mipmaps
+// TODO pre-upload textures
+// TODO make SaveAs and Print work
+//
 //import { IcosahedronBufferGeometry } from './three.js-master/src/geometries/IcosahedronGeometry.js'
 
 var scene = new THREE.Scene();

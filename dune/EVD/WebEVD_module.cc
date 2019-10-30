@@ -135,39 +135,24 @@ void WebEVD::endJob()
 
 struct PNGBytes
 {
-  PNGBytes(int w, int h) : width(w), height(h)
+  PNGBytes(int w, int h) : width(w), height(h), data(width*height*4, 0)
   {
     // Scale up to the next power of two
     //    for(width = 1; width < w; width *= 2);
     //    for(height = 1; height < h; height *= 2);
     //    std::cout << w << "x" << h << " -> " << width << "x" << height << std::endl;
-
-    data = new png_byte*[height];
-    for(int i = 0; i < height; ++i){
-      data[i] = new png_byte[width*4];
-      for(int j = 0; j < width*4; ++j){
-        data[i][j] = 0;
-        if(i >= h || j >= w*4) data[i][j] = 128;
-      }
-    }
   }
 
   png_byte& operator()(int x, int y, int c)
   {
-    return data[y][x*4+c];
-  }
-
-  ~PNGBytes()
-  {
-    for(int i = 0; i < height; ++i) delete[] data[i];
-    delete[] data;
+    return data[(y*width+x)*4+c];
   }
 
   int width, height;
-  png_byte** data;
+  std::vector<png_byte> data;
 };
 
-void WriteToPNG(const std::string& fname, const PNGBytes& bytes)
+void WriteToPNG(const std::string& fname, /*const*/ PNGBytes& bytes)
 {
   FILE* fp = fopen(fname.c_str(), "wb");
 
@@ -181,7 +166,11 @@ void WriteToPNG(const std::string& fname, const PNGBytes& bytes)
   png_set_IHDR(png_ptr, info_ptr, bytes.width, bytes.height,
                8/*bit_depth*/, PNG_COLOR_TYPE_RGBA/*GRAY*/, PNG_INTERLACE_NONE,
                PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
-  png_set_rows(png_ptr, info_ptr, bytes.data);
+
+  std::vector<png_byte*> pdatas(bytes.height);
+  for(int i = 0; i < bytes.height; ++i) pdatas[i] = &bytes.data[i*bytes.width*4];
+  png_set_rows(png_ptr, info_ptr, &pdatas.front());
+
   png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
 
   fclose(fp);

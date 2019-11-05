@@ -459,7 +459,8 @@ void WebEVD::analyze(const art::Event& evt)
          << "hits: [";
     for(const recob::Hit& hit: plane_hits[plane]){
       json << "{wire: " << geo::WireID(hit.WireID()).Wire
-           << ", tick: " << hit.PeakTime() << "}, ";
+           << ", tick: " << hit.PeakTime()
+           << ", rms: " << hit.RMS() << "}, ";
     }
 
     json << "]},\n";

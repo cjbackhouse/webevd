@@ -36,7 +36,7 @@ function ArrToVec(arr)
 
 var mat_lin = new THREE.LineBasicMaterial({color: 'gray'});
 
-var mat_hit = new THREE.MeshBasicMaterial( { color: 0xffffff, side: THREE.DoubleSide } );
+var mat_hit = new THREE.MeshBasicMaterial({color: 'gray', side: THREE.DoubleSide});
 
 function TextureMaterial(fname){
     var tex = new THREE.TextureLoader().load(fname,
@@ -96,6 +96,7 @@ for(key in planes){
 
     var p1 = c.clone(); var p2 = c.clone(); var p3 = c.clone(); var p4 = c.clone();
 
+    // p1 = a-d, p2 = a+d, p3 = -a+d, p4=-a-d
     p1.add(a);
     p2.add(a);
     p2.add(d);
@@ -149,16 +150,45 @@ for(key in planes){
     w.layers.set(plane.view);
     wires.add(w);
 
+    var hitgeom = new THREE.BufferGeometry();
+    var hitvtxs = [];
+
+    for(let hit of plane.hits){
+        var p = lerpVec(lerpVec(p4, p3, hit.tick/plane.nticks),
+                        lerpVec(p1, p2, hit.tick/plane.nticks),
+                        (hit.wire+.5)/plane.nwires);
+        const dx = hit.rms*plane.tick_pitch;
+        const dz = .45*plane.pitch;
+        hitvtxs.push(p.x-dx, p.y, p.z+dz,
+                     p.x-dx, p.y, p.z-dz,
+                     p.x+dx, p.y, p.z-dz,
+
+                     p.x-dx, p.y, p.z+dz,
+                     p.x+dx, p.y, p.z-dz,
+                     p.x+dx, p.y, p.z+dz);
+    }
+
+    console.log(hitvtxs);
+
+    hitgeom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs), 3));
+
+    var h = new THREE.Mesh(hitgeom, mat_hit);
+    h.layers.set(plane.view);
+    hits.add(h);
+
+
     if(plane.view != 2){
         if(a.z/a.y > 0){
             line.layers.enable(3);
             d.layers.enable(3);
             w.layers.enable(3);
+            h.layers.enable(3);
         }
         else{
             line.layers.enable(4);
             d.layers.enable(4);
             w.layers.enable(4);
+            h.layers.enable(4);
         }
     }
 }
@@ -295,6 +325,11 @@ function slerp(p0, p1, t){
     return ret;
 }
 
+function lerpVec(v0, v1, t){
+    return new THREE.Vector3(THREE.Math.lerp(v0.x, v1.x, t),
+                             THREE.Math.lerp(v0.y, v1.y, t),
+                             THREE.Math.lerp(v0.z, v1.z, t));
+}
 
 function UpdateFOV(cam, newFOV)
 {

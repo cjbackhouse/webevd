@@ -6,7 +6,7 @@ standard_webevd:
 
   HitLabel: "gaushit" # needed for PlotsTrue
 
-  SpacePointLabel: "reco3d"
+  SpacePointLabel: "pandora" # "spacepointsolver" # reco3d"
   SpacePointInstanceLabel: ""
 }
 

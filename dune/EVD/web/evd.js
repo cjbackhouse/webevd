@@ -38,6 +38,8 @@ var mat_lin = new THREE.LineBasicMaterial({color: 'gray'});
 
 var mat_hit = new THREE.MeshBasicMaterial({color: 'gray', side: THREE.DoubleSide});
 
+var mat_sps = new THREE.MeshBasicMaterial({color: 'blue'});
+
 function TextureMaterial(fname){
     var tex = new THREE.TextureLoader().load(fname,
                                              undefined,
@@ -95,6 +97,44 @@ function push_square_vtxs(c, du, dv, vtxs){
               p1.x, p1.y, p1.z,
               p3.x, p3.y, p3.z,
               p4.x, p4.y, p4.z);
+}
+
+function push_icosahedron_vtxs(c, radius, vtxs, indices){
+    const t = ( 1 + Math.sqrt( 5 ) ) / 2;
+
+    const r0 = Math.sqrt(1+t*t);
+
+    const vs = [
+              -1, t, 0,
+              1, t, 0,
+              -1, -t, 0,
+              1, -t, 0,
+              0, -1, t,
+              0, 1, t,
+              0, -1, -t,
+              0, 1, -t,
+              t, 0, -1,
+              t, 0, 1,
+              -t, 0, -1,
+              -t, 0, 1
+              ];
+
+    const is = [
+              0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11,
+              1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
+              3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9,
+              4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1
+              ];
+
+    for(i = 0; i < is.length; ++i){
+        indices.push(is[i] + vtxs.length/3);
+    }
+
+    for(i = 0; i < vs.length; i += 3){
+        vtxs.push(c.x + radius/r0*vs[i  ]);
+        vtxs.push(c.y + radius/r0*vs[i+1]);
+        vtxs.push(c.z + radius/r0*vs[i+2]);
+    }
 }
 
 for(key in planes){
@@ -168,8 +208,6 @@ for(key in planes){
         push_square_vtxs(hc, du, dv, hitvtxs);
     }
 
-    console.log(hitvtxs);
-
     hitgeom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs), 3));
 
     var h = new THREE.Mesh(hitgeom, mat_hit);
@@ -194,6 +232,22 @@ for(key in planes){
 }
 
 com.divideScalar(nplanes);
+
+spvtxs = [];
+spidxs = [];
+var isp = 0;
+for(let sp of coords){
+    push_icosahedron_vtxs(ArrToVec(sp), .4, spvtxs, spidxs);
+}
+
+var spgeom = new THREE.BufferGeometry();
+spgeom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
+console.log(spidxs);
+spgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(spidxs), 1));
+var sps = new THREE.Mesh(spgeom, mat_sps);
+for(var i = 0; i < 5; ++i) sps.layers.enable(i);
+scene.add(sps);
+
 
 colors = ['red', 'blue', 'green', 'orange', 'purple', 'skyblue'];
 
@@ -269,7 +323,7 @@ function Toggle(col, id, str){
 function ToggleRawDigits(){Toggle(digs, 'rawdigits', 'RawDigits');}
 function ToggleWires(){Toggle(wires, 'wires', 'Wires');}
 function ToggleHits(){Toggle(hits, 'hits', 'Hits');}
-function ToggleSpacePoints(){Toggle(group, 'spacepoints', 'SpacePoints');}
+function ToggleSpacePoints(){Toggle(sps, 'spacepoints', 'SpacePoints');}
 function ToggleTracks(){Toggle(reco_tracks, 'tracks', 'Tracks');}
 function ToggleTruth(){Toggle(truth, 'truth', 'Truth');}
 
@@ -284,6 +338,7 @@ SetVisibility(wires, false, 'wires', 'Wires');
 SetVisibility(hits, false, 'hits', 'Hits');
 SetVisibility(reco_tracks, false, 'tracks', 'Tracks');
 SetVisibility(truth, true, 'truth', 'Truth');
+SetVisibility(sps, false, 'spacepoints', 'SpacePoints');
 
 var animStart = null;
 

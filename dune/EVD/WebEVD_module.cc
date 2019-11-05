@@ -284,9 +284,8 @@ void WebEVD::analyze(const art::Event& evt)
   std::map<geo::PlaneID, PNGBytes*> plane_dig_imgs;
   std::map<geo::PlaneID, PNGBytes*> plane_wire_imgs;
 
-  //  art::Handle<std::vector<recob::SpacePoint>> pts;
-  //evt.getByLabel(fSpacePointTag, pts);
-  std::vector<recob::SpacePoint>* pts = new std::vector<recob::SpacePoint>;
+  art::Handle<std::vector<recob::SpacePoint>> pts;
+  evt.getByLabel(fSpacePointTag, pts);
 
   std::ofstream outf("coords.js");
   JSONFormatter json(outf);
@@ -295,7 +294,7 @@ void WebEVD::analyze(const art::Event& evt)
   for(const recob::SpacePoint& p: *pts){
     json << TVector3(p.XYZ()) << ",\n";
   }
-  json << "];\n";
+  json << "];\n\n";
 
   //      json << "var waves = [" << std::endl;
 

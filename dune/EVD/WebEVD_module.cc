@@ -148,12 +148,74 @@ struct PNGBytes
     return data[(y*width+x)*4+c];
   }
 
+  const png_byte& operator()(int x, int y, int c) const
+  {
+    return data[(y*width+x)*4+c];
+  }
+
+  void GetExtents(int& minx, int& maxx, int& miny, int& maxy,
+                  int threshold = 0) const
+  {
+    // HACK the extents off for now
+    minx = miny = 0; maxx = width-1; maxy = height-1;
+    return;
+
+    minx = width-1;
+    maxx = 0;
+    miny = height-1;
+    maxy = 0;
+
+    for(int i = 0; i < width; ++i){
+      for(int j = 0; j < height; ++j){
+        if((*this)(i, j, 3) > threshold){ // check the alpha
+          minx = std::min(i, minx);
+          maxx = std::max(i, maxx);
+          miny = std::min(j, miny);
+          maxy = std::max(j, maxy);
+        }
+      }
+    }
+  }
+
+
   int width, height;
   std::vector<png_byte> data;
 };
 
-void WriteToPNG(const std::string& fname, /*const*/ PNGBytes& bytes)
+PNGBytes MipMap(const PNGBytes& b)
 {
+  PNGBytes ret(b.width/2, b.height/2);
+
+  for(int i = 0; i < b.width/2; ++i){
+    for(int j = 0; j < b.height/2; ++j){
+      for(int c = 0; c < 3; ++c){
+        // TODO think about this algorith a bit
+        ret(i, j, c) = (b(i*2,   j*2, c) + b(i*2+1, j*2,   c) +
+                        b(i*2+1, j*2, c) + b(i*2+1, j*2+1, c))/4;
+      }
+      ret(i, j, 3) = std::max(std::max(b(i*2,   j*2, 3), b(i*2+1, j*2,   3)),
+                              std::max(b(i*2+1, j*2, 3), b(i*2+1, j*2+1, 3)));
+    }
+  }
+
+  return ret;
+}
+
+void WriteToPNG(const std::string& fname, const PNGBytes& bytes)
+{
+  int minx, maxx, miny, maxy;
+  // Don't allow a little bit of noise to dominate the sizing. Still seems
+  // to be the case often for the digits though.
+  bytes.GetExtents(minx, maxx, miny, maxy, 8);
+
+  // Just don't write the image if it's completely empty
+  if(miny > maxy || minx > maxx) return;
+
+  const int neww = maxx-minx+1;
+  const int newh = maxy-miny+1;
+
+  //  std::cout << bytes.width << "x" << bytes.height << " -> " << neww << "x" << newh << " (" << minx << "-" << maxx << ", " << miny << "-" << maxy << ")" << std::endl;
+
   FILE* fp = fopen(fname.c_str(), "wb");
 
   png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
@@ -163,12 +225,12 @@ void WriteToPNG(const std::string& fname, /*const*/ PNGBytes& bytes)
   //  png_set_compression_level(png_ptr, 9);
 
   png_init_io(png_ptr, fp);
-  png_set_IHDR(png_ptr, info_ptr, bytes.width, bytes.height,
+  png_set_IHDR(png_ptr, info_ptr, neww, newh, //bytes.width, bytes.height,
                8/*bit_depth*/, PNG_COLOR_TYPE_RGBA/*GRAY*/, PNG_INTERLACE_NONE,
                PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
 
-  std::vector<png_byte*> pdatas(bytes.height);
-  for(int i = 0; i < bytes.height; ++i) pdatas[i] = &bytes.data[i*bytes.width*4];
+  std::vector<png_byte*> pdatas(newh);
+  for(int i = 0; i < newh; ++i) pdatas[i] = const_cast<png_byte*>(&bytes(minx, miny+i, 0));
   png_set_rows(png_ptr, info_ptr, &pdatas.front());
 
   png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
@@ -441,6 +503,9 @@ void WebEVD::analyze(const art::Event& evt)
     std::cout << "Writing digits/" << it.first.toString() << std::endl;
     if(true){//fork() == 0){
       WriteToPNG("digits/"+it.first.toString()+".png", *it.second);
+
+      //      WriteToPNG("digits/"+it.first.toString()+"_m.png", MipMap(MipMap(MipMap(*it.second))));
+
       delete it.second;
       //      exit(0);
     }

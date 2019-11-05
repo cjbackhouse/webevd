@@ -423,12 +423,20 @@ void WebEVD::analyze(const art::Event& evt)
 
   std::map<geo::PlaneID, std::vector<recob::Hit>> plane_hits;
   for(const recob::Hit& hit: *hits){
-    const geo::WireID wire(hit.WireID());
-    if(geom->SignalType(wire) != geo::kCollection) continue; // for now
+    // Would possibly be right for disambiguated hits?
+    //    const geo::WireID wire(hit.WireID());
 
-    const geo::PlaneID plane(wire);
+    for(geo::WireID wire: geom->ChannelToWire(hit.Channel())){
+      //    if(geom->SignalType(wire) != geo::kCollection) continue; // for now
+      // TODO loop over possible wires
+      const geo::PlaneID plane(wire);
 
-    plane_hits[plane].push_back(hit);
+      // Correct for disambiguated hits
+      //      plane_hits[plane].push_back(hit);
+
+      // Otherwise we have to update the wire number
+      plane_hits[plane].emplace_back(hit.Channel(), hit.StartTick(), hit.EndTick(), hit.PeakTime(), hit.SigmaPeakTime(), hit.RMS(), hit.PeakAmplitude(), hit.SigmaPeakAmplitude(), hit.SummedADC(), hit.Integral(), hit.SigmaIntegral(), hit.Multiplicity(), hit.LocalIndex(), hit.GoodnessOfFit(), hit.DegreesOfFreedom(), hit.View(), hit.SignalType(), wire);
+    }
   }
 
   json << "planes = {\n";

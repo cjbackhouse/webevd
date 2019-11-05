@@ -76,6 +76,27 @@ var nplanes = 0;
 var uperp = null;
 var vperp = null;
 
+function push_square_vtxs(c, du, dv, vtxs){
+    var p1 = c.clone();
+    var p2 = c.clone();
+    var p3 = c.clone();
+    var p4 = c.clone();
+
+    // p1 = du-dv, p2 = du+dv, p3 = -du+dv, p4=-du-dv
+    p1.add(du); p1.addScaledVector(dv, -1);
+    p2.add(du); p2.add(dv);
+    p3.addScaledVector(du, -1); p3.add(dv);
+    p4.addScaledVector(du, -1); p4.addScaledVector(dv, -1);
+
+    vtxs.push(p1.x, p1.y, p1.z,
+              p2.x, p2.y, p2.z,
+              p3.x, p3.y, p3.z,
+
+              p1.x, p1.y, p1.z,
+              p3.x, p3.y, p3.z,
+              p4.x, p4.y, p4.z);
+}
+
 for(key in planes){
     var plane = planes[key];
     var c = ArrToVec(plane.center);
@@ -94,29 +115,12 @@ for(key in planes){
         vperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
     }
 
-    var p1 = c.clone(); var p2 = c.clone(); var p3 = c.clone(); var p4 = c.clone();
-
-    // p1 = a-d, p2 = a+d, p3 = -a+d, p4=-a-d
-    p1.add(a);
-    p2.add(a);
-    p2.add(d);
-    p3.add(d);
-    p3.addScaledVector(a, -1);
-    p4.addScaledVector(a, -1);
-    p1.addScaledVector(d, -1);
-    p4.addScaledVector(d, -1);
+    vtxs = [];
+    push_square_vtxs(c, a, d, vtxs);
 
     var geom = new THREE.BufferGeometry();
-    var vertices = new Float32Array( [p1.x, p1.y, p1.z,
-                                      p2.x, p2.y, p2.z,
-                                      p3.x, p3.y, p3.z,
-
-                                      p1.x, p1.y, p1.z,
-                                      p3.x, p3.y, p3.z,
-                                      p4.x, p4.y, p4.z]);
-
     // itemSize = 3 because there are 3 values (components) per vertex
-    geom.addAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
+    geom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
     var edges = new THREE.EdgesGeometry( geom );
     var line = new THREE.LineSegments( edges, mat_lin );
@@ -141,9 +145,9 @@ for(key in planes){
     geom.addAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
 
     var mat = TextureMaterial("digits/"+key+".png");
-    var d = new THREE.Mesh( geom, mat );
-    d.layers.set(plane.view);
-    digs.add(d);
+    var dmesh = new THREE.Mesh( geom, mat );
+    dmesh.layers.set(plane.view);
+    digs.add(dmesh);
 
     mat = TextureMaterial("wires/"+key+".png");
     var w = new THREE.Mesh( geom, mat );
@@ -154,18 +158,14 @@ for(key in planes){
     var hitvtxs = [];
 
     for(let hit of plane.hits){
-        var p = lerpVec(lerpVec(p4, p3, hit.tick/plane.nticks),
-                        lerpVec(p1, p2, hit.tick/plane.nticks),
-                        (hit.wire+.5)/plane.nwires);
-        const dx = hit.rms*plane.tick_pitch;
-        const dz = .45*plane.pitch;
-        hitvtxs.push(p.x-dx, p.y, p.z+dz,
-                     p.x-dx, p.y, p.z-dz,
-                     p.x+dx, p.y, p.z-dz,
+        var hc = c.clone();
+        hc.addScaledVector(a, (2.*hit.wire)/plane.nwires-1);
+        hc.addScaledVector(d, (2.*hit.tick)/plane.nticks-1);
 
-                     p.x-dx, p.y, p.z+dz,
-                     p.x+dx, p.y, p.z-dz,
-                     p.x+dx, p.y, p.z+dz);
+        var du = ArrToVec(plane.across).multiplyScalar(plane.pitch*.45);
+        var dv = ArrToVec(plane.normal).multiplyScalar(hit.rms*Math.abs(plane.tick_pitch));
+
+        push_square_vtxs(hc, du, dv, hitvtxs);
     }
 
     console.log(hitvtxs);
@@ -180,13 +180,13 @@ for(key in planes){
     if(plane.view != 2){
         if(a.z/a.y > 0){
             line.layers.enable(3);
-            d.layers.enable(3);
+            dmesh.layers.enable(3);
             w.layers.enable(3);
             h.layers.enable(3);
         }
         else{
             line.layers.enable(4);
-            d.layers.enable(4);
+            dmesh.layers.enable(4);
             w.layers.enable(4);
             h.layers.enable(4);
         }

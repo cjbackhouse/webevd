@@ -2,8 +2,6 @@
 // TODO learn how imports/modules work
 // TODO back/fwd buttons (need to serve differently?)
 // TODO work well on ProtoDUNE
-// TODO fix hits and SpacePoints
-// TODO fix U/V bug
 // TODO clear handling of disambiguation
 // TODO look into gallery
 // TODO plot IDEs
@@ -370,10 +368,11 @@ function ThreeDView(){
 }
 
 // https://en.wikipedia.org/wiki/Slerp#Geometric_Slerp
+// p0 and p1 must be unit vectors
 function slerp(p0, p1, t){
-    if(p0.equals(p1)) return p0.clone();
+    var omega = Math.acos(THREE.Math.clamp(p0.dot(p1), -1, +1));
+    if(omega == 0) return p0.clone();
 
-    var omega = Math.acos(p0.dot(p1));
     var ret = p0.clone();
     ret.multiplyScalar(Math.sin((1-t)*omega)/Math.sin(omega));
     ret.addScaledVector(p1, Math.sin(t*omega)/Math.sin(omega));

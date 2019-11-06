@@ -482,6 +482,7 @@ void WebEVD::analyze(const art::Event& evt)
     json << "  [\n    ";
     const recob::TrackTrajectory& traj = track.Trajectory();
     for(unsigned int j = traj.FirstValidPoint(); j <= traj.LastValidPoint(); ++j){
+      if(!traj.HasValidPoint(j)) continue;
       const geo::Point_t pt = traj.LocationAtPoint(j);
       json << "[" << pt.X() << ", " << pt.Y() << ", " << pt.Z() << "], ";
     }

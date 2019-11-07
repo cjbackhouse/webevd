@@ -128,14 +128,16 @@ function GenerateMipMaps(tex, mat, mipdim, texdim){
         if(ok){
             console.log('ACTIVATING MIPMAPS!');
 
+            // TODO - is it bad that the largest resolution image is in the
+            // main map and also the first element in the mipmap list?
             for(var i = texdim; i >= 1; i /= 2){
                 mat.map.mipmaps.push(mat.tmpmipmaps[i]);
             }
             delete mat.tmpmipmaps;
 
-            // Interpolate within mipmaps but not between them
-            tex.minFilter = THREE.NearestMipmapLinearFilter;
+            tex.minFilter = THREE.LinearMipmapLinearFilter;
 
+            mat.map.needsUpdate = true;
             mat.needsUpdate = true;
             requestAnimationFrame(animate);
         }

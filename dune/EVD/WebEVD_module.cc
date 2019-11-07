@@ -78,6 +78,8 @@ protected:
   art::InputTag fSpacePointTag;
 
   std::string fHitLabel;
+
+  std::string fTempDir;
 };
 
 DEFINE_ART_MODULE(WebEVD)
@@ -89,6 +91,8 @@ WebEVD::WebEVD(const fhicl::ParameterSet& pset)
                                  pset.get<std::string>("SpacePointInstanceLabel"))),
     fHitLabel(pset.get<std::string>("HitLabel"))
 {
+  fTempDir = "/tmp/webevd_XXXXXX";
+  mkdtemp(fTempDir.data());
 }
 
 void WebEVD::endJob()
@@ -116,7 +120,7 @@ void WebEVD::endJob()
               << port << ":localhost:" << port << " "
               << user << "@" << host << std::endl << std::endl;
     std::cout << "Press Ctrl-C here when done" << std::endl;
-    const int status = system(TString::Format("busybox httpd -f -p %d -h web/", port).Data());
+    const int status = system(TString::Format("busybox httpd -f -p %d -h %s", port, fTempDir.c_str()).Data());
   // system("cd web; python -m SimpleHTTPServer 8000");
   // system("cd web; python3 -m http.server 8000");
 
@@ -131,6 +135,8 @@ void WebEVD::endJob()
       break;
     }
   }
+
+  std::cout << fTempDir << std::endl;
 }
 
 int RoundUpToPowerOfTwo(int x)
@@ -155,20 +161,6 @@ struct PNGArena
   const png_byte& operator()(int x, int y, int c) const
   {
     return data[(y*extent+x)*4+c];
-  }
-
-  void MipMap(int newdim)
-  {
-    for(int x = 0; x < newdim; ++x){
-      for(int y = 0; y < newdim; ++y){
-        for(int c = 0; c < 4; ++c){
-          (*this)(x, y, c) = std::max(std::max((*this)(x*2,   y*2,   c),
-                                               (*this)(x*2+1, y*2+1, c)),
-                                      std::max((*this)(x*2,   y*2,   c),
-                                               (*this)(x*2+1, y*2+1, c)));
-        }
-      }
-    }
   }
 
   struct View
@@ -231,6 +223,43 @@ struct PNGArena
   std::vector<png_byte> data;
 };
 
+void MipMap(PNGArena& bytes, int newdim)
+{
+  // The algorithm here is only really suitable for the specific way we're
+  // encoding hits, not for general images.
+  //
+  // The alpha channel is set to the max of any of the source pixels. The
+  // colour channels are averaged, weighted by the alpha values, and then
+  // scaled so that the most intense colour retains its same maximum intensity
+  // (this is relevant for green, where we use "dark green", 128).
+  for(int y = 0; y < newdim; ++y){
+    for(int x = 0; x < newdim; ++x){
+      double totc[3] = {0,};
+      double maxtotc = 0;
+      png_byte maxc[3] = {0,};
+      png_byte maxmaxc = 0;
+      png_byte maxa = 0;
+      for(int dy = 0; dy <= 1; ++dy){
+        for(int dx = 0; dx <= 1; ++dx){
+          const png_byte va = bytes(x*2+dx, y*2+dy, 3); // alpha value
+          maxa = std::max(maxa, va);
+
+          for(int c = 0; c < 3; ++c){
+            const png_byte vc = bytes(x*2+dx, y*2+dy, c); // colour value
+            totc[c] += vc * va;
+            maxc[c] = std::max(maxc[c], vc);
+            maxtotc = std::max(maxtotc, totc[c]);
+            maxmaxc = std::max(maxmaxc, maxc[c]);
+          } // end for c
+        } // end for dx
+      } // end for dy
+
+      for(int c = 0; c < 3; ++c) bytes(x, y, c) = maxtotc ? maxmaxc*totc[c]/maxtotc : 0;
+      bytes(x, y, 3) = maxa;
+    } // end for x
+  } // end for y
+}
+
 void WriteToPNG(const std::string& fname, /*const*/ PNGArena& bytes)
 {
   for(int mipmapdim = bytes.extent; mipmapdim >= 1; mipmapdim /= 2){
@@ -259,9 +288,10 @@ void WriteToPNG(const std::string& fname, /*const*/ PNGArena& bytes)
 
     png_destroy_write_struct(&png_ptr, &info_ptr);
 
-    bytes.MipMap(mipmapdim/2);
+    MipMap(bytes, mipmapdim/2);
   }
 }
+
 
 struct PNGBytes
 {
@@ -414,6 +444,8 @@ void WebEVD::analyze(const art::Event& evt)
   //  const int width = 480; // TODO remove // max wire ID 512*8;
   const int height = 4492; // TODO somewhere to look up number of ticks?
 
+  // Larger than this doesn't seem to work in the browser. Smaller won't fit
+  // the number of ticks we have.
   const int kArenaSize = 8192;
 
   std::map<std::pair<int, int>, std::vector<PNGArena*>> arenas;
@@ -424,7 +456,15 @@ void WebEVD::analyze(const art::Event& evt)
   art::Handle<std::vector<recob::SpacePoint>> pts;
   evt.getByLabel(fSpacePointTag, pts);
 
-  std::ofstream outf("coords.js");
+  char webdir[PATH_MAX];
+  realpath("web/", webdir);
+
+  for(std::string tgt: {"evd.js", "index.html", "three.js-master"}){
+    symlink(TString::Format("%s/%s", webdir,           tgt.c_str()).Data(),
+            TString::Format("%s/%s", fTempDir.c_str(), tgt.c_str()).Data());
+  }
+
+  std::ofstream outf(fTempDir+"/coords.js");
   JSONFormatter json(outf);
 
   json << "var coords = [\n";
@@ -675,7 +715,7 @@ void WebEVD::analyze(const art::Event& evt)
   for(auto it: arenas){
     for(unsigned int i = 0; i < it.second.size(); ++i){
       std::cout << "Writing " << it.second[i]->name << std::endl;
-      WriteToPNG("web/"+it.second[i]->name, *it.second[i]);
+      WriteToPNG(fTempDir+"/"+it.second[i]->name, *it.second[i]);
       delete it.second[i];
     }
   }

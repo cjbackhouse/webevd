@@ -23,7 +23,7 @@ renderer.setSize( window.innerWidth, window.innerHeight-4);
 renderer.setClearColor('black');//'white');//0xa0a0a0);
 
 renderer.alpha = true;
-renderer.antialias = true;
+renderer.antialias = false; //true;
 
 document.body.appendChild( renderer.domElement );
 
@@ -38,21 +38,185 @@ var mat_hit = new THREE.MeshBasicMaterial({color: 'gray', side: THREE.DoubleSide
 
 var mat_sps = new THREE.MeshBasicMaterial({color: 'blue'});
 
+function GenerateMipMaps(tex, mat){
+    console.log('Loaded callback');
+
+    // var canvas = document.createElement('canvas');
+    // canvas.width = tex.image.width;
+    // canvas.height = tex.image.height;
+    // var context = canvas.getContext('2d');
+
+    // context.drawImage(tex.image, 0, 0);
+    // tex.dispose();
+
+    // var d = Math.min(tex.image.width, tex.image.height);
+
+    // var data = context.getImageData(0, 0, d/*tex.image.width*/, d/*tex.image.height*/).data;
+    // console.log(data);
+    // let newtex = new THREE.DataTexture(data, d/*tex.image.width*/, d/*tex.image.height*/, THREE.RGBAFormat);
+    // newtex.flipY = false; // some disagreement between conventions...
+    // newtex.minFilter = THREE.LinearMipmapLinearFilter;
+    // newtex.magFilter = THREE.NearestFilter;
+
+    // newtex.generateMipmaps = false; // true;
+
+
+
+    // var w = d;//tex.image.width;
+    // var h = d;//tex.image.height;
+
+    // //    if(THREE.Math.ceilPowerOfTwo(w) != w ||
+    // //       THREE.Math.ceilPowerOfTwo(h) != h) return;
+
+    // // TODO this seems like a terrible duplication
+    // newtex.mipmaps.push(newtex.image);
+
+    // while(w > 1 && h > 1){
+    // w /= 2;
+    // h /= 2;
+
+    // //    console.log(img.width, img.height, w, h);
+
+    // let mipdata = new Uint8ClampedArray(4*w*h);
+
+    // for(var x = 0; x < w; ++x){
+    //     for(var y = 0; y < h; ++y){
+    //         var newi = (x+y*w)*4;
+    //         var oldi = (x*2+y*2*tex.image.width)*4;
+
+    //         mipdata[newi  ] = w < 128 ? 255 : 0;//data[oldi+1];
+    //         mipdata[newi+1] = w >= 128 ? 255 : 0;//data[oldi  ];
+    //         mipdata[newi+2] = 0;//data[oldi+2];
+    //         mipdata[newi+3] = y%2 == 0 ? 255 : 0;//data[oldi+3];
+    //     }
+    // }
+
+    // //    tex.image = img;
+
+    // let miptex = new THREE.DataTexture(mipdata, w, h, THREE.RGBAFormat);
+    // newtex.mipmaps.push(miptex.image);
+
+    // //    newtex = miptex;
+    // //    break;
+    // }
+
+    // console.log(newtex.image, newtex.mipmaps);
+
+    mat.map = tex; // newtex;
+    mat.opacity = 1;
+    mat.needsUpdate = true;
+    requestAnimationFrame(animate);
+
+    return;
+
+    // TODO - does this have to be in the document?
+    var canvas = document.createElement( 'canvas' );
+    var context = canvas.getContext( '2d' );
+    //    var context = new CanvasRenderingContext2D();
+    var img = tex.image;
+    //    var img = {width: 64, height: 64};
+
+    //    context.drawImage(img, 0, 0);
+
+    var data = context.getImageData(0, 0, img.width, img.height);
+
+    tex.image = (new THREE.DataTexture(data, img.width, img.height, THREE.RGBAFormat)).image;
+    console.log('HERE');
+
+    var w = img.width;
+    var h = img.height;
+
+    if(THREE.Math.ceilPowerOfTwo(w) != w ||
+       THREE.Math.ceilPowerOfTwo(h) != h) return;
+
+    tex.mipmaps.push(tex.image);
+
+    while(w > 1 && h > 1){
+    w /= 2;
+    h /= 2;
+
+    console.log(img.width, img.height, w, h);
+
+    let newdata = new Uint8Array(4*w*h);
+
+    for(var x = 0; x < w; ++x){
+        for(var y = 0; y < h; ++y){
+            var newi = (x+y*w)*4;
+            var oldi = (x*2+y*2*img.width)*4;
+
+            newdata[newi  ] = w < 128 ? 255 : 0;//data[oldi+1];
+            newdata[newi+1] = w >= 128 ? 255 : 0;//data[oldi  ];
+            newdata[newi+2] = 0;//data[oldi+2];
+            newdata[newi+3] = y%2 == 0 ? 255 : 0;//data[oldi+3];
+        }
+    }
+
+    //    tex.image = img;
+
+    let newtex = new THREE.DataTexture(newdata, w, h, THREE.RGBAFormat);
+    tex.mipmaps.push(newtex.image);
+    //    tex.image.copy(newtex.image);
+    //    tex.mipmaps.push(newtex.image);
+    }
+
+    tex.needsUpdate = true;
+
+    console.log(tex.image, tex.mipmaps);
+
+    //    newtex.flipY = false; // some disagreement between conventions...
+    //    newtex.magFilter = THREE.NearestFilter;
+    //    newtex.minFilter = THREE.LinearFilter;
+
+    //    tex.copy(newtex);
+}
+
+var gtexmats = {};
+
 function TextureMaterial(fname){
+    if(fname in gtexmats) return gtexmats[fname];
+    /*
+    var newdata = new Uint8Array(4*256*256);
+
+    for(var x = 0; x < 256; ++x){
+        for(var y = 0; y < 256; ++y){
+            var newi = (x+y*256)*4;
+            newdata[newi+3] = 255;
+            newdata[newi+2] = x%2 == 0 ? 255 : 0;
+        }
+    }
+    */
+
+    //    var tex = new THREE.DataTexture(newdata, 256, 256, THREE.RGBAFormat);
+    //    tex.GenerateMipMaps = false;
+    //    GenerateMipMaps(tex);
+
+    var mat = new THREE.MeshBasicMaterial( { color: 'white', opacity: .1, side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
+
     var tex = new THREE.TextureLoader().load(fname,
+                                             function(t){window.requestIdleCallback(function(deadline){GenerateMipMaps(t, mat);})},
+                                             //undefined,
+                                             //                                             GenerateMipMaps,
                                              undefined,
-                                             undefined,
-                                             function(err){console.log('error loading', fname, err);});
+                                             function(err){mat.opacity = 0; mat.needsUpdate; requestAnimationFrame(animate); console.log('error loading', fname, err);});
 
-  var mat = new THREE.MeshBasicMaterial( { color: 'white', side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
-  tex.flipY = false; // some disagreement between conventions...
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.LinearFilter;
-  tex.generateMipmaps = true;
-  //  mat.alphaMap = tex;
-  mat.map = tex;
+    /*
+    tex.flipY = false; // some disagreement between conventions...
+    tex.magFilter = THREE.NearestFilter;
+    //  tex.minFilter = THREE.LinearFilter;
 
-  return mat;
+    tex.minFilter = THREE.NearestMipmapNearestFilter;
+    //  tex.minFilter = THREE.NearestMipmapLinearFilter;
+
+    tex.generateMipmaps = false; // true;
+    //  mat.alphaMap = tex;
+    mat.map = tex;
+    */
+
+    console.log(tex.minFilter, tex.magFilter);
+
+    gtexmats[fname] = mat;
+
+    return mat;
 }
 
 
@@ -167,30 +331,42 @@ for(key in planes){
 
     line.layers.set(plane.view);
 
-    // Power-of-two fixup
-    var fw = 1;//plane.nwires/THREE.Math.ceilPowerOfTwo(plane.nwires);
-    var fh = 1;//plane.nticks/THREE.Math.ceilPowerOfTwo(plane.nticks);
+    for(dw of [plane.digs, plane.wires]){
+        if(dw == undefined) continue; // sometimes wires are missing
 
-    // TODO think carefully about geometry
-    var uvs = new Float32Array( [fw,  0,
-                                 fw, fh,
-                                  0, fh,
+        var geom = new THREE.BufferGeometry();
+        geom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
-                                 fw,  0,
-                                  0, fh,
-                                  0,  0] );
+        var u0 =   dw.texdx/dw.texdim;
+        var v0 = 1-dw.texdy/dw.texdim;
+        var u1 =   (dw.texdx+plane.nwires)/dw.texdim;
+        var v1 = 1-(dw.texdy+plane.nticks)/dw.texdim;
 
-    geom.addAttribute( 'uv', new THREE.BufferAttribute( uvs, 2 ) );
+        // TODO think carefully about geometry
+        var uvs = new Float32Array( [u1, v0,
+                                     u1, v1,
+                                     u0, v1,
 
-    var mat = TextureMaterial("digits/"+key+".png");
-    var dmesh = new THREE.Mesh( geom, mat );
-    dmesh.layers.set(plane.view);
-    digs.add(dmesh);
+                                     u1, v0,
+                                     u0, v1,
+                                     u0, v0] );
 
-    mat = TextureMaterial("wires/"+key+".png");
-    var w = new THREE.Mesh( geom, mat );
-    w.layers.set(plane.view);
-    wires.add(w);
+        geom.addAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+
+        var mat = TextureMaterial(dw.fname);
+        var dmesh = new THREE.Mesh(geom, mat);
+        dmesh.layers.set(plane.view);
+        if(dw === plane.digs) digs.add(dmesh); else wires.add(dmesh);
+
+        if(plane.view != 2){
+            if(a.z/a.y > 0){
+                dmesh.layers.enable(3);
+            }
+            else{
+                dmesh.layers.enable(4);
+            }
+        }
+    }
 
     var hitgeom = new THREE.BufferGeometry();
     var hitvtxs = [];
@@ -216,14 +392,14 @@ for(key in planes){
     if(plane.view != 2){
         if(a.z/a.y > 0){
             line.layers.enable(3);
-            dmesh.layers.enable(3);
-            w.layers.enable(3);
+            //            dmesh.layers.enable(3);
+            //            w.layers.enable(3);
             h.layers.enable(3);
         }
         else{
             line.layers.enable(4);
-            dmesh.layers.enable(4);
-            w.layers.enable(4);
+            //            dmesh.layers.enable(4);
+            //            w.layers.enable(4);
             h.layers.enable(4);
         }
     }
@@ -240,7 +416,6 @@ for(let sp of coords){
 
 var spgeom = new THREE.BufferGeometry();
 spgeom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
-console.log(spidxs);
 spgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(spidxs), 1));
 var sps = new THREE.Mesh(spgeom, mat_sps);
 for(var i = 0; i < 5; ++i) sps.layers.enable(i);

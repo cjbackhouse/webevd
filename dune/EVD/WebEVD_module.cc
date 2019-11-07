@@ -157,6 +157,19 @@ struct PNGArena
     return data[(y*extent+x)*4+c];
   }
 
+  void MipMap(int newdim)
+  {
+    for(int x = 0; x < newdim; ++x){
+      for(int y = 0; y < newdim; ++y){
+        for(int c = 0; c < 4; ++c){
+          (*this)(x, y, c) = std::max(std::max((*this)(x*2,   y*2,   c),
+                                               (*this)(x*2+1, y*2+1, c)),
+                                      std::max((*this)(x*2,   y*2,   c),
+                                               (*this)(x*2+1, y*2+1, c)));
+        }
+      }
+    }
+  }
 
   struct View
   {
@@ -218,30 +231,36 @@ struct PNGArena
   std::vector<png_byte> data;
 };
 
-void WriteToPNG(const std::string& fname, const PNGArena& bytes)
+void WriteToPNG(const std::string& fname, /*const*/ PNGArena& bytes)
 {
-  FILE* fp = fopen(fname.c_str(), "wb");
+  for(int mipmapdim = bytes.extent; mipmapdim >= 1; mipmapdim /= 2){
+    //    FILE* fp = fopen(fname.c_str()+".png", "wb");
 
-  png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-  auto info_ptr = png_create_info_struct(png_ptr);
+    FILE* fp = fopen(TString::Format("%s_%d.png", fname.c_str(), mipmapdim).Data(), "wb");
 
-  // Doesn't seem to have a huge effect
-  //  png_set_compression_level(png_ptr, 9);
+    png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    auto info_ptr = png_create_info_struct(png_ptr);
 
-  png_init_io(png_ptr, fp);
-  png_set_IHDR(png_ptr, info_ptr, bytes.extent, bytes.extent,
-               8/*bit_depth*/, PNG_COLOR_TYPE_RGBA/*GRAY*/, PNG_INTERLACE_NONE,
-               PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+    // Doesn't seem to have a huge effect
+    //  png_set_compression_level(png_ptr, 9);
 
-  std::vector<png_byte*> pdatas(bytes.extent);
-  for(int i = 0; i < bytes.extent; ++i) pdatas[i] = const_cast<png_byte*>(&bytes(0, i, 0));
-  png_set_rows(png_ptr, info_ptr, &pdatas.front());
+    png_init_io(png_ptr, fp);
+    png_set_IHDR(png_ptr, info_ptr, mipmapdim, mipmapdim,
+                 8/*bit_depth*/, PNG_COLOR_TYPE_RGBA/*GRAY*/, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
 
-  png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
+    std::vector<png_byte*> pdatas(mipmapdim);
+    for(int i = 0; i < mipmapdim; ++i) pdatas[i] = const_cast<png_byte*>(&bytes(0, i, 0));
+    png_set_rows(png_ptr, info_ptr, &pdatas.front());
 
-  fclose(fp);
+    png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
 
-  png_destroy_write_struct(&png_ptr, &info_ptr);
+    fclose(fp);
+
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+
+    bytes.MipMap(mipmapdim/2);
+  }
 }
 
 struct PNGBytes
@@ -456,7 +475,7 @@ void WebEVD::analyze(const art::Event& evt)
         //            std::cout << "Create " << plane << " with " << Nw << std::endl;
         const auto key = std::make_pair(Nw, height);
         if(arenas[key].empty() || arenas[key].back()->Full()){
-          const std::string name = TString::Format("arena_%d_%d_%lu.png", Nw, height, arenas[key].size()).Data();
+          const std::string name = TString::Format("arena_%d_%d_%lu", Nw, height, arenas[key].size()).Data();
           arenas[key].push_back(new PNGArena(name, kArenaSize, Nw, height));
         }
 
@@ -515,7 +534,7 @@ void WebEVD::analyze(const art::Event& evt)
       if(plane_wire_imgs.count(plane) == 0){
         const auto key = std::make_pair(Nw, height);
         if(arenas[key].empty() || arenas[key].back()->Full()){
-          const std::string name = TString::Format("arena_%d_%d_%lu.png", Nw, height, arenas[key].size()).Data();
+          const std::string name = TString::Format("arena_%d_%d_%lu", Nw, height, arenas[key].size()).Data();
           arenas[key].push_back(new PNGArena(name, kArenaSize, Nw, height));
         }
         plane_wire_imgs[plane] = arenas[key].back()->NewView();

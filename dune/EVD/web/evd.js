@@ -38,8 +38,8 @@ var mat_hit = new THREE.MeshBasicMaterial({color: 'gray', side: THREE.DoubleSide
 
 var mat_sps = new THREE.MeshBasicMaterial({color: 'blue'});
 
-function GenerateMipMaps(tex, mat){
-    console.log('Loaded callback');
+function GenerateMipMaps(tex, mat, mipdim, texdim){
+    console.log('Loaded callback', mipdim, texdim);
 
     // var canvas = document.createElement('canvas');
     // canvas.width = tex.image.width;
@@ -102,10 +102,44 @@ function GenerateMipMaps(tex, mat){
 
     // console.log(newtex.image, newtex.mipmaps);
 
-    mat.map = tex; // newtex;
-    mat.opacity = 1;
-    mat.needsUpdate = true;
-    requestAnimationFrame(animate);
+    if(mat.tmpmipmaps == undefined) mat.tmpmipmaps = {};
+
+    if(mipdim == texdim){
+        // Main texture
+        tex.generateMipMaps = false;
+        // Go pixely rather than blurry when zoomed right in
+        tex.magFilter = THREE.NearestFilter;
+
+        mat.map = tex;
+        mat.opacity = 1;
+        mat.needsUpdate = true;
+        requestAnimationFrame(animate);
+    }
+
+    mat.tmpmipmaps[mipdim] = tex.image;
+
+    //    console.log(mat.map, mat.tmpmipmaps);
+    if(mat.map != null){
+        var ok = true;
+        for(var i = 1; i <= texdim; i *= 2){
+            if(!(i in mat.tmpmipmaps)) ok = false;
+        }
+
+        if(ok){
+            console.log('ACTIVATING MIPMAPS!');
+
+            for(var i = texdim; i >= 1; i /= 2){
+                mat.map.mipmaps.push(mat.tmpmipmaps[i]);
+            }
+            delete mat.tmpmipmaps;
+
+            // Interpolate within mipmaps but not between them
+            tex.minFilter = THREE.NearestMipmapLinearFilter;
+
+            mat.needsUpdate = true;
+            requestAnimationFrame(animate);
+        }
+    }
 
     return;
 
@@ -172,7 +206,7 @@ function GenerateMipMaps(tex, mat){
 
 var gtexmats = {};
 
-function TextureMaterial(fname){
+function TextureMaterial(fname, texdim){
     if(fname in gtexmats) return gtexmats[fname];
     /*
     var newdata = new Uint8Array(4*256*256);
@@ -192,12 +226,21 @@ function TextureMaterial(fname){
 
     var mat = new THREE.MeshBasicMaterial( { color: 'white', opacity: .1, side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
 
-    var tex = new THREE.TextureLoader().load(fname,
-                                             function(t){window.requestIdleCallback(function(deadline){GenerateMipMaps(t, mat);})},
-                                             //undefined,
-                                             //                                             GenerateMipMaps,
-                                             undefined,
-                                             function(err){mat.opacity = 0; mat.needsUpdate; requestAnimationFrame(animate); console.log('error loading', fname, err);});
+    // var tex = new THREE.TextureLoader().load(fname+'_'+dw.texdim+'.png',
+    //                                          function(t){window.requestIdleCallback(function(deadline){GenerateMipMaps(t, mat);})},
+    //                                          //undefined,
+    //                                          //                                             GenerateMipMaps,
+    //                                          undefined,
+    //                                          function(err){mat.opacity = 0; mat.needsUpdate; requestAnimationFrame(animate); console.log('error loading', fname, err);});
+
+    for(let d = texdim; d >= 1; d /= 2){
+        new THREE.TextureLoader().load(fname+'_'+d+'.png',
+                                       function(t){window.requestIdleCallback(function(deadline){GenerateMipMaps(t, mat, d, texdim);})},
+                                       undefined,
+                                       function(err){mat.opacity = 0; mat.needsUpdate; requestAnimationFrame(animate); console.log('error loading', fname, d, err);});
+    }
+
+    //    console.log(tex);
 
     /*
     tex.flipY = false; // some disagreement between conventions...
@@ -212,7 +255,7 @@ function TextureMaterial(fname){
     mat.map = tex;
     */
 
-    console.log(tex.minFilter, tex.magFilter);
+    //    console.log(tex.minFilter, tex.magFilter);
 
     gtexmats[fname] = mat;
 
@@ -353,7 +396,7 @@ for(key in planes){
 
         geom.addAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 
-        var mat = TextureMaterial(dw.fname);
+        var mat = TextureMaterial(dw.fname, dw.texdim);
         var dmesh = new THREE.Mesh(geom, mat);
         dmesh.layers.set(plane.view);
         if(dw === plane.digs) digs.add(dmesh); else wires.add(dmesh);

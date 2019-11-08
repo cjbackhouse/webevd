@@ -97,6 +97,8 @@ WebEVD::WebEVD(const fhicl::ParameterSet& pset)
 
 void WebEVD::endJob()
 {
+  std::cout << "Temp dir: " << fTempDir << std::endl;
+
   char host[1024];
   gethostname(host, 1024);
   char* user = getlogin();
@@ -135,8 +137,6 @@ void WebEVD::endJob()
       break;
     }
   }
-
-  std::cout << fTempDir << std::endl;
 }
 
 int RoundUpToPowerOfTwo(int x)
@@ -260,140 +260,30 @@ void MipMap(PNGArena& bytes, int newdim)
   } // end for y
 }
 
-void WriteToPNG(const std::string& fname, /*const*/ PNGArena& bytes)
+
+void WriteToPNG(const std::string& fname, const PNGArena& bytes,
+                int mipmapdim = -1)
 {
-  for(int mipmapdim = bytes.extent; mipmapdim >= 1; mipmapdim /= 2){
-    //    FILE* fp = fopen(fname.c_str()+".png", "wb");
-
-    FILE* fp = fopen(TString::Format("%s_%d.png", fname.c_str(), mipmapdim).Data(), "wb");
-
-    png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    auto info_ptr = png_create_info_struct(png_ptr);
-
-    // Doesn't seem to have a huge effect
-    //  png_set_compression_level(png_ptr, 9);
-
-    png_init_io(png_ptr, fp);
-    png_set_IHDR(png_ptr, info_ptr, mipmapdim, mipmapdim,
-                 8/*bit_depth*/, PNG_COLOR_TYPE_RGBA/*GRAY*/, PNG_INTERLACE_NONE,
-                 PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
-
-    std::vector<png_byte*> pdatas(mipmapdim);
-    for(int i = 0; i < mipmapdim; ++i) pdatas[i] = const_cast<png_byte*>(&bytes(0, i, 0));
-    png_set_rows(png_ptr, info_ptr, &pdatas.front());
-
-    png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
-
-    fclose(fp);
-
-    png_destroy_write_struct(&png_ptr, &info_ptr);
-
-    MipMap(bytes, mipmapdim/2);
-  }
-}
-
-
-struct PNGBytes
-{
-  PNGBytes(int w, int h)
-    : width(RoundUpToPowerOfTwo(w)),
-      height(RoundUpToPowerOfTwo(h)),
-      data(width*height*4, 0)
-  {
-    // Scale up to the next power of two
-    //    for(width = 1; width < w; width *= 2);
-    //    for(height = 1; height < h; height *= 2);
-    std::cout << w << "x" << h << " -> " << width << "x" << height << std::endl;
-  }
-
-  png_byte& operator()(int x, int y, int c)
-  {
-    return data[(y*width+x)*4+c];
-  }
-
-  const png_byte& operator()(int x, int y, int c) const
-  {
-    return data[(y*width+x)*4+c];
-  }
-
-  void GetExtents(int& minx, int& maxx, int& miny, int& maxy,
-                  int threshold = 0) const
-  {
-    // HACK the extents off for now
-    minx = miny = 0; maxx = width-1; maxy = height-1;
-    return;
-
-    minx = width-1;
-    maxx = 0;
-    miny = height-1;
-    maxy = 0;
-
-    for(int i = 0; i < width; ++i){
-      for(int j = 0; j < height; ++j){
-        if((*this)(i, j, 3) > threshold){ // check the alpha
-          minx = std::min(i, minx);
-          maxx = std::max(i, maxx);
-          miny = std::min(j, miny);
-          maxy = std::max(j, maxy);
-        }
-      }
-    }
-  }
-
-
-  int width, height;
-  std::vector<png_byte> data;
-};
-
-PNGBytes MipMap(const PNGBytes& b)
-{
-  PNGBytes ret(b.width/2, b.height/2);
-
-  for(int i = 0; i < b.width/2; ++i){
-    for(int j = 0; j < b.height/2; ++j){
-      for(int c = 0; c < 3; ++c){
-        // TODO think about this algorith a bit
-        ret(i, j, c) = (b(i*2,   j*2, c) + b(i*2+1, j*2,   c) +
-                        b(i*2+1, j*2, c) + b(i*2+1, j*2+1, c))/4;
-      }
-      ret(i, j, 3) = std::max(std::max(b(i*2,   j*2, 3), b(i*2+1, j*2,   3)),
-                              std::max(b(i*2+1, j*2, 3), b(i*2+1, j*2+1, 3)));
-    }
-  }
-
-  return ret;
-}
-
-void WriteToPNG(const std::string& fname, const PNGBytes& bytes)
-{
-  int minx, maxx, miny, maxy;
-  // Don't allow a little bit of noise to dominate the sizing. Still seems
-  // to be the case often for the digits though.
-  bytes.GetExtents(minx, maxx, miny, maxy, 8);
-
-  // Just don't write the image if it's completely empty
-  if(miny > maxy || minx > maxx) return;
-
-  const int neww = maxx-minx+1;
-  const int newh = maxy-miny+1;
-
-  //  std::cout << bytes.width << "x" << bytes.height << " -> " << neww << "x" << newh << " (" << minx << "-" << maxx << ", " << miny << "-" << maxy << ")" << std::endl;
+  if(mipmapdim == -1) mipmapdim = bytes.extent;
 
   FILE* fp = fopen(fname.c_str(), "wb");
 
   png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
   auto info_ptr = png_create_info_struct(png_ptr);
 
-  // Doesn't seem to have a huge effect
+  // Doesn't seem to have a huge effect. Setting zero generates huge files
   //  png_set_compression_level(png_ptr, 9);
 
+  // Doesn't affect the file size, may be a small speedup
+  png_set_filter(png_ptr, 0, PNG_FILTER_NONE);
+
   png_init_io(png_ptr, fp);
-  png_set_IHDR(png_ptr, info_ptr, neww, newh, //bytes.width, bytes.height,
+  png_set_IHDR(png_ptr, info_ptr, mipmapdim, mipmapdim,
                8/*bit_depth*/, PNG_COLOR_TYPE_RGBA/*GRAY*/, PNG_INTERLACE_NONE,
                PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
 
-  std::vector<png_byte*> pdatas(newh);
-  for(int i = 0; i < newh; ++i) pdatas[i] = const_cast<png_byte*>(&bytes(minx, miny+i, 0));
+  std::vector<png_byte*> pdatas(mipmapdim);
+  for(int i = 0; i < mipmapdim; ++i) pdatas[i] = const_cast<png_byte*>(&bytes(0, i, 0));
   png_set_rows(png_ptr, info_ptr, &pdatas.front());
 
   png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
@@ -402,6 +292,18 @@ void WriteToPNG(const std::string& fname, const PNGBytes& bytes)
 
   png_destroy_write_struct(&png_ptr, &info_ptr);
 }
+
+// NB: destroys "bytes" in the process
+void WriteToPNGWithMipMaps(const std::string& prefix, PNGArena& bytes)
+{
+  for(int mipmapdim = bytes.extent; mipmapdim >= 1; mipmapdim /= 2){
+    WriteToPNG(TString::Format("%s_%d.png", prefix.c_str(), mipmapdim).Data(),
+               bytes, mipmapdim);
+
+    MipMap(bytes, mipmapdim/2);
+  }
+}
+
 
 class JSONFormatter
 {
@@ -714,35 +616,12 @@ void WebEVD::analyze(const art::Event& evt)
 
   for(auto it: arenas){
     for(unsigned int i = 0; i < it.second.size(); ++i){
+      // TODO think about doing this in threads
       std::cout << "Writing " << it.second[i]->name << std::endl;
-      WriteToPNG(fTempDir+"/"+it.second[i]->name, *it.second[i]);
+      WriteToPNGWithMipMaps(fTempDir+"/"+it.second[i]->name, *it.second[i]);
       delete it.second[i];
     }
   }
-
-  /*
-  // Very cheesy speedup to parallelize png making
-  for(auto it: plane_dig_imgs){
-    std::cout << "Writing digits/" << it.first.toString() << std::endl;
-    if(true){//fork() == 0){
-      WriteToPNG("digits/"+it.first.toString()+".png", *it.second);
-
-      //      WriteToPNG("digits/"+it.first.toString()+"_m.png", MipMap(MipMap(MipMap(*it.second))));
-
-      delete it.second;
-      //      exit(0);
-    }
-  }
-
-  for(auto it: plane_wire_imgs){
-    std::cout << "Writing wires/" << it.first.toString() << std::endl;
-    if(true){//fork() == 0){
-      WriteToPNG("wires/"+it.first.toString()+".png", *it.second);
-      delete it.second;
-      //      exit(0);
-    }
-  }
-  */
 }
 
 } // namespace

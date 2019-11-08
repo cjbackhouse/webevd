@@ -105,7 +105,7 @@ function TextureMaterial(fname, texdim){
 
     // Load all the mipmaps
     for(let d = texdim; d >= 1; d /= 2){
-        new THREE.TextureLoader().load(fname+'_'+d+'.png',
+        new THREE.TextureLoader().load(fname+'_mip'+d+'.png',
                                        function(t){
                                            TextureLoadCallback(t, mat, d, texdim);
                                        },

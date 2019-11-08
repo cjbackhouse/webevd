@@ -149,50 +149,46 @@ int RoundUpToPowerOfTwo(int x)
 // Square because seems to be necessary for mipmapping
 struct PNGArena
 {
-  PNGArena(const std::string& n, int e, int ex, int ey) : name(n), extent(e), elemx(ex), elemy(ey), nviews(0), data(e*e*4, 0)
+  PNGArena(const std::string& n, int e, int ex, int ey) : name(n), extent(e), elemx(ex), elemy(ey), nviews(0)
   {
   }
 
-  png_byte& operator()(int x, int y, int c)
+  png_byte& operator()(int i, int x, int y, int c)
   {
-    return data[(y*extent+x)*4+c];
+    return data[i][(y*extent+x)*4+c];
   }
 
-  const png_byte& operator()(int x, int y, int c) const
+  const png_byte& operator()(int i, int x, int y, int c) const
   {
-    return data[(y*extent+x)*4+c];
+    return data[i][(y*extent+x)*4+c];
   }
 
   struct View
   {
     png_byte& operator()(int x, int y, int c)
     {
-      return arena(x+dx, y+dy, c);
+      return arena(dataIdx, x+dx, y+dy, c);
     }
 
     const png_byte& operator()(int x, int y, int c) const
     {
-      return arena(x+dx, y+dy, c);
+      return arena(dataIdx, x+dx, y+dy, c);
     }
 
-    std::string ArenaName() const {return arena.name;}
+    std::string ArenaName() const {return TString::Format("%s_%d", arena.name.c_str(), dataIdx).Data();}
     int OffsetX() const {return dx;}
     int OffsetY() const {return dy;}
 
   protected:
     friend class PNGArena;
-    View(PNGArena& a, int _dx, int _dy) : arena(a), dx(_dx), dy(_dy)
+    View(PNGArena& a, int _di, int _dx, int _dy) : arena(a), dataIdx(_di), dx(_dx), dy(_dy)
     {
     }
 
     PNGArena& arena;
+    int dataIdx;
     int dx, dy;
   };
-
-  bool Full() const
-  {
-    return nviews >= (extent/elemx)*(extent/elemy);
-  }
 
   // TODO think about memory management
   View* NewView()
@@ -200,27 +196,28 @@ struct PNGArena
     const int nfitx = extent/elemx;
     const int nfity = extent/elemy;
 
-    const int ix = nviews%nfitx;
-    const int iy = nviews/nfitx;
+    int ix = nviews%nfitx;
+    int iy = nviews/nfitx;
 
-    if(iy >= nfity){
-      std::cout << "Arena overflow!" << std::endl;
-      ++nviews;
-      std::cout << "  " << extent << " " << elemx << " " << elemy << " " << nviews << std::endl;
-      //      return new View(*this, 0, 0);
-      abort();
+    if(data.empty() || iy >= nfity){
+      ix = 0;
+      iy = 0;
+      nviews = 0;
+      data.emplace_back(4*extent*extent, 0);
     }
 
     ++nviews;
 
-    return new View(*this, ix*elemx, iy*elemy);
+    return new View(*this, data.size()-1, ix*elemx, iy*elemy);
   }
 
   std::string name;
   int extent;
   int elemx, elemy;
   int nviews;
-  std::vector<png_byte> data;
+  // TODO would be better to have this indexed by elemx/elemy as well, and then
+  // externals callers would only have to deal with one arena.
+  std::vector<std::vector<png_byte>> data;
 };
 
 void MipMap(PNGArena& bytes, int newdim)
@@ -232,73 +229,76 @@ void MipMap(PNGArena& bytes, int newdim)
   // colour channels are averaged, weighted by the alpha values, and then
   // scaled so that the most intense colour retains its same maximum intensity
   // (this is relevant for green, where we use "dark green", 128).
-  for(int y = 0; y < newdim; ++y){
-    for(int x = 0; x < newdim; ++x){
-      double totc[3] = {0,};
-      double maxtotc = 0;
-      png_byte maxc[3] = {0,};
-      png_byte maxmaxc = 0;
-      png_byte maxa = 0;
-      for(int dy = 0; dy <= 1; ++dy){
-        for(int dx = 0; dx <= 1; ++dx){
-          const png_byte va = bytes(x*2+dx, y*2+dy, 3); // alpha value
-          maxa = std::max(maxa, va);
+  for(unsigned int d = 0; d < bytes.data.size(); ++d){
+    for(int y = 0; y < newdim; ++y){
+      for(int x = 0; x < newdim; ++x){
+        double totc[3] = {0,};
+        double maxtotc = 0;
+        png_byte maxc[3] = {0,};
+        png_byte maxmaxc = 0;
+        png_byte maxa = 0;
+        for(int dy = 0; dy <= 1; ++dy){
+          for(int dx = 0; dx <= 1; ++dx){
+            const png_byte va = bytes(d, x*2+dx, y*2+dy, 3); // alpha value
+            maxa = std::max(maxa, va);
 
-          for(int c = 0; c < 3; ++c){
-            const png_byte vc = bytes(x*2+dx, y*2+dy, c); // colour value
-            totc[c] += vc * va;
-            maxc[c] = std::max(maxc[c], vc);
-            maxtotc = std::max(maxtotc, totc[c]);
-            maxmaxc = std::max(maxmaxc, maxc[c]);
-          } // end for c
-        } // end for dx
-      } // end for dy
+            for(int c = 0; c < 3; ++c){
+              const png_byte vc = bytes(d, x*2+dx, y*2+dy, c); // colour value
+              totc[c] += vc * va;
+              maxc[c] = std::max(maxc[c], vc);
+              maxtotc = std::max(maxtotc, totc[c]);
+              maxmaxc = std::max(maxmaxc, maxc[c]);
+            } // end for c
+          } // end for dx
+        } // end for dy
 
-      for(int c = 0; c < 3; ++c) bytes(x, y, c) = maxtotc ? maxmaxc*totc[c]/maxtotc : 0;
-      bytes(x, y, 3) = maxa;
-    } // end for x
-  } // end for y
+        for(int c = 0; c < 3; ++c) bytes(d, x, y, c) = maxtotc ? maxmaxc*totc[c]/maxtotc : 0;
+        bytes(d, x, y, 3) = maxa;
+      } // end for x
+    } // end for y
+  } // end for d
 }
 
 
-void WriteToPNG(const std::string& fname, const PNGArena& bytes,
+void WriteToPNG(const std::string& prefix, const PNGArena& bytes,
                 int mipmapdim = -1)
 {
   if(mipmapdim == -1) mipmapdim = bytes.extent;
 
-  FILE* fp = fopen(fname.c_str(), "wb");
+  for(unsigned int d = 0; d < bytes.data.size(); ++d){
+    FILE* fp = fopen(TString::Format("%s_%d_mip%d.png", prefix.c_str(), d, mipmapdim).Data(), "wb");
 
-  png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-  auto info_ptr = png_create_info_struct(png_ptr);
+    png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    auto info_ptr = png_create_info_struct(png_ptr);
 
-  // Doesn't seem to have a huge effect. Setting zero generates huge files
-  //  png_set_compression_level(png_ptr, 9);
+    // Doesn't seem to have a huge effect. Setting zero generates huge files
+    //  png_set_compression_level(png_ptr, 9);
 
-  // Doesn't affect the file size, may be a small speedup
-  png_set_filter(png_ptr, 0, PNG_FILTER_NONE);
+    // Doesn't affect the file size, may be a small speedup
+    png_set_filter(png_ptr, 0, PNG_FILTER_NONE);
 
-  png_init_io(png_ptr, fp);
-  png_set_IHDR(png_ptr, info_ptr, mipmapdim, mipmapdim,
-               8/*bit_depth*/, PNG_COLOR_TYPE_RGBA/*GRAY*/, PNG_INTERLACE_NONE,
-               PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+    png_init_io(png_ptr, fp);
+    png_set_IHDR(png_ptr, info_ptr, mipmapdim, mipmapdim,
+                 8/*bit_depth*/, PNG_COLOR_TYPE_RGBA/*GRAY*/, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
 
-  std::vector<png_byte*> pdatas(mipmapdim);
-  for(int i = 0; i < mipmapdim; ++i) pdatas[i] = const_cast<png_byte*>(&bytes(0, i, 0));
-  png_set_rows(png_ptr, info_ptr, &pdatas.front());
+    std::vector<png_byte*> pdatas(mipmapdim);
+    for(int i = 0; i < mipmapdim; ++i) pdatas[i] = const_cast<png_byte*>(&bytes(d, 0, i, 0));
+    png_set_rows(png_ptr, info_ptr, &pdatas.front());
 
-  png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
+    png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
 
-  fclose(fp);
+    fclose(fp);
 
-  png_destroy_write_struct(&png_ptr, &info_ptr);
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+  }
 }
 
 // NB: destroys "bytes" in the process
 void WriteToPNGWithMipMaps(const std::string& prefix, PNGArena& bytes)
 {
   for(int mipmapdim = bytes.extent; mipmapdim >= 1; mipmapdim /= 2){
-    WriteToPNG(TString::Format("%s_%d.png", prefix.c_str(), mipmapdim).Data(),
-               bytes, mipmapdim);
+    WriteToPNG(prefix, bytes, mipmapdim);
 
     MipMap(bytes, mipmapdim/2);
   }
@@ -350,7 +350,7 @@ void WebEVD::analyze(const art::Event& evt)
   // the number of ticks we have.
   const int kArenaSize = 8192;
 
-  std::map<std::pair<int, int>, std::vector<PNGArena*>> arenas;
+  std::map<std::pair<int, int>, PNGArena*> arenas;
 
   std::map<geo::PlaneID, PNGArena::View*> plane_dig_imgs;
   std::map<geo::PlaneID, PNGArena::View*> plane_wire_imgs;
@@ -416,12 +416,12 @@ void WebEVD::analyze(const art::Event& evt)
       if(plane_dig_imgs.count(plane) == 0){
         //            std::cout << "Create " << plane << " with " << Nw << std::endl;
         const auto key = std::make_pair(Nw, height);
-        if(arenas[key].empty() || arenas[key].back()->Full()){
-          const std::string name = TString::Format("arena_%d_%d_%lu", Nw, height, arenas[key].size()).Data();
-          arenas[key].push_back(new PNGArena(name, kArenaSize, Nw, height));
+        if(arenas[key] == 0){
+          const std::string name = TString::Format("arena_%dx%d", Nw, height).Data();
+          arenas[key] = new PNGArena(name, kArenaSize, Nw, height);
         }
 
-        plane_dig_imgs[plane] = arenas[key].back()->NewView();
+        plane_dig_imgs[plane] = arenas[key]->NewView();
       }
 
       //          std::cout << "Look up " << plane << std::endl;
@@ -475,11 +475,11 @@ void WebEVD::analyze(const art::Event& evt)
 
       if(plane_wire_imgs.count(plane) == 0){
         const auto key = std::make_pair(Nw, height);
-        if(arenas[key].empty() || arenas[key].back()->Full()){
-          const std::string name = TString::Format("arena_%d_%d_%lu", Nw, height, arenas[key].size()).Data();
-          arenas[key].push_back(new PNGArena(name, kArenaSize, Nw, height));
+        if(arenas[key] == 0){
+          const std::string name = TString::Format("arena_%d_%d", Nw, height).Data();
+          arenas[key] = new PNGArena(name, kArenaSize, Nw, height);
         }
-        plane_wire_imgs[plane] = arenas[key].back()->NewView();
+        plane_wire_imgs[plane] = arenas[key]->NewView();
       }
 
       PNGArena::View& bytes = *plane_wire_imgs[plane];
@@ -615,13 +615,15 @@ void WebEVD::analyze(const art::Event& evt)
   json << "];\n";
 
   for(auto it: arenas){
-    for(unsigned int i = 0; i < it.second.size(); ++i){
-      // TODO think about doing this in threads
-      std::cout << "Writing " << it.second[i]->name << std::endl;
-      WriteToPNGWithMipMaps(fTempDir+"/"+it.second[i]->name, *it.second[i]);
-      delete it.second[i];
-    }
+    // TODO think about doing this in threads
+    std::cout << "Writing " << it.second->name << std::endl;
+    WriteToPNGWithMipMaps(fTempDir+"/"+it.second->name, *it.second);
+    delete it.second;
   }
+
+  // TODO use unique_ptr?
+  for(auto it: plane_dig_imgs) delete it.second;
+  for(auto it: plane_wire_imgs) delete it.second;
 }
 
 } // namespace

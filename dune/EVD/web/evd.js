@@ -7,6 +7,7 @@
 // TODO plot IDEs
 // TODO plot photons
 // TODO pre-upload textures
+// TODO Use textures for hits at long distances so they're visible
 // TODO make SaveAs and Print work
 //
 //import { IcosahedronBufferGeometry } from './three.js-master/src/geometries/IcosahedronGeometry.js'
@@ -272,8 +273,8 @@ for(key in planes){
 
     for(let hit of plane.hits){
         var hc = c.clone();
-        hc.addScaledVector(a, (2.*hit.wire)/plane.nwires-1);
-        hc.addScaledVector(d, (2.*hit.tick)/plane.nticks-1);
+        hc.addScaledVector(a, (2.*hit.wire+1)/plane.nwires-1);
+        hc.addScaledVector(d, (2.*hit.tick+1)/plane.nticks-1);
 
         var du = ArrToVec(plane.across).multiplyScalar(plane.pitch*.45);
         var dv = ArrToVec(plane.normal).multiplyScalar(hit.rms*Math.abs(plane.tick_pitch));

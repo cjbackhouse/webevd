@@ -84,6 +84,8 @@ function TextureLoadCallback(tex, mat, mipdim, texdim){
             delete mat.tmpmipmaps;
 
             tex.minFilter = THREE.LinearMipmapLinearFilter;
+            // Necessary to not see block edges, but is super ugly...
+            //            tex.minFilter = THREE.NearestMipmapNearestFilter;
 
             mat.map.needsUpdate = true;
             mat.needsUpdate = true;
@@ -240,32 +242,48 @@ for(key in planes){
 
     for(dw of [plane.digs, plane.wires]){
         if(dw == undefined) continue; // sometimes wires are missing
+        for(block of dw.blocks){
+            // TODO - would want to combine all the ones with the same texture
+            // file into a single geometry.
+            var geom = new THREE.BufferGeometry();
 
-        var geom = new THREE.BufferGeometry();
-        geom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+            var blockc = ArrToVec(plane.center);
+            blockc.add(d); // center of the drift direction too
+            blockc.addScaledVector(ArrToVec(plane.across), (block.dx+32-plane.nwires/2)*plane.pitch);
+            blockc.addScaledVector(ArrToVec(plane.normal), (block.dy+32-plane.nticks/2)*Math.abs(plane.tick_pitch));
 
-        var u0 =   dw.texdx/dw.texdim;
-        var v0 = 1-dw.texdy/dw.texdim;
-        var u1 =   (dw.texdx+plane.nwires)/dw.texdim;
-        var v1 = 1-(dw.texdy+plane.nticks)/dw.texdim;
+            // TODO hardcoding in (half) block size isn't good
+            var blocka = ArrToVec(plane.across).multiplyScalar(32*plane.pitch);
+            var blockd = ArrToVec(plane.normal).multiplyScalar(32*Math.abs(plane.tick_pitch));
 
-        // TODO think carefully about geometry
-        var uvs = new Float32Array( [u1, v0,
-                                     u1, v1,
-                                     u0, v1,
+            vtxs = [];
+            push_square_vtxs(blockc, blocka, blockd, vtxs);
+            geom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
-                                     u1, v0,
-                                     u0, v1,
-                                     u0, v0] );
+            // TODO ditto here
+            var u0 =   block.texdx/block.texdim;
+            var v0 = 1-block.texdy/block.texdim;
+            var u1 =   (block.texdx+64)/block.texdim;
+            var v1 = 1-(block.texdy+64)/block.texdim;
 
-        geom.addAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+            // TODO think carefully about geometry
+            var uvs = new Float32Array( [u1, v0,
+                                         u1, v1,
+                                         u0, v1,
 
-        var mat = TextureMaterial(dw.fname, dw.texdim);
-        var dmesh = new THREE.Mesh(geom, mat);
-        dmesh.layers.set(plane.view);
-        if(dw === plane.digs) digs.add(dmesh); else wires.add(dmesh);
+                                         u1, v0,
+                                         u0, v1,
+                                         u0, v0] );
 
-        if(plane.view != 2) dmesh.layers.enable(uvlayer);
+            geom.addAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+
+            var mat = TextureMaterial(block.fname, block.texdim);
+            var dmesh = new THREE.Mesh(geom, mat);
+            dmesh.layers.set(plane.view);
+            if(dw === plane.digs) digs.add(dmesh); else wires.add(dmesh);
+
+            if(plane.view != 2) dmesh.layers.enable(uvlayer);
+        }
     }
 
     var hitgeom = new THREE.BufferGeometry();

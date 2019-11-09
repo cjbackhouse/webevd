@@ -146,10 +146,17 @@ int RoundUpToPowerOfTwo(int x)
   return ret;
 }
 
+
+// Larger than this doesn't seem to work in the browser. Smaller won't fit
+// the number of ticks we have.
+const int kArenaSize = 8192;
+
+const int kBlockSize = 64;
+
 // Square because seems to be necessary for mipmapping
 struct PNGArena
 {
-  PNGArena(const std::string& n, int e, int ex, int ey) : name(n), extent(e), elemx(ex), elemy(ey), nviews(0)
+  PNGArena(const std::string& n) : name(n), extent(kArenaSize), nviews(0)
   {
   }
 
@@ -163,38 +170,10 @@ struct PNGArena
     return data[i][(y*extent+x)*4+c];
   }
 
-  struct View
+  png_byte* NewBlock()
   {
-    png_byte& operator()(int x, int y, int c)
-    {
-      return arena(dataIdx, x+dx, y+dy, c);
-    }
-
-    const png_byte& operator()(int x, int y, int c) const
-    {
-      return arena(dataIdx, x+dx, y+dy, c);
-    }
-
-    std::string ArenaName() const {return TString::Format("%s_%d", arena.name.c_str(), dataIdx).Data();}
-    int OffsetX() const {return dx;}
-    int OffsetY() const {return dy;}
-
-  protected:
-    friend class PNGArena;
-    View(PNGArena& a, int _di, int _dx, int _dy) : arena(a), dataIdx(_di), dx(_dx), dy(_dy)
-    {
-    }
-
-    PNGArena& arena;
-    int dataIdx;
-    int dx, dy;
-  };
-
-  // TODO think about memory management
-  View* NewView()
-  {
-    const int nfitx = extent/elemx;
-    const int nfity = extent/elemy;
+    const int nfitx = extent/kBlockSize;
+    const int nfity = extent/kBlockSize;
 
     int ix = nviews%nfitx;
     int iy = nviews/nfitx;
@@ -203,22 +182,89 @@ struct PNGArena
       ix = 0;
       iy = 0;
       nviews = 0;
-      data.emplace_back(4*extent*extent, 0);
+      data.emplace_back(4*extent*extent);
     }
 
     ++nviews;
 
-    return new View(*this, data.size()-1, ix*elemx, iy*elemy);
+    return &data.back()[(iy*extent + ix)*kBlockSize*4];
   }
 
   std::string name;
   int extent;
   int elemx, elemy;
   int nviews;
-  // TODO would be better to have this indexed by elemx/elemy as well, and then
-  // externals callers would only have to deal with one arena.
+
   std::vector<std::vector<png_byte>> data;
 };
+
+
+struct PNGView
+{
+  PNGView(PNGArena& a, int w, int h)
+    : arena(a), width(w), height(h), blocks(w/kBlockSize+1, std::vector<png_byte*>(h/kBlockSize+1, 0))
+  {
+  }
+
+  inline png_byte& operator()(int x, int y, int c)
+  {
+    const int ix = x/kBlockSize;
+    const int iy = y/kBlockSize;
+    if(!blocks[ix][iy]) blocks[ix][iy] = arena.NewBlock();
+    return blocks[ix][iy][((y-iy*kBlockSize)*arena.extent+(x-ix*kBlockSize))*4+c];
+  }
+
+  inline png_byte operator()(int x, int y, int c) const
+  {
+    const int ix = x/kBlockSize;
+    const int iy = y/kBlockSize;
+    if(!blocks[ix][iy]) return 0;
+    return blocks[ix][iy][((y-iy*kBlockSize)*arena.extent+(x-ix*kBlockSize))*4+c];
+  }
+
+protected:
+  template<class T> friend T& operator<<(T&, const PNGView&);
+
+  PNGArena& arena;
+  int width, height;
+  std::vector<std::vector<png_byte*>> blocks;
+};
+
+
+template<class T> T& operator<<(T& os, const PNGView& v)
+{
+  os << "{blocks: [";
+  for(unsigned int ix = 0; ix < v.blocks.size(); ++ix){
+    for(unsigned int iy = 0; iy < v.blocks[ix].size(); ++iy){
+      const png_byte* b = v.blocks[ix][iy];
+      if(!b) continue;
+
+      int dataidx = 0;
+      for(unsigned int d = 0; d < v.arena.data.size(); ++d){
+        if(b >= &v.arena.data[d].front() &&
+           b <  &v.arena.data[d].front() + 4*v.arena.extent*v.arena.extent){
+          dataidx = d;
+          break;
+        }
+      }
+
+      const int texdx = ((b-&v.arena.data[dataidx].front())/4)%v.arena.extent;
+      const int texdy = ((b-&v.arena.data[dataidx].front())/4)/v.arena.extent;
+
+      os << "{"
+         << "dx: " << ix*kBlockSize << ", "
+         << "dy: " << iy*kBlockSize << ", "
+         << "fname: \"" << v.arena.name << "_" << dataidx << "\", "
+         << "texdim: " << v.arena.extent << ", "
+         << "texdx: " << texdx << ", "
+         << "texdy: " << texdy
+         << "}, ";
+    }
+  }
+  os << "]}";
+  return os;
+}
+
 
 void MipMap(PNGArena& bytes, int newdim)
 {
@@ -259,6 +305,30 @@ void MipMap(PNGArena& bytes, int newdim)
   } // end for d
 }
 
+void AnalyzeArena(const PNGArena& bytes)
+{
+  for(int blockSize = 1; blockSize <= bytes.extent; blockSize *= 2){
+    long nfilled = 0;
+    for(unsigned int d = 0; d < bytes.data.size(); ++d){
+      for(int iy = 0; iy < bytes.extent/blockSize; ++iy){
+        for(int ix = 0; ix < bytes.extent/blockSize; ++ix){
+          bool filled = false;
+          for(int y = 0; y < blockSize && !filled; ++y){
+            for(int x = 0; x < blockSize; ++x){
+              if(bytes(d, ix*blockSize+x, iy*blockSize+y, 3) > 0){
+                filled = true;
+                break;
+              }
+            }
+          } // end for y
+          if(filled) ++nfilled;
+        }
+      }
+    }
+
+    std::cout << "With block size = " << blockSize << " " << double(nfilled)/((bytes.extent*bytes.extent)/(blockSize*blockSize)*bytes.data.size()) << " of the blocks are filled" << std::endl;
+  }
+}
 
 void WriteToPNG(const std::string& prefix, const PNGArena& bytes,
                 int mipmapdim = -1)
@@ -297,6 +367,8 @@ void WriteToPNG(const std::string& prefix, const PNGArena& bytes,
 // NB: destroys "bytes" in the process
 void WriteToPNGWithMipMaps(const std::string& prefix, PNGArena& bytes)
 {
+  //  AnalyzeArena(bytes);
+
   for(int mipmapdim = bytes.extent; mipmapdim >= 1; mipmapdim /= 2){
     WriteToPNG(prefix, bytes, mipmapdim);
 
@@ -346,14 +418,10 @@ void WebEVD::analyze(const art::Event& evt)
   //  const int width = 480; // TODO remove // max wire ID 512*8;
   const int height = 4492; // TODO somewhere to look up number of ticks?
 
-  // Larger than this doesn't seem to work in the browser. Smaller won't fit
-  // the number of ticks we have.
-  const int kArenaSize = 8192;
+  PNGArena arena("arena");
 
-  std::map<std::pair<int, int>, PNGArena*> arenas;
-
-  std::map<geo::PlaneID, PNGArena::View*> plane_dig_imgs;
-  std::map<geo::PlaneID, PNGArena::View*> plane_wire_imgs;
+  std::map<geo::PlaneID, PNGView*> plane_dig_imgs;
+  std::map<geo::PlaneID, PNGView*> plane_wire_imgs;
 
   art::Handle<std::vector<recob::SpacePoint>> pts;
   evt.getByLabel(fSpacePointTag, pts);
@@ -414,19 +482,12 @@ void WebEVD::analyze(const art::Event& evt)
       const unsigned int Nw = geom->Nwires(plane);
 
       if(plane_dig_imgs.count(plane) == 0){
-        //            std::cout << "Create " << plane << " with " << Nw << std::endl;
-        const auto key = std::make_pair(Nw, height);
-        if(arenas[key] == 0){
-          const std::string name = TString::Format("arena_%dx%d", Nw, height).Data();
-          arenas[key] = new PNGArena(name, kArenaSize, Nw, height);
-        }
-
-        plane_dig_imgs[plane] = arenas[key]->NewView();
+        plane_dig_imgs[plane] = new PNGView(arena, Nw, height);
       }
 
       //          std::cout << "Look up " << plane << std::endl;
 
-      PNGArena::View& bytes = *plane_dig_imgs[plane];
+      PNGView& bytes = *plane_dig_imgs[plane];
 
       //          std::cout << dig.Samples() << " and " << wire.Wire << std::endl;
       //        }
@@ -474,19 +535,16 @@ void WebEVD::analyze(const art::Event& evt)
       const unsigned int Nw = geom->Nwires(plane);
 
       if(plane_wire_imgs.count(plane) == 0){
-        const auto key = std::make_pair(Nw, height);
-        if(arenas[key] == 0){
-          const std::string name = TString::Format("arena_%d_%d", Nw, height).Data();
-          arenas[key] = new PNGArena(name, kArenaSize, Nw, height);
-        }
-        plane_wire_imgs[plane] = arenas[key]->NewView();
+        plane_wire_imgs[plane] = new PNGView(arena, Nw, height);
       }
 
-      PNGArena::View& bytes = *plane_wire_imgs[plane];
+      PNGView& bytes = *plane_wire_imgs[plane];
 
       const auto adcs = (*wires)[wireIdx].Signal();
       //        std::cout << "  " << adcs.size() << std::endl;
       for(unsigned int tick = 0; tick < std::min(adcs.size(), size_t(height)); ++tick){
+        if(adcs[tick] <= 0) continue;
+
         // green channel
         bytes(wire.Wire-w0.Wire, tick, 1) = 128; // dark green
         // alpha channel
@@ -536,7 +594,8 @@ void WebEVD::analyze(const art::Event& evt)
     const unsigned int nwires = planegeo.Nwires();
     const double pitch = planegeo.WirePitch();
     const TVector3 c = planegeo.GetCenter();
-    const PNGArena::View* dig_view = it.second;
+    const PNGView* dig_view = it.second;
+    (void)dig_view;
 
     const auto d = planegeo.GetIncreasingWireDirection();
     //    const auto dwire = planegeo.GetWireDirection();
@@ -545,7 +604,8 @@ void WebEVD::analyze(const art::Event& evt)
     const int nticks = height; // HACK from earlier
     const double tick_pitch = detprop->ConvertTicksToX(1, plane) - detprop->ConvertTicksToX(0, plane);
 
-    PNGArena::View* wire_view = plane_wire_imgs.count(plane) ? plane_wire_imgs[plane] : 0;
+    PNGView* wire_view = plane_wire_imgs.count(plane) ? plane_wire_imgs[plane] : 0;
+    (void)wire_view;
 
     json << "  \"" << plane << "\": {"
          << "view: " << view << ", "
@@ -557,19 +617,8 @@ void WebEVD::analyze(const art::Event& evt)
          << "across: " << d << ", "
          << "normal: " << n << ", ";
 
-    json << "digs: {"
-         << "fname: \"" << dig_view->ArenaName() << "\", "
-         << "texdim: " << kArenaSize << ", "
-         << "texdx: " << dig_view->OffsetX() << ", "
-         << "texdy: " << dig_view->OffsetY() << "}, ";
-
-    if(wire_view){
-      json << "wires: {"
-           << "fname: \"" << wire_view->ArenaName() << "\", "
-           << "texdim: " << kArenaSize << ", "
-           << "texdx: " << wire_view->OffsetX() << ", "
-           << "texdy: " << wire_view->OffsetY() << "}, ";
-    }
+    json << "digs: " << *dig_view << ", ";
+    if(wire_view) json << "wires: " << *wire_view << ", ";
 
     json << "hits: [";
     for(const recob::Hit& hit: plane_hits[plane]){
@@ -614,12 +663,8 @@ void WebEVD::analyze(const art::Event& evt)
   }
   json << "];\n";
 
-  for(auto it: arenas){
-    // TODO think about doing this in threads
-    std::cout << "Writing " << it.second->name << std::endl;
-    WriteToPNGWithMipMaps(fTempDir+"/"+it.second->name, *it.second);
-    delete it.second;
-  }
+  std::cout << "Writing " << arena.name << std::endl;
+  WriteToPNGWithMipMaps(fTempDir+"/"+arena.name, arena);
 
   // TODO use unique_ptr?
   for(auto it: plane_dig_imgs) delete it.second;

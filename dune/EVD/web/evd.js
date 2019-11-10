@@ -83,9 +83,10 @@ function TextureLoadCallback(tex, mat, mipdim, texdim){
             }
             delete mat.tmpmipmaps;
 
-            tex.minFilter = THREE.LinearMipmapLinearFilter;
+            mat.map.minFilter = THREE.LinearMipmapLinearFilter;
             // Necessary to not see block edges, but is super ugly...
-            //            tex.minFilter = THREE.NearestMipmapNearestFilter;
+            // Mostly because the wires are much wider than the ticks
+            // mat.map.minFilter = THREE.NearestMipmapLinearFilter;
 
             mat.map.needsUpdate = true;
             mat.needsUpdate = true;
@@ -261,8 +262,8 @@ for(key in planes){
             geom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
             // TODO ditto here
-            var u0 =   block.texdx/block.texdim;
-            var v0 = 1-block.texdy/block.texdim;
+            var u0 =   (block.texdx   )/block.texdim;
+            var v0 = 1-(block.texdy   )/block.texdim;
             var u1 =   (block.texdx+64)/block.texdim;
             var v1 = 1-(block.texdy+64)/block.texdim;
 

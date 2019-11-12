@@ -226,7 +226,7 @@ for(key in planes){
     push_square_vtxs(c, a, d, vtxs);
 
     var geom = new THREE.BufferGeometry();
-    geom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
     var edges = new THREE.EdgesGeometry( geom );
     var line = new THREE.LineSegments( edges, mat_lin );
@@ -258,7 +258,7 @@ for(key in planes){
 
             vtxs = [];
             push_square_vtxs(blockc, blocka, blockd, vtxs);
-            geom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+            geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
             // TODO ditto here
             var u0 =   (block.texdx   )/block.texdim;
@@ -274,7 +274,7 @@ for(key in planes){
                                          u0, v1,
                                          u0, v0] );
 
-            geom.addAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+            geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 
             var mat = TextureMaterial(block.fname, block.texdim);
             var dmesh = new THREE.Mesh(geom, mat);
@@ -299,7 +299,7 @@ for(key in planes){
         push_square_vtxs(hc, du, dv, hitvtxs);
     }
 
-    hitgeom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs), 3));
+    hitgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs), 3));
 
     var h = new THREE.Mesh(hitgeom, mat_hit);
     h.layers.set(plane.view);
@@ -321,7 +321,7 @@ for(let sp of coords){
 }
 
 var spgeom = new THREE.BufferGeometry();
-spgeom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
+spgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
 spgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(spidxs), 1));
 var sps = new THREE.Mesh(spgeom, mat_sps);
 for(var i = 0; i < 5; ++i) sps.layers.enable(i);
@@ -339,7 +339,7 @@ function add_tracks(trajs, group){
         var trkgeom = new THREE.BufferGeometry();
         ptarr = [];
         for(let pt of track) ptarr = ptarr.concat(pt);
-        trkgeom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
+        trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
 
         var trkline = new THREE.Line(trkgeom, mat_trk);
         trkline.layers.enable(0); trkline.layers.enable(1); trkline.layers.enable(2); trkline.layers.enable(3); trkline.layers.enable(4);
@@ -616,6 +616,6 @@ window.addEventListener('unload', function(event){renderer.dispose();});
 controls.addEventListener('change', animate);
 window.addEventListener('resize', animate);
 
-Animate();
+animate();
 
 console.log(renderer.info);

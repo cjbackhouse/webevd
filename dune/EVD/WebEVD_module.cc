@@ -80,6 +80,8 @@ protected:
   std::string fHitLabel;
 
   std::string fTempDir;
+
+  std::vector<std::string> fCleanup;
 };
 
 DEFINE_ART_MODULE(WebEVD)
@@ -134,6 +136,13 @@ void WebEVD::endJob()
     else{
       break;
     }
+  }
+
+  // I'm nervous about removing files based on a wildcard, so we explicitly
+  // track everything we put in the tmp directory and clean it up here.
+  for(const std::string& f: fCleanup) unlink(f.c_str());
+  if(rmdir(fTempDir.c_str()) != 0){
+    std::cout << "Failed to clean up temporary directory " << fTempDir << std::endl;
   }
 }
 
@@ -329,12 +338,15 @@ void AnalyzeArena(const PNGArena& bytes)
 }
 
 void WriteToPNG(const std::string& prefix, const PNGArena& bytes,
-                int mipmapdim = -1)
+                std::vector<std::string>& cleanup, int mipmapdim = -1)
 {
   if(mipmapdim == -1) mipmapdim = bytes.extent;
 
   for(unsigned int d = 0; d < bytes.data.size(); ++d){
-    FILE* fp = fopen(TString::Format("%s_%d_mip%d.png", prefix.c_str(), d, mipmapdim).Data(), "wb");
+    const std::string fname = TString::Format("%s_%d_mip%d.png", prefix.c_str(), d, mipmapdim).Data();
+    cleanup.push_back(fname);
+
+    FILE* fp = fopen(fname.c_str(), "wb");
 
     png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     auto info_ptr = png_create_info_struct(png_ptr);
@@ -363,12 +375,13 @@ void WriteToPNG(const std::string& prefix, const PNGArena& bytes,
 }
 
 // NB: destroys "bytes" in the process
-void WriteToPNGWithMipMaps(const std::string& prefix, PNGArena& bytes)
+void WriteToPNGWithMipMaps(const std::string& prefix, PNGArena& bytes,
+                           std::vector<std::string>& cleanup)
 {
   //  AnalyzeArena(bytes);
 
   for(int mipmapdim = bytes.extent; mipmapdim >= 1; mipmapdim /= 2){
-    WriteToPNG(prefix, bytes, mipmapdim);
+    WriteToPNG(prefix, bytes, cleanup, mipmapdim);
 
     MipMap(bytes, mipmapdim/2);
   }
@@ -429,9 +442,12 @@ void WebEVD::analyze(const art::Event& evt)
   for(std::string tgt: {"evd.js", "index.html" /*, "three.js-master"*/}){
     symlink(TString::Format("%s/%s", webdir,           tgt.c_str()).Data(),
             TString::Format("%s/%s", fTempDir.c_str(), tgt.c_str()).Data());
+    fCleanup.push_back(fTempDir+"/"+tgt);
   }
 
   std::ofstream outf(fTempDir+"/coords.js");
+  fCleanup.push_back(fTempDir+"/coords.js");
+
   JSONFormatter json(outf);
 
   json << "var coords = [\n";
@@ -607,7 +623,7 @@ void WebEVD::analyze(const art::Event& evt)
   json << "];\n";
 
   std::cout << "Writing " << arena.name << std::endl;
-  WriteToPNGWithMipMaps(fTempDir+"/"+arena.name, arena);
+  WriteToPNGWithMipMaps(fTempDir+"/"+arena.name, arena, fCleanup);
 
   // TODO use unique_ptr?
   for(auto it: plane_dig_imgs) delete it.second;

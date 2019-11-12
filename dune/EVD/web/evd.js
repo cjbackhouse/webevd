@@ -13,11 +13,13 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@v0.110.0/build/three.module.js";
 import {OrbitControls} from "https://cdn.jsdelivr.net/npm/three@v0.110.0/examples/jsm/controls/OrbitControls.js";
 
-var scene = new THREE.Scene();
+let gAnimReentrant = false;
 
-var camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 0.1, 1e6 );
+let scene = new THREE.Scene();
 
-var renderer = new THREE.WebGLRenderer();
+let camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 0.1, 1e6 );
+
+let renderer = new THREE.WebGLRenderer();
 // I have no idea why these 4 pixels are necessary
 renderer.setSize( window.innerWidth, window.innerHeight-4);
 
@@ -33,22 +35,22 @@ function ArrToVec(arr)
     return new THREE.Vector3(arr[0], arr[1], arr[2]);
 }
 
-var mat_lin = new THREE.LineBasicMaterial({color: 'gray'});
+let mat_lin = new THREE.LineBasicMaterial({color: 'gray'});
 
-var mat_hit = new THREE.MeshBasicMaterial({color: 'gray', side: THREE.DoubleSide});
+let mat_hit = new THREE.MeshBasicMaterial({color: 'gray', side: THREE.DoubleSide});
 
-var mat_sps = new THREE.MeshBasicMaterial({color: 'blue'});
+let mat_sps = new THREE.MeshBasicMaterial({color: 'blue'});
 
 function TextureLoadCallback(tex, mat, mipdim, texdim){
     console.log('Loaded callback', mipdim, texdim);
 
     // This is how you would create a data texture if necessary
-    // var canvas = document.createElement('canvas');
+    // let canvas = document.createElement('canvas');
     // canvas.width = tex.image.width;
     // canvas.height = tex.image.height;
-    // var context = canvas.getContext('2d');
+    // let context = canvas.getContext('2d');
     // context.drawImage(tex.image, 0, 0);
-    // var data = context.getImageData(0, 0, tex.image.width, tex.image.height).data;
+    // let data = context.getImageData(0, 0, tex.image.width, tex.image.height).data;
     // let newtex = new THREE.DataTexture(data, tex.image.width, tex.image.height, THREE.RGBAFormat);
 
     // Until all the mipmaps are ready we stash them in the material
@@ -71,15 +73,15 @@ function TextureLoadCallback(tex, mat, mipdim, texdim){
     // If the main texture is loaded
     if(mat.map != null){
         // And we have now loaded all of the mipmaps
-        var ok = true;
-        for(var i = 1; i <= texdim; i *= 2){
+        let ok = true;
+        for(let i = 1; i <= texdim; i *= 2){
             if(!(i in mat.tmpmipmaps)) ok = false;
         }
 
         if(ok){
             // TODO - is it bad that the largest resolution image is in the
             // main map and also the first element in the mipmap list?
-            for(var i = texdim; i >= 1; i /= 2){
+            for(let i = texdim; i >= 1; i /= 2){
                 mat.map.mipmaps.push(mat.tmpmipmaps[i]);
             }
             delete mat.tmpmipmaps;
@@ -98,13 +100,13 @@ function TextureLoadCallback(tex, mat, mipdim, texdim){
 
 // Cache so we can request the same texture material multiple times without
 // duplication
-var gtexmats = {};
+let gtexmats = {};
 
 function TextureMaterial(fname, texdim){
     if(fname in gtexmats) return gtexmats[fname];
 
     // Make the material a transparent solid colour until the texture loads
-    var mat = new THREE.MeshBasicMaterial( { color: 'white', opacity: .1, side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
+    let mat = new THREE.MeshBasicMaterial( { color: 'white', opacity: .1, side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
     gtexmats[fname] = mat;
 
     // Load all the mipmaps
@@ -126,12 +128,12 @@ function TextureMaterial(fname, texdim){
 }
 
 
-var outlines = new THREE.Group();
-var digs = new THREE.Group();
-var wires = new THREE.Group();
-var hits = new THREE.Group();
-var reco_tracks = new THREE.Group();
-var truth = new THREE.Group();
+let outlines = new THREE.Group();
+let digs = new THREE.Group();
+let wires = new THREE.Group();
+let hits = new THREE.Group();
+let reco_tracks = new THREE.Group();
+let truth = new THREE.Group();
 
 scene.add(outlines);
 scene.add(digs);
@@ -140,17 +142,17 @@ scene.add(hits);
 scene.add(reco_tracks);
 scene.add(truth);
 
-var com = new THREE.Vector3();
-var nplanes = 0;
+let com = new THREE.Vector3();
+let nplanes = 0;
 
-var uperp = null;
-var vperp = null;
+let uperp = null;
+let vperp = null;
 
 function push_square_vtxs(c, du, dv, vtxs){
-    var p1 = c.clone();
-    var p2 = c.clone();
-    var p3 = c.clone();
-    var p4 = c.clone();
+    let p1 = c.clone();
+    let p2 = c.clone();
+    let p3 = c.clone();
+    let p4 = c.clone();
 
     // p1 = du-dv, p2 = du+dv, p3 = -du+dv, p4=-du-dv
     p1.add(du); p1.addScaledVector(dv, -1);
@@ -194,11 +196,11 @@ function push_icosahedron_vtxs(c, radius, vtxs, indices){
               4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1
               ];
 
-    for(i = 0; i < is.length; ++i){
+    for(let i = 0; i < is.length; ++i){
         indices.push(is[i] + vtxs.length/3);
     }
 
-    for(i = 0; i < vs.length; i += 3){
+    for(let i = 0; i < vs.length; i += 3){
         vtxs.push(c.x + radius/r0*vs[i  ]);
         vtxs.push(c.y + radius/r0*vs[i+1]);
         vtxs.push(c.z + radius/r0*vs[i+2]);
@@ -206,10 +208,10 @@ function push_icosahedron_vtxs(c, radius, vtxs, indices){
 }
 
 for(let key in planes){
-    var plane = planes[key];
-    var c = ArrToVec(plane.center);
-    var a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
-    var d = ArrToVec(plane.normal).multiplyScalar(plane.nticks*Math.abs(plane.tick_pitch)/2.); // drift direction
+    let plane = planes[key];
+    let c = ArrToVec(plane.center);
+    let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
+    let d = ArrToVec(plane.normal).multiplyScalar(plane.nticks*Math.abs(plane.tick_pitch)/2.); // drift direction
 
     c.add(d); // center of the drift direction too
 
@@ -226,11 +228,11 @@ for(let key in planes){
     let vtxs = [];
     push_square_vtxs(c, a, d, vtxs);
 
-    var geom = new THREE.BufferGeometry();
+    let geom = new THREE.BufferGeometry();
     geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
-    var edges = new THREE.EdgesGeometry( geom );
-    var line = new THREE.LineSegments( edges, mat_lin );
+    let edges = new THREE.EdgesGeometry( geom );
+    let line = new THREE.LineSegments( edges, mat_lin );
 
     outlines.add(line);
 
@@ -246,28 +248,28 @@ for(let key in planes){
         for(let block of dw.blocks){
             // TODO - would want to combine all the ones with the same texture
             // file into a single geometry.
-            var geom = new THREE.BufferGeometry();
+            let geom = new THREE.BufferGeometry();
 
-            var blockc = ArrToVec(plane.center);
+            let blockc = ArrToVec(plane.center);
             blockc.add(d); // center of the drift direction too
             blockc.addScaledVector(ArrToVec(plane.across), (block.dx+32-plane.nwires/2)*plane.pitch);
             blockc.addScaledVector(ArrToVec(plane.normal), (block.dy+32-plane.nticks/2)*Math.abs(plane.tick_pitch));
 
             // TODO hardcoding in (half) block size isn't good
-            var blocka = ArrToVec(plane.across).multiplyScalar(32*plane.pitch);
-            var blockd = ArrToVec(plane.normal).multiplyScalar(32*Math.abs(plane.tick_pitch));
+            let blocka = ArrToVec(plane.across).multiplyScalar(32*plane.pitch);
+            let blockd = ArrToVec(plane.normal).multiplyScalar(32*Math.abs(plane.tick_pitch));
 
             vtxs = [];
             push_square_vtxs(blockc, blocka, blockd, vtxs);
             geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
             // TODO ditto here
-            var u0 =   (block.texdx   )/block.texdim;
-            var v0 = 1-(block.texdy   )/block.texdim;
-            var u1 =   (block.texdx+64)/block.texdim;
-            var v1 = 1-(block.texdy+64)/block.texdim;
+            let u0 =   (block.texdx   )/block.texdim;
+            let v0 = 1-(block.texdy   )/block.texdim;
+            let u1 =   (block.texdx+64)/block.texdim;
+            let v1 = 1-(block.texdy+64)/block.texdim;
 
-            var uvs = new Float32Array( [u1, v0,
+            let uvs = new Float32Array( [u1, v0,
                                          u1, v1,
                                          u0, v1,
 
@@ -277,8 +279,8 @@ for(let key in planes){
 
             geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 
-            var mat = TextureMaterial(block.fname, block.texdim);
-            var dmesh = new THREE.Mesh(geom, mat);
+            let mat = TextureMaterial(block.fname, block.texdim);
+            let dmesh = new THREE.Mesh(geom, mat);
             dmesh.layers.set(plane.view);
             if(dw === plane.digs) digs.add(dmesh); else wires.add(dmesh);
 
@@ -286,23 +288,23 @@ for(let key in planes){
         }
     }
 
-    var hitgeom = new THREE.BufferGeometry();
-    var hitvtxs = [];
+    let hitgeom = new THREE.BufferGeometry();
+    let hitvtxs = [];
 
     for(let hit of plane.hits){
-        var hc = c.clone();
+        let hc = c.clone();
         hc.addScaledVector(a, (2.*hit.wire+1)/plane.nwires-1);
         hc.addScaledVector(d, (2.*hit.tick+1)/plane.nticks-1);
 
-        var du = ArrToVec(plane.across).multiplyScalar(plane.pitch*.45);
-        var dv = ArrToVec(plane.normal).multiplyScalar(hit.rms*Math.abs(plane.tick_pitch));
+        let du = ArrToVec(plane.across).multiplyScalar(plane.pitch*.45);
+        let dv = ArrToVec(plane.normal).multiplyScalar(hit.rms*Math.abs(plane.tick_pitch));
 
         push_square_vtxs(hc, du, dv, hitvtxs);
     }
 
     hitgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs), 3));
 
-    var h = new THREE.Mesh(hitgeom, mat_hit);
+    let h = new THREE.Mesh(hitgeom, mat_hit);
     h.layers.set(plane.view);
     hits.add(h);
 
@@ -316,33 +318,33 @@ com.divideScalar(nplanes);
 
 let spvtxs = [];
 let spidxs = [];
-var isp = 0;
+let isp = 0;
 for(let sp of coords){
     push_icosahedron_vtxs(ArrToVec(sp), .4, spvtxs, spidxs);
 }
 
-var spgeom = new THREE.BufferGeometry();
+let spgeom = new THREE.BufferGeometry();
 spgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
 spgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(spidxs), 1));
-var sps = new THREE.Mesh(spgeom, mat_sps);
-for(var i = 0; i < 5; ++i) sps.layers.enable(i);
+let sps = new THREE.Mesh(spgeom, mat_sps);
+for(let i = 0; i < 5; ++i) sps.layers.enable(i);
 scene.add(sps);
 
 
 let colors = ['red', 'blue', 'green', 'orange', 'purple', 'skyblue'];
 
 function add_tracks(trajs, group){
-    var i = 0;
+    let i = 0;
     for(let track of trajs){
         let col = colors[i%colors.length];
         i += 1;
-        var mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
-        var trkgeom = new THREE.BufferGeometry();
+        let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
+        let trkgeom = new THREE.BufferGeometry();
         let ptarr = [];
         for(let pt of track) ptarr = ptarr.concat(pt);
         trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
 
-        var trkline = new THREE.Line(trkgeom, mat_trk);
+        let trkline = new THREE.Line(trkgeom, mat_trk);
         trkline.layers.enable(0); trkline.layers.enable(1); trkline.layers.enable(2); trkline.layers.enable(3); trkline.layers.enable(4);
         group.add(trkline);
     }
@@ -351,7 +353,7 @@ function add_tracks(trajs, group){
 add_tracks(tracks, reco_tracks);
 add_tracks(truth_trajs, truth);
 
-var controls = new OrbitControls(camera, renderer.domElement);
+let controls = new OrbitControls(camera, renderer.domElement);
 
 controls.target = com;
 
@@ -363,15 +365,13 @@ camera.lookAt(com);
 
 controls.update();
 
-var animReentrant = false;
-
 function animate() {
-    if(animReentrant) return;
-    animReentrant = true;
+    if(gAnimReentrant) return;
+    gAnimReentrant = true;
 
-    var now = performance.now(); // can be passed as an argument, but only for requestAnimationFrame callbacks
+    let now = performance.now(); // can be passed as an argument, but only for requestAnimationFrame callbacks
     if(animStart != null){
-        var frac = (now-animStart)/1000.; // 1sec anim
+        let frac = (now-animStart)/1000.; // 1sec anim
         if(frac > 1){
             frac = 1;
             animStart = null;
@@ -384,7 +384,7 @@ function animate() {
 
     if(animStart != null) requestAnimationFrame(animate);
 
-    animReentrant = false;
+    gAnimReentrant = false;
 }
 
 function SetVisibility(col, state, id, str)
@@ -421,7 +421,7 @@ SetVisibility(reco_tracks, false, 'tracks', 'Tracks');
 SetVisibility(truth, true, 'truth', 'Truth');
 SetVisibility(sps, false, 'spacepoints', 'SpacePoints');
 
-var animStart = null;
+let animStart = null;
 let animFunc = null;
 
 function ZView(){camera.layers.set(2); requestAnimationFrame(animate);}
@@ -440,7 +440,7 @@ function ThreeDView(){
 
     // A hack to make sure the Z->3D transition doesn't end up completely
     // degenerate for the camera (which leads to a strange 90 degree flip).
-    var targetDiff = camera.position.clone();
+    let targetDiff = camera.position.clone();
     targetDiff.sub(controls.target);
     targetDiff.normalize();
     targetDiff.addScaledVector(camera.up, -1e-3);
@@ -462,10 +462,10 @@ window.ThreeDView = ThreeDView;
 // https://en.wikipedia.org/wiki/Slerp#Geometric_Slerp
 // p0 and p1 must be unit vectors
 function slerp(p0, p1, t){
-    var omega = Math.acos(THREE.Math.clamp(p0.dot(p1), -1, +1));
+    let omega = Math.acos(THREE.Math.clamp(p0.dot(p1), -1, +1));
     if(omega == 0) return p0.clone();
 
-    var ret = p0.clone();
+    let ret = p0.clone();
     ret.multiplyScalar(Math.sin((1-t)*omega)/Math.sin(omega));
     ret.addScaledVector(p1, Math.sin(t*omega)/Math.sin(omega));
     return ret;
@@ -479,7 +479,7 @@ function lerpVec(v0, v1, t){
 
 function UpdateFOV(cam, newFOV)
 {
-    var diff = cam.position.clone();
+    let diff = cam.position.clone();
     diff.sub(controls.target);
     diff.multiplyScalar(cam.fov/newFOV);
     diff.add(controls.target);
@@ -492,12 +492,12 @@ function UpdateFOV(cam, newFOV)
 }
 
 function AnimateTo(targetDiff, targetUp, targetFOV, endFunc){
-    var initDiff = camera.position.clone();
+    let initDiff = camera.position.clone();
     initDiff.sub(controls.target);
     initDiff.normalize();
 
-    var initFOV = camera.fov;
-    var initUp = camera.up.clone();
+    let initFOV = camera.fov;
+    let initUp = camera.up.clone();
 
     console.log('Animate from ', initDiff, initUp, initFOV, ' to ', targetDiff, targetUp, targetFOV);
 
@@ -513,7 +513,7 @@ function AnimateTo(targetDiff, targetUp, targetFOV, endFunc){
     animStart = performance.now();
     animFunc = function(frac){
         if(targetDiff != null){
-            var mag = camera.position.distanceTo(controls.target);
+            let mag = camera.position.distanceTo(controls.target);
             camera.position.copy(controls.target);
             camera.position.addScaledVector(slerp(initDiff, targetDiff, frac), mag);
         }

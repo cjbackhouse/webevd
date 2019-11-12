@@ -439,7 +439,7 @@ void WebEVD::analyze(const art::Event& evt)
   char webdir[PATH_MAX];
   realpath("web/", webdir);
 
-  for(std::string tgt: {"evd.js", "index.html" /*, "three.js-master"*/}){
+  for(std::string tgt: {"evd.js", "index.html", "httpd.conf", /*, "three.js-master"*/}){
     symlink(TString::Format("%s/%s", webdir,           tgt.c_str()).Data(),
             TString::Format("%s/%s", fTempDir.c_str(), tgt.c_str()).Data());
     fCleanup.push_back(fTempDir+"/"+tgt);

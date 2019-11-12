@@ -1,5 +1,4 @@
 // TODO come up with a cool name
-// TODO learn how imports/modules work
 // TODO back/fwd buttons (need to serve differently?)
 // TODO work well on ProtoDUNE
 // TODO clear handling of disambiguation
@@ -9,8 +8,10 @@
 // TODO pre-upload textures
 // TODO Use textures for hits at long distances so they're visible
 // TODO make SaveAs and Print work
-//
-//import { IcosahedronBufferGeometry } from './three.js-master/src/geometries/IcosahedronGeometry.js'
+
+// TODO - probably we should ship our own (minified) copies of these
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@v0.110.0/build/three.module.js";
+import {OrbitControls} from "https://cdn.jsdelivr.net/npm/three@v0.110.0/examples/jsm/controls/OrbitControls.js";
 
 var scene = new THREE.Scene();
 
@@ -204,7 +205,7 @@ function push_icosahedron_vtxs(c, radius, vtxs, indices){
     }
 }
 
-for(key in planes){
+for(let key in planes){
     var plane = planes[key];
     var c = ArrToVec(plane.center);
     var a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
@@ -222,7 +223,7 @@ for(key in planes){
         vperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
     }
 
-    vtxs = [];
+    let vtxs = [];
     push_square_vtxs(c, a, d, vtxs);
 
     var geom = new THREE.BufferGeometry();
@@ -240,9 +241,9 @@ for(key in planes){
         if(a.z/a.y > 0) uvlayer = 3; else uvlayer = 4;
     }
 
-    for(dw of [plane.digs, plane.wires]){
+    for(let dw of [plane.digs, plane.wires]){
         if(dw == undefined) continue; // sometimes wires are missing
-        for(block of dw.blocks){
+        for(let block of dw.blocks){
             // TODO - would want to combine all the ones with the same texture
             // file into a single geometry.
             var geom = new THREE.BufferGeometry();
@@ -313,8 +314,8 @@ for(key in planes){
 
 com.divideScalar(nplanes);
 
-spvtxs = [];
-spidxs = [];
+let spvtxs = [];
+let spidxs = [];
 var isp = 0;
 for(let sp of coords){
     push_icosahedron_vtxs(ArrToVec(sp), .4, spvtxs, spidxs);
@@ -328,16 +329,16 @@ for(var i = 0; i < 5; ++i) sps.layers.enable(i);
 scene.add(sps);
 
 
-colors = ['red', 'blue', 'green', 'orange', 'purple', 'skyblue'];
+let colors = ['red', 'blue', 'green', 'orange', 'purple', 'skyblue'];
 
 function add_tracks(trajs, group){
     var i = 0;
     for(let track of trajs){
-        col = colors[i%colors.length];
+        let col = colors[i%colors.length];
         i += 1;
         var mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
         var trkgeom = new THREE.BufferGeometry();
-        ptarr = [];
+        let ptarr = [];
         for(let pt of track) ptarr = ptarr.concat(pt);
         trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
 
@@ -350,7 +351,7 @@ function add_tracks(trajs, group){
 add_tracks(tracks, reco_tracks);
 add_tracks(truth_trajs, truth);
 
-var controls = new THREE.OrbitControls( camera, renderer.domElement );
+var controls = new OrbitControls(camera, renderer.domElement);
 
 controls.target = com;
 
@@ -398,12 +399,14 @@ function Toggle(col, id, str){
     requestAnimationFrame(animate);
 }
 
-function ToggleRawDigits(){Toggle(digs, 'rawdigits', 'RawDigits');}
-function ToggleWires(){Toggle(wires, 'wires', 'Wires');}
-function ToggleHits(){Toggle(hits, 'hits', 'Hits');}
-function ToggleSpacePoints(){Toggle(sps, 'spacepoints', 'SpacePoints');}
-function ToggleTracks(){Toggle(reco_tracks, 'tracks', 'Tracks');}
-function ToggleTruth(){Toggle(truth, 'truth', 'Truth');}
+// TODO - would be better to have this javascript look up the buttons in the
+// HTML and attach the handlers to them.
+window.ToggleRawDigits = function(){Toggle(digs, 'rawdigits', 'RawDigits');}
+window.ToggleWires = function(){Toggle(wires, 'wires', 'Wires');}
+window.ToggleHits = function(){Toggle(hits, 'hits', 'Hits');}
+window.ToggleSpacePoints = function(){Toggle(sps, 'spacepoints', 'SpacePoints');}
+window.ToggleTracks = function(){Toggle(reco_tracks, 'tracks', 'Tracks');}
+window.ToggleTruth = function(){Toggle(truth, 'truth', 'Truth');}
 
 AllViews();
 ThreeDControls();
@@ -419,6 +422,7 @@ SetVisibility(truth, true, 'truth', 'Truth');
 SetVisibility(sps, false, 'spacepoints', 'SpacePoints');
 
 var animStart = null;
+let animFunc = null;
 
 function ZView(){camera.layers.set(2); requestAnimationFrame(animate);}
 function UView(){camera.layers.set(0); requestAnimationFrame(animate);}
@@ -446,6 +450,14 @@ function ThreeDView(){
 
     ThreeDControls();
 }
+
+window.ZView = ZView;
+window.UView = UView;
+window.VView = VView;
+window.UVView = UVView;
+window.VUView = VUView;
+window.AllViews = AllViews;
+window.ThreeDView = ThreeDView;
 
 // https://en.wikipedia.org/wiki/Slerp#Geometric_Slerp
 // p0 and p1 must be unit vectors
@@ -574,6 +586,10 @@ function VUView2D(){
     TwoDControls();
 }
 
+window.ZView2D = ZView2D;
+window.UVView2D = UVView2D;
+window.VUView2D = VUView2D;
+
 function Perspective()
 {
     AnimateTo(null, null, 50, null);
@@ -583,6 +599,9 @@ function Ortho()
 {
     AnimateTo(null, null, 1e-6, null);
 }
+
+window.Perspective = Perspective;
+window.Ortho = Ortho;
 
 function Theme(theme)
 {
@@ -595,6 +614,8 @@ function Theme(theme)
 
     requestAnimationFrame(animate);
 }
+
+window.Theme = Theme;
 
 window.addEventListener( 'resize', onWindowResize, false );
 

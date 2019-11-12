@@ -45,14 +45,6 @@
 
     </style>
 
-    <!-- TODO: we should ship our own copies of these for robustness, but for now let's just pull them in from threejs.org -->
-    <script src="http://threejs.org/build/three.min.js"></script>
-    <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
-<!--
-    <script src="./three.js-master/build/three.js"></script>
-    <script src="./three.js-master/examples/js/controls/OrbitControls.js"></script>
--->
-
     <script src="coords.js"></script>
 
   </head>
@@ -67,12 +59,13 @@
       <div class="dropdown">
         <button>View...</button>
         <div class="dropdown-content">
+          <b>3D</b>
           <button onclick="ZView()">Z</button>
           <button onclick="UView()">U</button>
           <button onclick="VView()">V</button>
           <button onclick="UVView()">U/V</button>
           <button onclick="VUView()">V/U</button>
-          <button onclick="ThreeDView()">3D</button>
+          <button onclick="ThreeDView()">All</button>
           <b>2D</b>
           <button onclick="ZView2D()">Z</button>
           <button onclick="UVView2D()">U/V</button>
@@ -104,6 +97,6 @@
       <button id="truth" onclick="ToggleTruth()"></button>
 
     </div> <!-- position:absolute -->
-    <script src="evd.js"></script>
+    <script type="module" src="evd.js"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-// Christopher Backhouse - bckhouse@fnal.gov
+// Chris Backhouse - bckhouse@fnal.gov
 
 // art v3_03 (soon?) will inlude evt.getInputTags<>(). Until then, we can hack it in this dreadful way
 
@@ -104,11 +104,6 @@ void WebEVD::endJob()
   char* user = getlogin();
 
   std::cout << "\n------------------------------------------------------------\n" << std::endl;
-  // std::cout << "firefox localhost:1080 &" << std::endl;
-  // std::cout << "ssh -L 1080:localhost:8000 ";
-  // std::cout << host << std::endl << std::endl;
-  // std::cout << "Press Ctrl-C here when done" << std::endl;
-  // system("busybox httpd -f -p 8000 -h web/");
 
   // E1071 is DUNE :)
   int port = 1071;
@@ -117,14 +112,17 @@ void WebEVD::endJob()
   while(system(TString::Format("ss -an | grep -q %d", port).Data()) == 0) ++port;
   
   while(true){
-    std::cout << "firefox localhost:" << port << " &" << std::endl;
+    std::cout << "First run" << std::endl;
     std::cout << "ssh -L "
               << port << ":localhost:" << port << " "
               << user << "@" << host << std::endl << std::endl;
-    std::cout << "Press Ctrl-C here when done" << std::endl;
+    std::cout << "and then navigate to localhost:" << port << " in your favorite browser." << std::endl << std::endl;
+    std::cout << "Press Ctrl-C here when done." << std::endl;
+
     const int status = system(TString::Format("busybox httpd -f -p %d -h %s", port, fTempDir.c_str()).Data());
-  // system("cd web; python -m SimpleHTTPServer 8000");
-  // system("cd web; python3 -m http.server 8000");
+    // Alternative ways to start an HTTP server
+    // system("cd web; python -m SimpleHTTPServer 8000");
+    // system("cd web; python3 -m http.server 8000");
 
     std::cout << "\nStatus: " << status << std::endl;
 
@@ -415,7 +413,6 @@ void WebEVD::analyze(const art::Event& evt)
   //    auto const h = event.getValidHandle(token);
   //  }
 
-  //  const int width = 480; // TODO remove // max wire ID 512*8;
   const int height = 4492; // TODO somewhere to look up number of ticks?
 
   PNGArena arena("arena");
@@ -443,38 +440,16 @@ void WebEVD::analyze(const art::Event& evt)
   }
   json << "];\n\n";
 
-  //      json << "var waves = [" << std::endl;
-
   art::Handle<std::vector<raw::RawDigit>> digs;
   evt.getByLabel("daq", digs);
-
-  /*
-    for(const raw::RawDigit& dig: *digs){
-    //        std::cout << dig.NADC() << " " << dig.Samples() << " " << dig.Compression() << " " << dig.GetPedestal() << std::endl;
-    
-    // ChannelID_t Channel();
-
-    raw::RawDigit::ADCvector_t adcs(dig.Samples());
-    raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
-
-    json << "  [ ";
-    for(auto x: adcs) json << (x ? x-dig.GetPedestal() : 0) << ", ";
-    json << " ]," << std::endl;
-    }
-
-    json << "];" << std::endl;
-  */
 
   art::ServiceHandle<geo::Geometry> geom;
   const detinfo::DetectorProperties* detprop = art::ServiceHandle<detinfo::DetectorPropertiesService>()->provider();
 
-  for(unsigned int digIdx = 0; digIdx < digs->size()/*std::min(digs->size(), size_t(width))*/; ++digIdx){
+  for(unsigned int digIdx = 0; digIdx < digs->size(); ++digIdx){
     const raw::RawDigit& dig = (*digs)[digIdx];
 
-
     for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
-      //          if(geom->SignalType(wire) != geo::kCollection) continue; // for now
-
       const geo::TPCID tpc(wire);
       const geo::PlaneID plane(wire);
 
@@ -485,18 +460,7 @@ void WebEVD::analyze(const art::Event& evt)
         plane_dig_imgs[plane] = new PNGView(arena, Nw, height);
       }
 
-      //          std::cout << "Look up " << plane << std::endl;
-
       PNGView& bytes = *plane_dig_imgs[plane];
-
-      //          std::cout << dig.Samples() << " and " << wire.Wire << std::endl;
-      //        }
-      //          if(geo::TPCID(wire) == tpc){
-      //            xpos = detprop->ConvertTicksToX(hit->PeakTime(), wire);
-      //          if (geom->SignalType(wire) == geo::kCollection) xpos += fXHitOffset;
-      
-      //          const geo::WireID w0 = geom->GetBeginWireID(tpc);
-      //          const geo::WireID w0 = geom->GetBeginWireID(plane);
 
       raw::RawDigit::ADCvector_t adcs(dig.Samples());
       raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
@@ -523,11 +487,8 @@ void WebEVD::analyze(const art::Event& evt)
   art::Handle<std::vector<recob::Wire>> wires;
   evt.getByLabel("caldata", wires);
 
-  //      std::cout << wires->size() << std::endl;
   for(unsigned int wireIdx = 0; wireIdx < wires->size(); ++wireIdx){
     for(geo::WireID wire: geom->ChannelToWire((*wires)[wireIdx].Channel())){
-      //          if(geom->SignalType(wire) != geo::kCollection) continue; // for now
-
       const geo::TPCID tpc(wire);
       const geo::PlaneID plane(wire);
 
@@ -541,7 +502,6 @@ void WebEVD::analyze(const art::Event& evt)
       PNGView& bytes = *plane_wire_imgs[plane];
 
       const auto adcs = (*wires)[wireIdx].Signal();
-      //        std::cout << "  " << adcs.size() << std::endl;
       for(unsigned int tick = 0; tick < std::min(adcs.size(), size_t(height)); ++tick){
         if(adcs[tick] <= 0) continue;
 
@@ -553,18 +513,6 @@ void WebEVD::analyze(const art::Event& evt)
     }
   }
 
-  /*
-    json << "var wires = [" << std::endl;
-    
-    for(const recob::Wire& wire: *wires){
-    json << "  [ ";
-    for(auto x: wire.SignalROI()) json << x << ", ";
-    json << " ]," << std::endl;
-    }
-
-    json << "];" << std::endl;
-  */
-
   art::Handle<std::vector<recob::Hit>> hits;
   evt.getByLabel("gaushit", hits);
 
@@ -574,8 +522,6 @@ void WebEVD::analyze(const art::Event& evt)
     //    const geo::WireID wire(hit.WireID());
 
     for(geo::WireID wire: geom->ChannelToWire(hit.Channel())){
-      //    if(geom->SignalType(wire) != geo::kCollection) continue; // for now
-      // TODO loop over possible wires
       const geo::PlaneID plane(wire);
 
       // Correct for disambiguated hits
@@ -595,17 +541,14 @@ void WebEVD::analyze(const art::Event& evt)
     const double pitch = planegeo.WirePitch();
     const TVector3 c = planegeo.GetCenter();
     const PNGView* dig_view = it.second;
-    (void)dig_view;
 
     const auto d = planegeo.GetIncreasingWireDirection();
-    //    const auto dwire = planegeo.GetWireDirection();
     const TVector3 n = planegeo.GetNormalDirection();
 
     const int nticks = height; // HACK from earlier
     const double tick_pitch = detprop->ConvertTicksToX(1, plane) - detprop->ConvertTicksToX(0, plane);
 
     PNGView* wire_view = plane_wire_imgs.count(plane) ? plane_wire_imgs[plane] : 0;
-    (void)wire_view;
 
     json << "  \"" << plane << "\": {"
          << "view: " << view << ", "

@@ -20,10 +20,10 @@ var renderer = new THREE.WebGLRenderer();
 // I have no idea why these 4 pixels are necessary
 renderer.setSize( window.innerWidth, window.innerHeight-4);
 
-renderer.setClearColor('black');//'white');//0xa0a0a0);
+renderer.setClearColor('black');
 
 renderer.alpha = true;
-renderer.antialias = false; //true;
+renderer.antialias = false;
 
 document.body.appendChild( renderer.domElement );
 
@@ -226,7 +226,6 @@ for(key in planes){
     push_square_vtxs(c, a, d, vtxs);
 
     var geom = new THREE.BufferGeometry();
-    // itemSize = 3 because there are 3 values (components) per vertex
     geom.addAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
     var edges = new THREE.EdgesGeometry( geom );
@@ -267,7 +266,6 @@ for(key in planes){
             var u1 =   (block.texdx+64)/block.texdim;
             var v1 = 1-(block.texdy+64)/block.texdim;
 
-            // TODO think carefully about geometry
             var uvs = new Float32Array( [u1, v0,
                                          u1, v1,
                                          u0, v1,
@@ -357,7 +355,6 @@ var controls = new THREE.OrbitControls( camera, renderer.domElement );
 controls.target = com;
 
 camera.translateX(1000);
-//console.log(camera.position);
 camera.lookAt(com);
 
 //controls.autoRotate = true;
@@ -470,11 +467,9 @@ function lerpVec(v0, v1, t){
 
 function UpdateFOV(cam, newFOV)
 {
-    //    console.log('update fov ', cam, newFOV);
-
     var diff = cam.position.clone();
     diff.sub(controls.target);
-    diff.multiplyScalar(cam.fov/newFOV);//Math.sin(cam.fov*3.14/180)/Math.sin(newFOV*3.14/180));
+    diff.multiplyScalar(cam.fov/newFOV);
     diff.add(controls.target);
     cam.position.copy(diff);
 
@@ -515,7 +510,7 @@ function AnimateTo(targetDiff, targetUp, targetFOV, endFunc){
 
         if(targetFOV != null) UpdateFOV(camera, THREE.Math.lerp(initFOV, targetFOV, frac));
 
-        //        console.log('Anim: ', frac, camera.position, camera.up, camera.fov);
+        // console.log('Anim: ', frac, camera.position, camera.up, camera.fov);
 
         if(frac == 1 && endFunc != null) endFunc();
 
@@ -533,7 +528,7 @@ function TwoDControls(){
     controls.mouseButtons = {
         LEFT: THREE.MOUSE.PAN,
         MIDDLE: THREE.MOUSE.DOLLY,
-        RIGHT: null // THREE.MOUSE.ROTATE
+        RIGHT: null
     }
 
     // Seems to hang the touch controls entirely :(
@@ -616,13 +611,11 @@ function onWindowResize() {
     camera.updateProjectionMatrix();
 }
 
-window.addEventListener('unload', function(event) {
-    renderer.dispose();
-//    console.log( THREE.WebGLRenderer.info);
-      });
+window.addEventListener('unload', function(event){renderer.dispose();});
 
 controls.addEventListener('change', animate);
 window.addEventListener('resize', animate);
-animate();
+
+Animate();
 
 console.log(renderer.info);

@@ -174,12 +174,19 @@ protected:
   std::ofstream& fStream;
 };
 
-// TODO figure out a more-templatey way to do this
-template<class T> struct HandleMaker
+
+template<class T, class U> struct HandleType;
+
+template<class U> struct HandleType<art::Event, U>
 {
-  static art::Handle<std::vector<T>> Handle(const art::Event&){return art::Handle<std::vector<T>>();}
-  static gallery::Handle<std::vector<T>> Handle(const gallery::Event&){return gallery::Handle<std::vector<T>>();}
+  typedef art::Handle<std::vector<U>> type;
 };
+
+template<class U> struct HandleType<gallery::Event, U>
+{
+  typedef gallery::Handle<std::vector<U>> type;
+};
+
 
 template<class T> void WebEVDServer<T>::
 analyze(const T& evt,
@@ -211,7 +218,7 @@ analyze(const T& evt,
   std::map<geo::PlaneID, PNGView*> plane_dig_imgs;
   std::map<geo::PlaneID, PNGView*> plane_wire_imgs;
 
-  auto pts = HandleMaker<recob::SpacePoint>::Handle(evt);
+  typename HandleType<T, recob::SpacePoint>::type pts;
   evt.getByLabel("pandora"/*fSpacePointTag*/, pts);
 
   char webdir[PATH_MAX];
@@ -231,7 +238,7 @@ analyze(const T& evt,
   }
   json << "];\n\n";
 
-  auto digs = HandleMaker<raw::RawDigit>::Handle(evt);
+  typename HandleType<T, raw::RawDigit>::type digs;
   evt.getByLabel("daq", digs);
 
   for(unsigned int digIdx = 0; digIdx < digs->size(); ++digIdx){
@@ -272,7 +279,7 @@ analyze(const T& evt,
     }
   }
 
-  auto wires = HandleMaker<recob::Wire>::Handle(evt);
+  typename HandleType<T, recob::Wire>::type wires;
   evt.getByLabel("caldata", wires);
 
   for(unsigned int wireIdx = 0; wireIdx < wires->size(); ++wireIdx){
@@ -301,7 +308,7 @@ analyze(const T& evt,
     }
   }
 
-  auto hits = HandleMaker<recob::Hit>::Handle(evt);
+  typename HandleType<T, recob::Hit>::type hits;
   evt.getByLabel("gaushit", hits);
 
   std::map<geo::PlaneID, std::vector<recob::Hit>> plane_hits;
@@ -362,7 +369,7 @@ analyze(const T& evt,
   }
   json << "};\n";
 
-  auto tracks = HandleMaker<recob::Track>::Handle(evt);
+  typename HandleType<T, recob::Track>::type tracks;
   evt.getByLabel("pandora", tracks);
 
   json << "tracks = [\n";
@@ -379,7 +386,7 @@ analyze(const T& evt,
   json << "];\n";
 
 
-  auto parts = HandleMaker<simb::MCParticle>::Handle(evt);
+  typename HandleType<T, simb::MCParticle>::type parts;
   evt.getByLabel("largeant", parts);
 
   json << "truth_trajs = [\n";

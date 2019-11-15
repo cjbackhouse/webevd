@@ -70,23 +70,15 @@ namespace evd
 
 template<class T> WebEVDServer<T>::WebEVDServer()
 {
-  fTempDir = "/tmp/webevd_XXXXXX";
-  mkdtemp(fTempDir.data());
 }
 
 template<class T> WebEVDServer<T>::~WebEVDServer()
 {
-  // I'm nervous about removing files based on a wildcard, so we explicitly
-  // track everything we put in the tmp directory and clean it up here.
-  for(const std::string& f: fCleanup) unlink(f.c_str());
-  if(rmdir(fTempDir.c_str()) != 0){
-    std::cout << "Failed to clean up temporary directory " << fTempDir << std::endl;
-  }
 }
 
 template<class T> void WebEVDServer<T>::serve()
 {
-  std::cout << "Temp dir: " << fTempDir << std::endl;
+  std::cout << "Temp dir: " << fTmp.DirectoryName() << std::endl;
 
   char host[1024];
   gethostname(host, 1024);
@@ -108,7 +100,7 @@ template<class T> void WebEVDServer<T>::serve()
     std::cout << "and then navigate to localhost:" << port << " in your favorite browser." << std::endl << std::endl;
     std::cout << "Press Ctrl-C here when done." << std::endl;
 
-    const int status = system(TString::Format("busybox httpd -f -p %d -h %s", port, fTempDir.c_str()).Data());
+    const int status = system(TString::Format("busybox httpd -f -p %d -h %s", port, fTmp.DirectoryName().c_str()).Data());
     // Alternative ways to start an HTTP server
     // system("cd web; python -m SimpleHTTPServer 8000");
     // system("cd web; python3 -m http.server 8000");
@@ -317,16 +309,17 @@ void AnalyzeArena(const PNGArena& bytes)
   }
 }
 
-void WriteToPNG(const std::string& prefix, const PNGArena& bytes,
-                std::vector<std::string>& cleanup, int mipmapdim = -1)
+void WriteToPNG(Temporaries& tmp,
+                const std::string& prefix,
+                const PNGArena& bytes,
+                int mipmapdim = -1)
 {
   if(mipmapdim == -1) mipmapdim = bytes.extent;
 
   for(unsigned int d = 0; d < bytes.data.size(); ++d){
     const std::string fname = TString::Format("%s_%d_mip%d.png", prefix.c_str(), d, mipmapdim).Data();
-    cleanup.push_back(fname);
 
-    FILE* fp = fopen(fname.c_str(), "wb");
+    FILE* fp = tmp.fopen(fname.c_str(), "wb");
 
     png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     auto info_ptr = png_create_info_struct(png_ptr);
@@ -355,13 +348,13 @@ void WriteToPNG(const std::string& prefix, const PNGArena& bytes,
 }
 
 // NB: destroys "bytes" in the process
-void WriteToPNGWithMipMaps(const std::string& prefix, PNGArena& bytes,
-                           std::vector<std::string>& cleanup)
+void WriteToPNGWithMipMaps(Temporaries& tmp,
+                           const std::string& prefix, PNGArena& bytes)
 {
   //  AnalyzeArena(bytes);
 
   for(int mipmapdim = bytes.extent; mipmapdim >= 1; mipmapdim /= 2){
-    WriteToPNG(prefix, bytes, cleanup, mipmapdim);
+    WriteToPNG(tmp, prefix, bytes, mipmapdim);
 
     MipMap(bytes, mipmapdim/2);
   }
@@ -431,14 +424,11 @@ analyze(const T& evt,
   char webdir[PATH_MAX];
   realpath("web/", webdir);
 
-  for(std::string tgt: {"evd.js", "index.html", "httpd.conf", /*, "three.js-master"*/}){
-    symlink(TString::Format("%s/%s", webdir,           tgt.c_str()).Data(),
-            TString::Format("%s/%s", fTempDir.c_str(), tgt.c_str()).Data());
-    fCleanup.push_back(fTempDir+"/"+tgt);
-  }
+  fTmp.symlink(webdir, "evd.js");
+  fTmp.symlink(webdir, "index.html");
+  fTmp.symlink(webdir, "httpd.conf");
 
-  std::ofstream outf(fTempDir+"/coords.js");
-  fCleanup.push_back(fTempDir+"/coords.js");
+  std::ofstream outf = fTmp.ofstream("coords.js");
 
   JSONFormatter json(outf);
 
@@ -612,7 +602,7 @@ analyze(const T& evt,
   json << "];\n";
 
   std::cout << "Writing " << arena.name << std::endl;
-  WriteToPNGWithMipMaps(fTempDir+"/"+arena.name, arena, fCleanup);
+  WriteToPNGWithMipMaps(fTmp, arena.name, arena);
 
   // TODO use unique_ptr?
   for(auto it: plane_dig_imgs) delete it.second;

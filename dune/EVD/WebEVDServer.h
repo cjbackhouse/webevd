@@ -1,6 +1,8 @@
 #ifndef WEBEVDSERVER_H
 #define WEBEVDSERVER_H
 
+#include "dune/EVD/Temporaries.h"
+
 #include <string>
 #include <vector>
 
@@ -19,8 +21,7 @@ namespace evd
                  const detinfo::DetectorProperties* detprop);
     void serve();
   protected:
-    std::string fTempDir;
-    std::vector<std::string> fCleanup;
+    Temporaries fTmp;
   };
 }
 

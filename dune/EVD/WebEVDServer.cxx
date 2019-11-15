@@ -43,8 +43,6 @@ getInputTags(const art::Event& evt)
 
 #include "fhiclcpp/ParameterSet.h"
 #include "art/Framework/Principal/Handle.h"
-#include "art_root_io/TFileService.h"
-#include "canvas/Persistency/Common/Ptr.h"
 
 #include "art/Framework/Principal/Event.h"
 #include "gallery/Event.h"
@@ -54,12 +52,13 @@ getInputTags(const art::Event& evt)
 #include "lardataobj/RecoBase/Wire.h"
 #include "lardataobj/RecoBase/Track.h"
 
-#include "larsim/MCCheater/BackTrackerService.h"
+#include "nusimdata/SimulationBase/MCParticle.h"
 
 #include "lardataobj/RawData/RawDigit.h"
 #include "lardataobj/RawData/raw.h" // Uncompress()
 
-#include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
+#include "larcorealg/Geometry/GeometryCore.h"
+#include "lardataalg/DetectorInfo/DetectorProperties.h"
 
 namespace evd
 {

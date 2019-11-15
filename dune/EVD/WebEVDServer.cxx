@@ -1,40 +1,5 @@
 // Chris Backhouse - bckhouse@fnal.gov
 
-// art v3_03 (soon?) will inlude evt.getInputTags<>(). Until then, we can hack it in this dreadful way
-
-// These guys are dragged in and don't like private->public
-#include <any>
-#include <sstream>
-#include <mutex>
-
-#define private public
-#include "art/Framework/Principal/Event.h"
-#undef private
-
-std::vector<art::InputTag>
-getInputTags(const art::Principal& p,
-             art::ModuleContext const& mc,
-             art::WrappedTypeID const& wrapped,
-             art::SelectorBase const& sel,
-             art::ProcessTag const& processTag)
-{
-  std::vector<art::InputTag> tags;
-  cet::transform_all(p.findGroupsForProduct(mc, wrapped, sel, processTag, false), back_inserter(tags), [](auto const g) {
-      return g.result()->productDescription().inputTag();
-    });
-  return tags;
-}
-
-
-template <typename PROD> std::vector<art::InputTag>
-getInputTags(const art::Event& evt)
-{
-  return getInputTags(evt.principal_, evt.mc_, art::WrappedTypeID::make<PROD>(), art::MatchAllSelector{}, art::ProcessTag{"", evt.md_.processName()});
-}
-
-// end getInputTags hack
-
-
 #include "dune/EVD/WebEVDServer.h"
 
 #include "dune/EVD/PNGArena.h"
@@ -169,41 +134,20 @@ protected:
 };
 
 
-template<class T, class U> struct HandleType;
-
-template<class U> struct HandleType<art::Event, U>
-{
-  typedef art::Handle<std::vector<U>> type;
-};
-
-template<class U> struct HandleType<gallery::Event, U>
-{
-  typedef gallery::Handle<std::vector<U>> type;
-};
-
-
 template<class T> void WebEVDServer<T>::
 analyze(const T& evt,
         const geo::GeometryCore* geom,
         const detinfo::DetectorProperties* detprop)
 {
-  /*
-  std::cout << getInputTags<std::vector<recob::Track>>(evt).size() << " tracks "
-            << getInputTags<std::vector<recob::Wire>>(evt).size() << " wires"
-            << std::endl;
+  if constexpr (std::is_same_v<T, art::Event>){
+      const std::vector<art::InputTag> tags = evt.template getInputTags<std::vector<recob::Track>>();
 
-  for(auto x: getInputTags<std::vector<recob::Track>>(evt)) std::cout << x << std::endl;
-  */
-
-  // Needs art v3_03 (soon?)
-  //  std::vector<art::InputTag> tags = evt.getInputTags<recob::Track>();
-  //  evt.getInputTags<recob::Track>();
-
-  // Alternate syntax
-  //  auto const tokens = evt.getProductTokens<recob::Track>();
-  //  for (auto const& token : tokens) {
-  //    auto const h = event.getValidHandle(token);
-  //  }
+      std::cout << "Track tags:" << std::endl;
+      for(const art::InputTag& t: tags) std::cout << "  " << t << std::endl;
+    }
+  else{
+    std::cout << "No way to get input tags from gallery :(" << std::endl;
+  }
 
   const int height = 4492; // TODO somewhere to look up number of ticks?
 
@@ -212,7 +156,7 @@ analyze(const T& evt,
   std::map<geo::PlaneID, PNGView*> plane_dig_imgs;
   std::map<geo::PlaneID, PNGView*> plane_wire_imgs;
 
-  typename HandleType<T, recob::SpacePoint>::type pts;
+  HandleT<recob::SpacePoint> pts;
   evt.getByLabel("pandora"/*fSpacePointTag*/, pts);
 
   char webdir[PATH_MAX];
@@ -232,7 +176,7 @@ analyze(const T& evt,
   }
   json << "];\n\n";
 
-  typename HandleType<T, raw::RawDigit>::type digs;
+  HandleT<raw::RawDigit> digs;
   evt.getByLabel("daq", digs);
 
   for(unsigned int digIdx = 0; digIdx < digs->size(); ++digIdx){
@@ -273,7 +217,7 @@ analyze(const T& evt,
     }
   }
 
-  typename HandleType<T, recob::Wire>::type wires;
+  HandleT<recob::Wire> wires;
   evt.getByLabel("caldata", wires);
 
   for(unsigned int wireIdx = 0; wireIdx < wires->size(); ++wireIdx){
@@ -302,7 +246,7 @@ analyze(const T& evt,
     }
   }
 
-  typename HandleType<T, recob::Hit>::type hits;
+  HandleT<recob::Hit> hits;
   evt.getByLabel("gaushit", hits);
 
   std::map<geo::PlaneID, std::vector<recob::Hit>> plane_hits;
@@ -363,7 +307,7 @@ analyze(const T& evt,
   }
   json << "};\n";
 
-  typename HandleType<T, recob::Track>::type tracks;
+  HandleT<recob::Track> tracks;
   evt.getByLabel("pandora", tracks);
 
   json << "tracks = [\n";
@@ -380,7 +324,7 @@ analyze(const T& evt,
   json << "];\n";
 
 
-  typename HandleType<T, simb::MCParticle>::type parts;
+  HandleT<simb::MCParticle> parts;
   evt.getByLabel("largeant", parts);
 
   json << "truth_trajs = [\n";

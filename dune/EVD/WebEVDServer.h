@@ -21,6 +21,8 @@ namespace evd
                  const detinfo::DetectorProperties* detprop);
     void serve();
   protected:
+    template<class PROD> using HandleT = typename T::template HandleT<std::vector<PROD>>;
+
     Temporaries fTmp;
   };
 }

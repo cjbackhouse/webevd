@@ -129,9 +129,29 @@ public:
     return *this;
   }
 
+  JSONFormatter& operator<<(const art::InputTag& t)
+  {
+    fStream << t.label();
+    if(!t.instance().empty()) fStream << "_" << t.instance();
+    if(!t.process().empty()) fStream << "_" << t.process();
+    return *this;
+  }
+
 protected:
   std::ofstream& fStream;
 };
+
+
+template<class T> std::vector<art::InputTag> getInputTags(const art::Event& evt)
+{
+  return evt.getInputTags<std::vector<T>>();
+}
+
+template<class T> std::vector<art::InputTag> getInputTags(const gallery::Event& evt)
+{
+  std::cout << "Warning: getInputTags() not supported by gallery (https://cdcvs.fnal.gov/redmine/issues/23615) defaulting to \"pandora\"" << std::endl;
+  return {art::InputTag("pandora", "", "Reco")};
+}
 
 
 template<class T> void WebEVDServer<T>::
@@ -139,25 +159,12 @@ analyze(const T& evt,
         const geo::GeometryCore* geom,
         const detinfo::DetectorProperties* detprop)
 {
-  if constexpr (std::is_same_v<T, art::Event>){
-      const std::vector<art::InputTag> tags = evt.template getInputTags<std::vector<recob::Track>>();
-
-      std::cout << "Track tags:" << std::endl;
-      for(const art::InputTag& t: tags) std::cout << "  " << t << std::endl;
-    }
-  else{
-    std::cout << "No way to get input tags from gallery :(" << std::endl;
-  }
-
   const int height = 4492; // TODO somewhere to look up number of ticks?
 
   PNGArena arena("arena");
 
   std::map<geo::PlaneID, PNGView*> plane_dig_imgs;
   std::map<geo::PlaneID, PNGView*> plane_wire_imgs;
-
-  HandleT<recob::SpacePoint> pts;
-  evt.getByLabel("pandora"/*fSpacePointTag*/, pts);
 
   char webdir[PATH_MAX];
   realpath("web/", webdir);
@@ -170,11 +177,19 @@ analyze(const T& evt,
 
   JSONFormatter json(outf);
 
-  json << "var coords = [\n";
-  for(const recob::SpacePoint& p: *pts){
-    json << TVector3(p.XYZ()) << ",\n";
+  json << "var spacepoints = {\n";
+  for(const art::InputTag& tag: getInputTags<recob::SpacePoint>(evt)){
+    json << "  " << tag << ": [";
+
+    HandleT<recob::SpacePoint> pts;
+    evt.getByLabel(tag, pts);
+
+    for(const recob::SpacePoint& p: *pts){
+      json << TVector3(p.XYZ()) << ", ";
+    }
+    json << "],\n";
   }
-  json << "];\n\n";
+  json << "};\n\n";
 
   HandleT<raw::RawDigit> digs;
   evt.getByLabel("daq", digs);
@@ -307,21 +322,26 @@ analyze(const T& evt,
   }
   json << "};\n";
 
-  HandleT<recob::Track> tracks;
-  evt.getByLabel("pandora", tracks);
+  json << "tracks = {\n";
+  for(const art::InputTag& tag: getInputTags<recob::Track>(evt)){
+    json << "  " << tag << ":\n";
+    HandleT<recob::Track> tracks;
+    evt.getByLabel(tag, tracks);
 
-  json << "tracks = [\n";
-  for(const recob::Track& track: *tracks){
-    json << "  [\n    ";
-    const recob::TrackTrajectory& traj = track.Trajectory();
-    for(unsigned int j = traj.FirstValidPoint(); j <= traj.LastValidPoint(); ++j){
-      if(!traj.HasValidPoint(j)) continue;
-      const geo::Point_t pt = traj.LocationAtPoint(j);
-      json << "[" << pt.X() << ", " << pt.Y() << ", " << pt.Z() << "], ";
-    }
-    json << "\n  ],\n";
-  }
-  json << "];\n";
+    json << "  [\n"; // begin list of tracks
+    for(const recob::Track& track: *tracks){
+      json << "    [\n"; // begin list of trajectory points
+      const recob::TrackTrajectory& traj = track.Trajectory();
+      for(unsigned int j = traj.FirstValidPoint(); j <= traj.LastValidPoint(); ++j){
+        if(!traj.HasValidPoint(j)) continue;
+        const geo::Point_t pt = traj.LocationAtPoint(j);
+        json << "[" << pt.X() << ", " << pt.Y() << ", " << pt.Z() << "], ";
+      }
+      json << "\n    ],\n";
+    } // end for track
+    json << "  ],\n"; // end list of tracks
+  } // end for tag
+  json << "};\n"; // end of "tracks = "
 
 
   HandleT<simb::MCParticle> parts;

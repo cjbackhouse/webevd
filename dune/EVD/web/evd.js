@@ -350,7 +350,7 @@ for(let key in cryos){
 let spvtxs = [];
 let spidxs = [];
 let isp = 0;
-for(let sp of coords){
+for(let sp of spacepoints.pandora_Reco){
     push_icosahedron_vtxs(ArrToVec(sp), .4, spvtxs, spidxs);
 }
 
@@ -381,7 +381,12 @@ function add_tracks(trajs, group){
     }
 }
 
-add_tracks(tracks, reco_tracks);
+//for(let key in tracks){
+//    console.log(key);
+//    add_tracks(tracks[key], reco_tracks);
+//}
+
+add_tracks(tracks.pandora_Reco, reco_tracks);
 add_tracks(truth_trajs, truth);
 
 let controls = new OrbitControls(camera, renderer.domElement);

@@ -1,8 +1,7 @@
 // TODO come up with a cool name
-// TODO back/fwd buttons (need to serve differently?)
+// TODO back/fwd buttons (need to serve differently? httpd can do cgi...)
 // TODO work well on ProtoDUNE
 // TODO clear handling of disambiguation
-// TODO look into gallery
 // TODO plot IDEs
 // TODO plot photons
 // TODO pre-upload textures
@@ -12,6 +11,19 @@
 // TODO - probably we should ship our own (minified) copies of these
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@v0.110.0/build/three.module.js";
 import {OrbitControls} from "https://cdn.jsdelivr.net/npm/three@v0.110.0/examples/jsm/controls/OrbitControls.js";
+
+/*
+// This is all confusing, but should be able to fetch a JSON and read with .json()
+(async () => {
+    let response = await fetch('coords.js');
+    eval(response.text());
+    console.log('done');
+})();
+*/
+
+//fetch("coords.json")
+//    .then(response => response.json())
+//    .then(json => console.log(json));
 
 let gAnimReentrant = false;
 
@@ -316,6 +328,25 @@ for(let key in planes){
 
 com.divideScalar(nplanes);
 
+
+for(let key in cryos){
+    let cryo = cryos[key];
+
+    let r0 = ArrToVec(cryo.min);
+    let r1 = ArrToVec(cryo.max);
+
+    let boxgeom = new THREE.BoxBufferGeometry(r1.x-r0.x, r1.y-r0.y, r1.z-r0.z);
+
+    let edges = new THREE.EdgesGeometry(boxgeom);
+    let line = new THREE.LineSegments(edges, mat_lin);
+
+    line.position.set((r0.x+r1.x)/2, (r0.y+r1.y)/2, (r0.z+r1.z)/2);
+    scene.add(line);
+
+    for(let i = 0; i < 5; ++i) line.layers.enable(i);
+}
+
+
 let spvtxs = [];
 let spidxs = [];
 let isp = 0;
@@ -424,6 +455,8 @@ SetVisibility(sps, false, 'spacepoints', 'SpacePoints');
 let animStart = null;
 let animFunc = null;
 
+// TODO these only really do what you expect when already in 3D mode. May want
+// to "re-diagonalize" this functionality.
 function ZView(){camera.layers.set(2); requestAnimationFrame(animate);}
 function UView(){camera.layers.set(0); requestAnimationFrame(animate);}
 function VView(){camera.layers.set(1); requestAnimationFrame(animate);}

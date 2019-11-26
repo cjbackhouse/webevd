@@ -33,3 +33,4 @@ LIBS := -lpthread -lcanvas -lcetlib_except -lcetlib -lgallery -lnusimdata_Simula
 
 all:
 	g++ -O3 -g -pthread -std=c++1z webevd.cxx -owebevd ${CFLAGS} ${LIBDIRS} ${LIBS}
+#	strip webevd

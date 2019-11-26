@@ -337,6 +337,15 @@ analyze(const T& evt,
     }
     json << "\n  ],\n";
   }
+  json << "];\n\n";
+
+
+  json << "cryos = [\n";
+  for(auto it = geom->begin_cryostat(); it != geom->end_cryostat(); ++it){
+    const TVector3 r0(it->MinX(), it->MinY(), it->MinZ());
+    const TVector3 r1(it->MaxX(), it->MaxY(), it->MaxZ());
+    json << "  { min: "  << r0 << ", max: " << r1 << " },\n";
+  }
   json << "];\n";
 
   std::cout << "Writing " << arena.name << std::endl;

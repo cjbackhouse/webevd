@@ -144,14 +144,12 @@ let outlines = new THREE.Group();
 let digs = new THREE.Group();
 let wires = new THREE.Group();
 let hits = new THREE.Group();
-let reco_tracks = new THREE.Group();
 let truth = new THREE.Group();
 
 scene.add(outlines);
 scene.add(digs);
 scene.add(wires);
 scene.add(hits);
-scene.add(reco_tracks);
 scene.add(truth);
 
 let com = new THREE.Vector3();
@@ -347,19 +345,30 @@ for(let key in cryos){
 }
 
 
-let spvtxs = [];
-let spidxs = [];
-let isp = 0;
-for(let sp of spacepoints.pandora_Reco){
-    push_icosahedron_vtxs(ArrToVec(sp), .4, spvtxs, spidxs);
-}
+for(let key in spacepoints){
+    let spvtxs = [];
+    let spidxs = [];
+    for(let sp of spacepoints[key]){
+        push_icosahedron_vtxs(ArrToVec(sp), .4, spvtxs, spidxs);
+    }
 
-let spgeom = new THREE.BufferGeometry();
-spgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
-spgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(spidxs), 1));
-let sps = new THREE.Mesh(spgeom, mat_sps);
-for(let i = 0; i < 5; ++i) sps.layers.enable(i);
-scene.add(sps);
+    let spgeom = new THREE.BufferGeometry();
+    spgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
+    spgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(spidxs), 1));
+    let sps = new THREE.Mesh(spgeom, mat_sps);
+    for(let i = 0; i < 5; ++i) sps.layers.enable(i);
+    scene.add(sps);
+
+    let btn = document.createElement('button');
+    SetVisibility(sps, false, btn, key);
+
+    btn.addEventListener('click', function(){
+            SetVisibility(sps, !sps.visible, btn, key);
+            requestAnimationFrame(animate);
+        });
+
+    document.getElementById('spacepoints_dropdown').appendChild(btn);
+}
 
 
 let colors = ['red', 'blue', 'green', 'orange', 'purple', 'skyblue'];
@@ -381,12 +390,22 @@ function add_tracks(trajs, group){
     }
 }
 
-//for(let key in tracks){
-//    console.log(key);
-//    add_tracks(tracks[key], reco_tracks);
-//}
+for(let key in tracks){
+    let reco_tracks = new THREE.Group();
+    add_tracks(tracks[key], reco_tracks);
+    scene.add(reco_tracks);
 
-add_tracks(tracks.pandora_Reco, reco_tracks);
+    let btn = document.createElement('button');
+    SetVisibility(reco_tracks, false, btn, key);
+
+    btn.addEventListener('click', function(){
+            SetVisibility(reco_tracks, !reco_tracks.visible, btn, key);
+            requestAnimationFrame(animate);
+        });
+
+    document.getElementById('tracks_dropdown').appendChild(btn);
+}
+
 add_tracks(truth_trajs, truth);
 
 let controls = new OrbitControls(camera, renderer.domElement);
@@ -423,15 +442,20 @@ function animate() {
     gAnimReentrant = false;
 }
 
-function SetVisibility(col, state, id, str)
+function SetVisibility(col, state, elem, str)
 {
     col.visible = state;
     // Tick and Cross emojis respectively
-    document.getElementById(id).innerHTML = (state ? '&#x2705 ' : '&#x274c ')+str;
+    elem.innerHTML = (state ? '&#x2705 ' : '&#x274c ')+str;
+}
+
+function SetVisibilityById(col, state, id, str)
+{
+    SetVisibility(col, state, document.getElementById(id), str);
 }
 
 function Toggle(col, id, str){
-    SetVisibility(col, !col.visible, id, str);
+    SetVisibilityById(col, !col.visible, id, str);
     requestAnimationFrame(animate);
 }
 
@@ -440,8 +464,6 @@ function Toggle(col, id, str){
 window.ToggleRawDigits = function(){Toggle(digs, 'rawdigits', 'RawDigits');}
 window.ToggleWires = function(){Toggle(wires, 'wires', 'Wires');}
 window.ToggleHits = function(){Toggle(hits, 'hits', 'Hits');}
-window.ToggleSpacePoints = function(){Toggle(sps, 'spacepoints', 'SpacePoints');}
-window.ToggleTracks = function(){Toggle(reco_tracks, 'tracks', 'Tracks');}
 window.ToggleTruth = function(){Toggle(truth, 'truth', 'Truth');}
 
 AllViews();
@@ -450,12 +472,10 @@ ThreeDControls();
 // Try to pre-load all textures - doesn't work
 //renderer.compile(scene, camera);
 
-SetVisibility(digs, false, 'rawdigits', 'RawDigits');
-SetVisibility(wires, false, 'wires', 'Wires');
-SetVisibility(hits, false, 'hits', 'Hits');
-SetVisibility(reco_tracks, false, 'tracks', 'Tracks');
-SetVisibility(truth, true, 'truth', 'Truth');
-SetVisibility(sps, false, 'spacepoints', 'SpacePoints');
+SetVisibilityById(digs, false, 'rawdigits', 'RawDigits');
+SetVisibilityById(wires, false, 'wires', 'Wires');
+SetVisibilityById(hits, false, 'hits', 'Hits');
+SetVisibilityById(truth, true, 'truth', 'Truth');
 
 let animStart = null;
 let animFunc = null;

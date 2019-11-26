@@ -17,12 +17,45 @@
 
 #include "dune/EVD/WebEVDServer.h"
 
+void usage()
+{
+  std::cout << "Usage: webevd [-e [[RUN:]SUBRUN:]EVT] events.root [more_events.root...]" << std::endl;
+  exit(1);
+}
+
 // We use a function try block to catch and report on all exceptions.
 int main(int argc, char** argv)
 {
-  if(argc == 1){
-    std::cout << "Please specify the name of one or more art/ROOT input file(s) to read.\n";
-    return 1;
+  if(argc == 1) usage();
+
+  int tgt_run = -1, tgt_subrun = -1, tgt_evt = -1;
+  if(argc >= 2 && std::string(argv[1]) == "-e"){
+    if(argc <= 3) usage();
+
+    std::vector<int> toks;
+
+    char* ptok = strtok(argv[2], ":");
+    while(ptok){
+      toks.push_back(atoi(ptok));
+      ptok = strtok(0, ":");
+    }
+
+    if(toks.empty() || toks.size() > 3) usage();
+
+    tgt_evt = toks[toks.size()-1];
+    std::cout << "Will look for event " << tgt_evt;
+    if(toks.size() > 1){
+      tgt_subrun = toks[toks.size()-2];
+      std::cout << " in subrun " << tgt_subrun;
+    }
+    if(toks.size() > 2){
+      tgt_run = toks[toks.size()-3];
+      std::cout << " in run " << tgt_run;
+    }
+    std::cout << std::endl;
+
+    argc -= 2;
+    argv += 2;
   }
 
   evd::WebEVDServer<gallery::Event> server;
@@ -96,10 +129,14 @@ int main(int argc, char** argv)
   for(gallery::Event evt(filenames); !evt.atEnd(); evt.next()){
     const art::EventAuxiliary& aux = evt.eventAuxiliary();
 
-    // Gallery presents the events in a different order for some reason
-    if(aux.run() != 20000001 || aux.subRun() != 24 || aux.event() != 2302) continue;
+    if((tgt_run >= 0 && aux.run() != tgt_run) ||
+       (tgt_subrun >= 0 && aux.subRun() != tgt_subrun) ||
+       (tgt_evt >= 0 && aux.event() != tgt_evt)) continue;
 
     server.analyze(evt, &geom, &detprop);
+
+    std::cout << "\nDisplaying event " << aux.run() << ":" << aux.subRun() << ":" << aux.event() << std::endl << std::endl;
+
     server.serve();
 
     /*

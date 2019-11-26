@@ -16,6 +16,7 @@
 #include "lardataobj/RecoBase/SpacePoint.h"
 #include "lardataobj/RecoBase/Wire.h"
 #include "lardataobj/RecoBase/Track.h"
+#include "lardataobj/RecoBase/Vertex.h"
 
 #include "nusimdata/SimulationBase/MCParticle.h"
 
@@ -358,7 +359,18 @@ analyze(const T& evt,
     } // end for track
     json << "  ],\n"; // end list of tracks
   } // end for tag
-  json << "};\n"; // end of "tracks = "
+  json << "};\n\n"; // end of "tracks = "
+
+
+  json << "reco_vtxs = {\n";
+  for(const art::InputTag& tag: getInputTags<recob::Vertex>(evt)){
+    json << "  " << tag << ": [";
+    HandleT<recob::Vertex> vtxs;
+    evt.getByLabel(tag, vtxs);
+    for(const recob::Vertex& vtx: *vtxs) json << TVector3(vtx.position().x(), vtx.position().y(), vtx.position().z()) << ", ";
+    json << "],\n";
+  }
+  json << "};\n\n";
 
 
   HandleT<simb::MCParticle> parts;

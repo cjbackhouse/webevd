@@ -7,6 +7,7 @@
 // TODO pre-upload textures
 // TODO Use textures for hits at long distances so they're visible
 // TODO make SaveAs and Print work
+// TODO figure out z-order for objects in the plane
 
 // TODO - probably we should ship our own (minified) copies of these
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@v0.110.0/build/three.module.js";
@@ -52,6 +53,8 @@ let mat_lin = new THREE.LineBasicMaterial({color: 'gray'});
 let mat_hit = new THREE.MeshBasicMaterial({color: 'gray', side: THREE.DoubleSide});
 
 let mat_sps = new THREE.MeshBasicMaterial({color: 'blue'});
+
+let mat_vtxs = new THREE.MeshBasicMaterial({color: 'red'});
 
 function TextureLoadCallback(tex, mat, mipdim, texdim){
     console.log('Loaded callback', mipdim, texdim);
@@ -316,6 +319,8 @@ for(let key in planes){
     }
 }
 
+com.divideScalar(nplanes);
+
 for(let key in hitvtxs){
     let hits = new THREE.Group();
     scene.add(hits);
@@ -342,7 +347,32 @@ for(let key in hitvtxs){
     document.getElementById('hits_dropdown').appendChild(btn);
 }
 
-com.divideScalar(nplanes);
+
+for(let key in reco_vtxs){
+    let vvtxs = [];
+    let vidxs = [];
+    for(let v of reco_vtxs[key]){
+        push_icosahedron_vtxs(ArrToVec(v), .5, vvtxs, vidxs);
+    }
+
+    let vgeom = new THREE.BufferGeometry();
+    vgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vvtxs), 3));
+    vgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(vidxs), 1));
+    let vtxs = new THREE.Mesh(vgeom, mat_vtxs);
+    for(let i = 0; i < 5; ++i) vtxs.layers.enable(i);
+    scene.add(vtxs);
+
+
+    let btn = document.createElement('button');
+    SetVisibility(vtxs, false, btn, key);
+
+    btn.addEventListener('click', function(){
+            SetVisibility(vtxs, !vtxs.visible, btn, key);
+            requestAnimationFrame(animate);
+        });
+
+    document.getElementById('vertices_dropdown').appendChild(btn);
+}
 
 
 for(let key in cryos){

@@ -37,14 +37,17 @@ namespace std{
 namespace evd
 {
 
+// ----------------------------------------------------------------------------
 template<class T> WebEVDServer<T>::WebEVDServer()
 {
 }
 
+// ----------------------------------------------------------------------------
 template<class T> WebEVDServer<T>::~WebEVDServer()
 {
 }
 
+// ----------------------------------------------------------------------------
 template<class T> void WebEVDServer<T>::serve()
 {
   std::cout << "Temp dir: " << fTmp.DirectoryName() << std::endl;
@@ -87,6 +90,7 @@ template<class T> void WebEVDServer<T>::serve()
   }
 }
 
+// ----------------------------------------------------------------------------
 template<class T> T& operator<<(T& os, const PNGView& v)
 {
   os << "{blocks: [";
@@ -121,13 +125,34 @@ template<class T> T& operator<<(T& os, const PNGView& v)
   return os;
 }
 
-
+// ----------------------------------------------------------------------------
 class JSONFormatter
 {
 public:
   JSONFormatter(std::ofstream& os) : fStream(os) {}
 
-  template<class T> JSONFormatter& operator<<(const T& x){fStream << x; return *this;}
+  template<class T> JSONFormatter& operator<<(const T& x)
+  {
+    static_assert(std::is_arithmetic_v<T> ||
+                  std::is_enum_v<T> ||
+                  std::is_same_v<T, std::string>);
+    fStream << x;
+    return *this;
+  }
+
+  JSONFormatter& operator<<(const char* x)
+  {
+    fStream << x;
+    return *this;
+  }
+
+  template<class T> JSONFormatter& operator<<(const std::vector<T>& v)
+  {
+    fStream << "[";
+    for(const T& x: v) (*this) << x << ", ";
+    fStream << "]";
+    return *this;
+  }
 
   JSONFormatter& operator<<(const TVector3& v)
   {
@@ -150,12 +175,64 @@ protected:
   std::ofstream& fStream;
 };
 
-template<class T> std::vector<art::InputTag> getInputTags(const art::Event& evt)
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const geo::PlaneID& plane)
+{
+  return json << "\"" << std::string(plane) << "\"";
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const recob::Vertex& vtx)
+{
+  return json << TVector3(vtx.position().x(),
+                          vtx.position().y(),
+                          vtx.position().z());
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const recob::SpacePoint& sp)
+{
+  return json << TVector3(sp.XYZ());
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const recob::Track& track)
+{
+  std::vector<TVector3> pts;
+
+  const recob::TrackTrajectory& traj = track.Trajectory();
+  for(unsigned int j = traj.FirstValidPoint(); j <= traj.LastValidPoint(); ++j){
+    if(!traj.HasValidPoint(j)) continue;
+    const geo::Point_t pt = traj.LocationAtPoint(j);
+    pts.emplace_back(pt.X(), pt.Y(), pt.Z());
+  }
+
+  return json << pts;
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const simb::MCParticle& part)
+{
+  const int apdg = abs(part.PdgCode());
+  if(apdg == 12 || apdg == 14 || apdg == 16) return json << "[]"; // decay neutrinos
+  std::vector<TVector3> pts;
+  for(unsigned int j = 0; j < part.NumberTrajectoryPoints(); ++j){
+    pts.emplace_back(part.Vx(j), part.Vy(j), part.Vz(j));
+  }
+
+  return json << pts;
+}
+
+// ----------------------------------------------------------------------------
+template<class T> std::vector<art::InputTag>
+getInputTags(const art::Event& evt)
 {
   return evt.getInputTags<std::vector<T>>();
 }
 
-template<class T> std::vector<art::InputTag> getInputTags(const gallery::Event& evt)
+// ----------------------------------------------------------------------------
+template<class T> std::vector<art::InputTag>
+getInputTags(const gallery::Event& evt)
 {
   std::string label = "pandora";
   if constexpr(std::is_same_v<T, recob::Hit>) label = "gaushit";
@@ -164,7 +241,40 @@ template<class T> std::vector<art::InputTag> getInputTags(const gallery::Event& 
   return {art::InputTag(label)};
 }
 
+// ----------------------------------------------------------------------------
+template<class TProd, class TEvt> void
+SerializeProduct(const TEvt& evt,
+                 JSONFormatter& json,
+                 const std::string& label)
+{
+  json << "var " << label << " = {\n";
+  for(const art::InputTag& tag: getInputTags<TProd>(evt)){
+    json << "  " << tag << ": ";
 
+    typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
+    evt.getByLabel(tag, prods);
+
+    json << *prods;
+
+    json << ",\n";
+  }
+  json << "};\n\n";
+}
+
+// ----------------------------------------------------------------------------
+template<class TProd, class TEvt> void
+SerializeProductByLabel(const TEvt& evt,
+                        const std::string& in_label,
+                        JSONFormatter& json,
+                        const std::string& out_label)
+{
+  typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
+  evt.getByLabel(in_label, prods);
+
+  json << "var " << out_label << " = " << *prods << ";\n\n";
+}
+
+// ----------------------------------------------------------------------------
 template<class T> void WebEVDServer<T>::
 analyze(const T& evt,
         const geo::GeometryCore* geom,
@@ -187,20 +297,6 @@ analyze(const T& evt,
   std::ofstream outf = fTmp.ofstream("coords.js");
 
   JSONFormatter json(outf);
-
-  json << "var spacepoints = {\n";
-  for(const art::InputTag& tag: getInputTags<recob::SpacePoint>(evt)){
-    json << "  " << tag << ": [";
-
-    HandleT<recob::SpacePoint> pts;
-    evt.getByLabel(tag, pts);
-
-    for(const recob::SpacePoint& p: *pts){
-      json << TVector3(p.XYZ()) << ", ";
-    }
-    json << "],\n";
-  }
-  json << "};\n\n";
 
   HandleT<raw::RawDigit> digs;
   evt.getByLabel("daq", digs);
@@ -312,7 +408,7 @@ analyze(const T& evt,
 
     PNGView* wire_view = plane_wire_imgs.count(plane) ? plane_wire_imgs[plane] : 0;
 
-    json << "  \"" << plane << "\": {"
+    json << "  " << plane << ": {"
          << "view: " << view << ", "
          << "nwires: " << nwires << ", "
          << "pitch: " << pitch << ", "
@@ -340,54 +436,13 @@ analyze(const T& evt,
   }
   json << "};\n";
 
-  json << "tracks = {\n";
-  for(const art::InputTag& tag: getInputTags<recob::Track>(evt)){
-    json << "  " << tag << ":\n";
-    HandleT<recob::Track> tracks;
-    evt.getByLabel(tag, tracks);
+  SerializeProduct<recob::Track>(evt, json, "tracks");
 
-    json << "  [\n"; // begin list of tracks
-    for(const recob::Track& track: *tracks){
-      json << "    [\n"; // begin list of trajectory points
-      const recob::TrackTrajectory& traj = track.Trajectory();
-      for(unsigned int j = traj.FirstValidPoint(); j <= traj.LastValidPoint(); ++j){
-        if(!traj.HasValidPoint(j)) continue;
-        const geo::Point_t pt = traj.LocationAtPoint(j);
-        json << "[" << pt.X() << ", " << pt.Y() << ", " << pt.Z() << "], ";
-      }
-      json << "\n    ],\n";
-    } // end for track
-    json << "  ],\n"; // end list of tracks
-  } // end for tag
-  json << "};\n\n"; // end of "tracks = "
+  SerializeProduct<recob::SpacePoint>(evt, json, "spacepoints");
 
+  SerializeProduct<recob::Vertex>(evt, json, "reco_vtxs");
 
-  json << "reco_vtxs = {\n";
-  for(const art::InputTag& tag: getInputTags<recob::Vertex>(evt)){
-    json << "  " << tag << ": [";
-    HandleT<recob::Vertex> vtxs;
-    evt.getByLabel(tag, vtxs);
-    for(const recob::Vertex& vtx: *vtxs) json << TVector3(vtx.position().x(), vtx.position().y(), vtx.position().z()) << ", ";
-    json << "],\n";
-  }
-  json << "};\n\n";
-
-
-  HandleT<simb::MCParticle> parts;
-  evt.getByLabel("largeant", parts);
-
-  json << "truth_trajs = [\n";
-  for(const simb::MCParticle& part: *parts){
-    const int apdg = abs(part.PdgCode());
-    if(apdg == 12 || apdg == 14 || apdg == 16) continue; // decay neutrinos
-    json << "  [\n    ";
-    for(unsigned int j = 0; j < part.NumberTrajectoryPoints(); ++j){
-      json << "[" << part.Vx(j) << ", " << part.Vy(j) << ", " << part.Vz(j) << "], ";
-    }
-    json << "\n  ],\n";
-  }
-  json << "];\n\n";
-
+  SerializeProductByLabel<simb::MCParticle>(evt, "largeant", json, "truth_trajs");
 
   json << "cryos = [\n";
   for(auto it = geom->begin_cryostat(); it != geom->end_cryostat(); ++it){

@@ -143,13 +143,11 @@ function TextureMaterial(fname, texdim){
 let outlines = new THREE.Group();
 let digs = new THREE.Group();
 let wires = new THREE.Group();
-let hits = new THREE.Group();
 let truth = new THREE.Group();
 
 scene.add(outlines);
 scene.add(digs);
 scene.add(wires);
-scene.add(hits);
 scene.add(truth);
 
 let com = new THREE.Vector3();
@@ -217,6 +215,8 @@ function push_icosahedron_vtxs(c, radius, vtxs, indices){
     }
 }
 
+let hitvtxs = {}; // map indexed by reco algo
+
 for(let key in planes){
     let plane = planes[key];
     let c = ArrToVec(plane.center);
@@ -246,12 +246,13 @@ for(let key in planes){
 
     outlines.add(line);
 
-    line.layers.set(plane.view);
-
-    let uvlayer = -1;
+    let uvlayer = 2;
     if(plane.view != 2){
         if(a.z/a.y > 0) uvlayer = 3; else uvlayer = 4;
     }
+
+    line.layers.set(plane.view);
+    line.layers.enable(uvlayer);
 
     for(let dw of [plane.digs, plane.wires]){
         if(dw == undefined) continue; // sometimes wires are missing
@@ -294,34 +295,51 @@ for(let key in planes){
             dmesh.layers.set(plane.view);
             if(dw === plane.digs) digs.add(dmesh); else wires.add(dmesh);
 
-            if(plane.view != 2) dmesh.layers.enable(uvlayer);
+            dmesh.layers.enable(uvlayer);
         }
     }
 
-    let hitgeom = new THREE.BufferGeometry();
-    let hitvtxs = [];
+    for(let key in plane.hits){
+        if(!(key in hitvtxs)) hitvtxs[key] = {}; // indexed by pair of layers
+        for(let hit of plane.hits[key]){
+            let hc = c.clone();
+            hc.addScaledVector(a, (2.*hit.wire+1)/plane.nwires-1);
+            hc.addScaledVector(d, (2.*hit.tick+1)/plane.nticks-1);
 
-    for(let hit of plane.hits){
-        let hc = c.clone();
-        hc.addScaledVector(a, (2.*hit.wire+1)/plane.nwires-1);
-        hc.addScaledVector(d, (2.*hit.tick+1)/plane.nticks-1);
+            let du = ArrToVec(plane.across).multiplyScalar(plane.pitch*.45);
+            let dv = ArrToVec(plane.normal).multiplyScalar(hit.rms*Math.abs(plane.tick_pitch));
 
-        let du = ArrToVec(plane.across).multiplyScalar(plane.pitch*.45);
-        let dv = ArrToVec(plane.normal).multiplyScalar(hit.rms*Math.abs(plane.tick_pitch));
+            let views = (plane.view, uvlayer);
+            if(!(views in hitvtxs[key])) hitvtxs[key][views] = [];
+            push_square_vtxs(hc, du, dv, hitvtxs[key][views]);
+        }
+    }
+}
 
-        push_square_vtxs(hc, du, dv, hitvtxs);
+for(let key in hitvtxs){
+    let hits = new THREE.Group();
+    scene.add(hits);
+
+    for(let views in hitvtxs[key]){
+        let hitgeom = new THREE.BufferGeometry();
+
+        hitgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs[key][views]), 3));
+
+        let h = new THREE.Mesh(hitgeom, mat_hit);
+        h.layers.set(views[0]);
+        h.layers.enable(views[1]); // uvlayer
+        hits.add(h);
     }
 
-    hitgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs), 3));
+    let btn = document.createElement('button');
+    SetVisibility(hits, false, btn, key);
 
-    let h = new THREE.Mesh(hitgeom, mat_hit);
-    h.layers.set(plane.view);
-    hits.add(h);
+    btn.addEventListener('click', function(){
+            SetVisibility(hits, !hits.visible, btn, key);
+            requestAnimationFrame(animate);
+        });
 
-    if(plane.view != 2){
-        line.layers.enable(uvlayer);
-        h.layers.enable(uvlayer);
-    }
+    document.getElementById('hits_dropdown').appendChild(btn);
 }
 
 com.divideScalar(nplanes);
@@ -463,7 +481,6 @@ function Toggle(col, id, str){
 // HTML and attach the handlers to them.
 window.ToggleRawDigits = function(){Toggle(digs, 'rawdigits', 'RawDigits');}
 window.ToggleWires = function(){Toggle(wires, 'wires', 'Wires');}
-window.ToggleHits = function(){Toggle(hits, 'hits', 'Hits');}
 window.ToggleTruth = function(){Toggle(truth, 'truth', 'Truth');}
 
 AllViews();
@@ -474,7 +491,6 @@ ThreeDControls();
 
 SetVisibilityById(digs, false, 'rawdigits', 'RawDigits');
 SetVisibilityById(wires, false, 'wires', 'Wires');
-SetVisibilityById(hits, false, 'hits', 'Hits');
 SetVisibilityById(truth, true, 'truth', 'Truth');
 
 let animStart = null;

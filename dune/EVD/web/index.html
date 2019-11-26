@@ -93,7 +93,11 @@
 
       <button id="rawdigits" onclick="ToggleRawDigits()"></button>
       <button id="wires" onclick="ToggleWires()"></button>
-      <button id="hits" onclick="ToggleHits()"></button>
+      <div class="dropdown">
+        <button>Hits...</button>
+        <div class="dropdown-content" id="hits_dropdown">
+        </div>
+      </div>
       <div class="dropdown">
         <button>Tracks...</button>
         <div class="dropdown-content" id="tracks_dropdown">

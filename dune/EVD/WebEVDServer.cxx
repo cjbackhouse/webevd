@@ -25,6 +25,14 @@
 #include "larcorealg/Geometry/GeometryCore.h"
 #include "lardataalg/DetectorInfo/DetectorProperties.h"
 
+namespace std{
+  bool operator<(const art::InputTag& a, const art::InputTag& b)
+  {
+    return (std::make_tuple(a.label(), a.instance(), a.process()) <
+            std::make_tuple(b.label(), b.instance(), b.process()));
+  }
+}
+
 namespace evd
 {
 
@@ -141,7 +149,6 @@ protected:
   std::ofstream& fStream;
 };
 
-
 template<class T> std::vector<art::InputTag> getInputTags(const art::Event& evt)
 {
   return evt.getInputTags<std::vector<T>>();
@@ -149,8 +156,11 @@ template<class T> std::vector<art::InputTag> getInputTags(const art::Event& evt)
 
 template<class T> std::vector<art::InputTag> getInputTags(const gallery::Event& evt)
 {
-  std::cout << "Warning: getInputTags() not supported by gallery (https://cdcvs.fnal.gov/redmine/issues/23615) defaulting to \"pandora\"" << std::endl;
-  return {art::InputTag("pandora", "", "Reco")};
+  std::string label = "pandora";
+  if constexpr(std::is_same_v<T, recob::Hit>) label = "gaushit";
+
+  std::cout << "Warning: getInputTags() not supported by gallery (https://cdcvs.fnal.gov/redmine/issues/23615) defaulting to \"" << label << "\"" << std::endl;
+  return {art::InputTag(label)};
 }
 
 
@@ -261,22 +271,25 @@ analyze(const T& evt,
     }
   }
 
-  HandleT<recob::Hit> hits;
-  evt.getByLabel("gaushit", hits);
+  std::map<geo::PlaneID, std::map<art::InputTag, std::vector<recob::Hit>>> plane_hits;
 
-  std::map<geo::PlaneID, std::vector<recob::Hit>> plane_hits;
-  for(const recob::Hit& hit: *hits){
-    // Would possibly be right for disambiguated hits?
-    //    const geo::WireID wire(hit.WireID());
+  for(art::InputTag tag: getInputTags<recob::Hit>(evt)){
+    HandleT<recob::Hit> hits;
+    evt.getByLabel(tag, hits);
 
-    for(geo::WireID wire: geom->ChannelToWire(hit.Channel())){
-      const geo::PlaneID plane(wire);
+    for(const recob::Hit& hit: *hits){
+      // Would possibly be right for disambiguated hits?
+      //    const geo::WireID wire(hit.WireID());
 
-      // Correct for disambiguated hits
-      //      plane_hits[plane].push_back(hit);
+      for(geo::WireID wire: geom->ChannelToWire(hit.Channel())){
+        const geo::PlaneID plane(wire);
 
-      // Otherwise we have to update the wire number
-      plane_hits[plane].emplace_back(hit.Channel(), hit.StartTick(), hit.EndTick(), hit.PeakTime(), hit.SigmaPeakTime(), hit.RMS(), hit.PeakAmplitude(), hit.SigmaPeakAmplitude(), hit.SummedADC(), hit.Integral(), hit.SigmaIntegral(), hit.Multiplicity(), hit.LocalIndex(), hit.GoodnessOfFit(), hit.DegreesOfFreedom(), hit.View(), hit.SignalType(), wire);
+        // Correct for disambiguated hits
+        //      plane_hits[plane].push_back(hit);
+
+        // Otherwise we have to update the wire number
+        plane_hits[plane][tag].emplace_back(hit.Channel(), hit.StartTick(), hit.EndTick(), hit.PeakTime(), hit.SigmaPeakTime(), hit.RMS(), hit.PeakAmplitude(), hit.SigmaPeakAmplitude(), hit.SummedADC(), hit.Integral(), hit.SigmaIntegral(), hit.Multiplicity(), hit.LocalIndex(), hit.GoodnessOfFit(), hit.DegreesOfFreedom(), hit.View(), hit.SignalType(), wire);
+      }
     }
   }
 
@@ -311,14 +324,18 @@ analyze(const T& evt,
     json << "digs: " << *dig_view << ", ";
     if(wire_view) json << "wires: " << *wire_view << ", ";
 
-    json << "hits: [";
-    for(const recob::Hit& hit: plane_hits[plane]){
-      json << "{wire: " << geo::WireID(hit.WireID()).Wire
-           << ", tick: " << hit.PeakTime()
-           << ", rms: " << hit.RMS() << "}, ";
+    json << "hits: {";
+    for(auto it: plane_hits[plane]){
+      json << it.first << ": [";
+      for(const recob::Hit& hit: it.second){
+        json << "{wire: " << geo::WireID(hit.WireID()).Wire
+             << ", tick: " << hit.PeakTime()
+             << ", rms: " << hit.RMS() << "}, ";
+      }
+      json << "], ";
     }
 
-    json << "]},\n";
+    json << "}},\n";
   }
   json << "};\n";
 

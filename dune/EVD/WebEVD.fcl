@@ -3,11 +3,6 @@ BEGIN_PROLOG
 standard_webevd:
 {
   module_type: "WebEVD"
-
-  HitLabel: "gaushit"
-
-  SpacePointLabel: "pandora" # "spacepointsolver" # reco3d"
-  SpacePointInstanceLabel: ""
 }
 
 END_PROLOG

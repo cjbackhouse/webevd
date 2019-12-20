@@ -27,9 +27,10 @@ LIBDIRS := `root-config --libs` \
 	   -L${LARCOREALG_LIB} \
 	   -L${LARDATAOBJ_LIB} \
 	   -L${LARDATAALG_LIB} \
-	   -L/dune/app/users/bckhouse/dev/evd/build_slf6.x86_64/dunetpc/lib/
+	   -L${FHICLCPP_LIB} \
+	   -L${MRB_BUILDDIR}/dunetpc/lib/
 
-LIBS := -lpthread -lcanvas -lcetlib_except -lcetlib -lgallery -lnusimdata_SimulationBase -llarcoreobj_SummaryData -llardataobj_RecoBase -llarcorealg_Geometry -ldune_Geometry -llardataalg_DetectorInfo -lpng -ldune_EVD # -lCore -lRIO -lNet -lHist -lGraf -lGraf3d -lGpad -lTree -lRint -lPostscript -lMatrix -lPhysics -lMathCore -lThread -lMultiProc 
+LIBS := -lpthread -lcanvas -lcetlib_except -lcetlib -lgallery -lnusimdata_SimulationBase -llarcoreobj_SummaryData -llardataobj_RecoBase -llarcorealg_Geometry -ldune_Geometry -llardataalg_DetectorInfo -lpng -lfhiclcpp -ldune_EVD # -lCore -lRIO -lNet -lHist -lGraf -lGraf3d -lGpad -lTree -lRint -lPostscript -lMatrix -lPhysics -lMathCore -lThread -lMultiProc
 
 all:
 	g++ -O3 -g -pthread -std=c++1z webevd.cxx -owebevd ${CFLAGS} ${LIBDIRS} ${LIBS}

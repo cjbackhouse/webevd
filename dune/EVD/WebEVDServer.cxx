@@ -271,7 +271,13 @@ SerializeProductByLabel(const TEvt& evt,
   typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
   evt.getByLabel(in_label, prods);
 
-  json << "var " << out_label << " = " << *prods << ";\n\n";
+  json << "var " << out_label << " = ";
+  if(prods.isValid()){
+    json << *prods << ";\n\n";
+  }
+  else{
+    json << "[];\n\n";
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -301,7 +307,7 @@ analyze(const T& evt,
   HandleT<raw::RawDigit> digs;
   evt.getByLabel("daq", digs);
 
-  for(unsigned int digIdx = 0; digIdx < digs->size(); ++digIdx){
+  for(unsigned int digIdx = 0; digIdx < (digs.isValid() ? digs->size() : 0); ++digIdx){
     const raw::RawDigit& dig = (*digs)[digIdx];
 
     for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
@@ -391,14 +397,13 @@ analyze(const T& evt,
   }
 
   json << "planes = {\n";
-  for(auto it: plane_dig_imgs){
-    const geo::PlaneID plane = it.first;
+  for(geo::PlaneID plane: geom->IteratePlaneIDs()){
     const geo::PlaneGeo& planegeo = geom->Plane(plane);
     const int view = planegeo.View();
     const unsigned int nwires = planegeo.Nwires();
     const double pitch = planegeo.WirePitch();
     const TVector3 c = planegeo.GetCenter();
-    const PNGView* dig_view = it.second;
+    const PNGView* dig_view = plane_dig_imgs[plane];
 
     const auto d = planegeo.GetIncreasingWireDirection();
     const TVector3 n = planegeo.GetNormalDirection();
@@ -407,6 +412,9 @@ analyze(const T& evt,
     const double tick_pitch = detprop->ConvertTicksToX(1, plane) - detprop->ConvertTicksToX(0, plane);
 
     PNGView* wire_view = plane_wire_imgs.count(plane) ? plane_wire_imgs[plane] : 0;
+
+    // Skip completely empty planes (eg the wall-facing collection wires)
+    if(!dig_view && !wire_view) continue;
 
     json << "  " << plane << ": {"
          << "view: " << view << ", "
@@ -418,7 +426,7 @@ analyze(const T& evt,
          << "across: " << d << ", "
          << "normal: " << n << ", ";
 
-    json << "digs: " << *dig_view << ", ";
+    if(dig_view) json << "digs: " << *dig_view << ", ";
     if(wire_view) json << "wires: " << *wire_view << ", ";
 
     json << "hits: {";

@@ -1,0 +1,30 @@
+#include "services_dune.fcl"
+
+#include "WebEVD.fcl"
+
+process_name: EVD
+
+source:
+{
+  module_type: RootInput
+  maxEvents: 1 # makes more sense with current design of evd
+}
+
+services:
+{
+  @table::protodune_services
+}
+
+# Faster
+services.BackTrackerService: @erase
+services.PhotonBackTrackerService: @erase
+
+physics:
+{
+  analyzers:
+  {
+    evd: @local::standard_webevd
+  }
+
+  evd_path: [ evd ]
+}

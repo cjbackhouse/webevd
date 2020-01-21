@@ -286,8 +286,6 @@ analyze(const T& evt,
         const geo::GeometryCore* geom,
         const detinfo::DetectorProperties* detprop)
 {
-  const int height = 4492; // TODO somewhere to look up number of ticks?
-
   PNGArena arena("arena");
 
   std::map<geo::PlaneID, PNGView*> plane_dig_imgs;
@@ -307,6 +305,19 @@ analyze(const T& evt,
   HandleT<raw::RawDigit> digs;
   evt.getByLabel("daq", digs);
 
+  HandleT<recob::Wire> wires;
+  evt.getByLabel("caldata", wires);
+
+  // Find out empirically how many samples we took
+  unsigned long maxTick = 0;
+  if(digs.isValid()){
+    for(const raw::RawDigit& dig: *digs) maxTick = std::max(maxTick, (unsigned long)dig.Samples());
+  }
+  if(wires.isValid()){
+    for(const recob::Wire& wire: *wires) maxTick = std::max(maxTick, wire.NSignal());
+  }
+  std::cout << "Number of ticks " << maxTick << std::endl;
+
   for(unsigned int digIdx = 0; digIdx < (digs.isValid() ? digs->size() : 0); ++digIdx){
     const raw::RawDigit& dig = (*digs)[digIdx];
 
@@ -318,7 +329,7 @@ analyze(const T& evt,
       const unsigned int Nw = geom->Nwires(plane);
 
       if(plane_dig_imgs.count(plane) == 0){
-        plane_dig_imgs[plane] = new PNGView(arena, Nw, height);
+        plane_dig_imgs[plane] = new PNGView(arena, Nw, maxTick);
       }
 
       PNGView& bytes = *plane_dig_imgs[plane];
@@ -326,7 +337,7 @@ analyze(const T& evt,
       raw::RawDigit::ADCvector_t adcs(dig.Samples());
       raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
 
-      for(unsigned int tick = 0; tick < std::min(adcs.size(), size_t(height)); ++tick){
+      for(unsigned int tick = 0; tick < adcs.size(); ++tick){
         const int adc = adcs[tick] ? int(adcs[tick])-dig.GetPedestal() : 0;
 
         if(adc != 0){
@@ -345,9 +356,6 @@ analyze(const T& evt,
     }
   }
 
-  HandleT<recob::Wire> wires;
-  evt.getByLabel("caldata", wires);
-
   for(unsigned int wireIdx = 0; wireIdx < wires->size(); ++wireIdx){
     for(geo::WireID wire: geom->ChannelToWire((*wires)[wireIdx].Channel())){
       const geo::TPCID tpc(wire);
@@ -357,13 +365,13 @@ analyze(const T& evt,
       const unsigned int Nw = geom->Nwires(plane);
 
       if(plane_wire_imgs.count(plane) == 0){
-        plane_wire_imgs[plane] = new PNGView(arena, Nw, height);
+        plane_wire_imgs[plane] = new PNGView(arena, Nw, maxTick);
       }
 
       PNGView& bytes = *plane_wire_imgs[plane];
 
       const auto adcs = (*wires)[wireIdx].Signal();
-      for(unsigned int tick = 0; tick < std::min(adcs.size(), size_t(height)); ++tick){
+      for(unsigned int tick = 0; tick < adcs.size(); ++tick){
         if(adcs[tick] <= 0) continue;
 
         // green channel
@@ -408,7 +416,6 @@ analyze(const T& evt,
     const auto d = planegeo.GetIncreasingWireDirection();
     const TVector3 n = planegeo.GetNormalDirection();
 
-    const int nticks = height; // HACK from earlier
     const double tick_pitch = detprop->ConvertTicksToX(1, plane) - detprop->ConvertTicksToX(0, plane);
 
     PNGView* wire_view = plane_wire_imgs.count(plane) ? plane_wire_imgs[plane] : 0;
@@ -420,7 +427,7 @@ analyze(const T& evt,
          << "view: " << view << ", "
          << "nwires: " << nwires << ", "
          << "pitch: " << pitch << ", "
-         << "nticks: " << nticks << ", "
+         << "nticks: " << maxTick << ", "
          << "tick_pitch: " << tick_pitch << ", "
          << "center: " << c << ", "
          << "across: " << d << ", "

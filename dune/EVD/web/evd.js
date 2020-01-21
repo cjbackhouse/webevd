@@ -378,6 +378,8 @@ for(let key in reco_vtxs){
 }
 
 // Physical cryostat
+let cryogroup = new THREE.Group();
+
 for(let key in cryos){
     let cryo = cryos[key];
 
@@ -390,12 +392,17 @@ for(let key in cryos){
     let line = new THREE.LineSegments(edges, mat_geo);
 
     line.position.set((r0.x+r1.x)/2, (r0.y+r1.y)/2, (r0.z+r1.z)/2);
-    scene.add(line);
 
     for(let i = 0; i < 5; ++i) line.layers.enable(i);
+
+    cryogroup.add(line);
 }
 
+scene.add(cryogroup);
+
 // Physical APAs
+let apas = new THREE.Group();
+
 for(let key in planes){
     let plane = planes[key];
     if(plane.view != 2) continue; // collection only
@@ -413,11 +420,16 @@ for(let key in planes){
     let edges = new THREE.EdgesGeometry(geom);
     let line = new THREE.LineSegments(edges, mat_geo);
 
-    scene.add(line);
     for(let i = 0; i < 5; ++i) line.layers.enable(i);
+
+    apas.add(line);
 }
 
+scene.add(apas);
+
 // Physical OpDets
+let opdetgroup = new THREE.Group();
+
 for(let opdet of opdets){
     let c = ArrToVec(opdet.center);
     let dy = new THREE.Vector3(0, opdet.height/2., 0);
@@ -432,9 +444,13 @@ for(let opdet of opdets){
     let edges = new THREE.EdgesGeometry(geom);
     let line = new THREE.LineSegments(edges, mat_geo);
 
-    scene.add(line);
     for(let i = 0; i < 5; ++i) line.layers.enable(i);
+
+    opdetgroup.add(line);
 }
+
+scene.add(opdetgroup);
+
 
 for(let key in spacepoints){
     let spvtxs = [];
@@ -556,6 +572,11 @@ window.ToggleRawDigits = function(){Toggle(digs, 'rawdigits', 'RawDigits');}
 window.ToggleWires = function(){Toggle(wires, 'wires', 'Wires');}
 window.ToggleTruth = function(){Toggle(truth, 'truth', 'Truth');}
 
+window.ToggleCryos = function(){Toggle(cryogroup, 'cryos', 'Cryostats');}
+window.ToggleAPAs = function(){Toggle(apas, 'apas', 'APAs');}
+window.ToggleOpDets = function(){Toggle(opdetgroup, 'opdets', 'OpDets');}
+
+
 AllViews();
 ThreeDControls();
 
@@ -565,6 +586,10 @@ ThreeDControls();
 SetVisibilityById(digs, false, 'rawdigits', 'RawDigits');
 SetVisibilityById(wires, false, 'wires', 'Wires');
 SetVisibilityById(truth, true, 'truth', 'Truth');
+
+SetVisibilityById(cryogroup, true, 'cryos', 'Cryostats');
+SetVisibilityById(apas, true, 'apas', 'APAs');
+SetVisibilityById(opdetgroup, false, 'opdets', 'OpDets');
 
 let animStart = null;
 let animFunc = null;
@@ -763,6 +788,7 @@ function Theme(theme)
 }
 
 window.Theme = Theme;
+
 
 window.addEventListener( 'resize', onWindowResize, false );
 

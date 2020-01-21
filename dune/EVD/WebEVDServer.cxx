@@ -241,6 +241,15 @@ getInputTags(const gallery::Event& evt)
   if constexpr(std::is_same_v<T, recob::Hit>) label = "gaushit";
 
   std::cout << "Warning: getInputTags() not supported by gallery (https://cdcvs.fnal.gov/redmine/issues/23615) defaulting to \"" << label << "\"" << std::endl;
+
+  try{
+    evt.getValidHandle<std::vector<T>>(art::InputTag(label));
+  }
+  catch(...){
+    std::cout << "...but \"" << label << "\" not found in file" << std::endl;
+    return {};
+  }
+
   return {art::InputTag(label)};
 }
 

@@ -50,6 +50,8 @@ function ArrToVec(arr)
 
 let mat_lin = new THREE.LineBasicMaterial({color: 'gray'});
 
+let mat_geo = new THREE.LineBasicMaterial({color: 'darkred'});
+
 let mat_hit = new THREE.MeshBasicMaterial({color: 'gray', side: THREE.DoubleSide});
 
 let mat_sps = new THREE.MeshBasicMaterial({color: 'blue'});
@@ -226,7 +228,9 @@ for(let key in planes){
     let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
     let d = ArrToVec(plane.normal).multiplyScalar(plane.nticks*Math.abs(plane.tick_pitch)/2.); // drift direction
 
-    c.add(d); // center of the drift direction too
+    c.set(plane.tick_origin, c.y, c.z);
+
+    c.add(d); // center in the drift direction too
 
     com.add(c);
     nplanes += 1; // javascript is silly and doesn't have any good size() method
@@ -264,8 +268,7 @@ for(let key in planes){
             // file into a single geometry.
             let geom = new THREE.BufferGeometry();
 
-            let blockc = ArrToVec(plane.center);
-            blockc.add(d); // center of the drift direction too
+            let blockc = c.clone();
             blockc.addScaledVector(ArrToVec(plane.across), (block.dx+32-plane.nwires/2)*plane.pitch);
             blockc.addScaledVector(ArrToVec(plane.normal), (block.dy+32-plane.nticks/2)*Math.abs(plane.tick_pitch));
 
@@ -374,7 +377,7 @@ for(let key in reco_vtxs){
     document.getElementById('vertices_dropdown').appendChild(btn);
 }
 
-
+// Physical cryostat
 for(let key in cryos){
     let cryo = cryos[key];
 
@@ -384,11 +387,33 @@ for(let key in cryos){
     let boxgeom = new THREE.BoxBufferGeometry(r1.x-r0.x, r1.y-r0.y, r1.z-r0.z);
 
     let edges = new THREE.EdgesGeometry(boxgeom);
-    let line = new THREE.LineSegments(edges, mat_lin);
+    let line = new THREE.LineSegments(edges, mat_geo);
 
     line.position.set((r0.x+r1.x)/2, (r0.y+r1.y)/2, (r0.z+r1.z)/2);
     scene.add(line);
 
+    for(let i = 0; i < 5; ++i) line.layers.enable(i);
+}
+
+// Physical APAs
+for(let key in planes){
+    let plane = planes[key];
+    if(plane.view != 2) continue; // collection only
+
+    let c = ArrToVec(plane.center);
+    let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
+    let d = ArrToVec(plane.wiredir).multiplyScalar(plane.depth/2.);
+
+    let vtxs = [];
+    push_square_vtxs(c, a, d, vtxs);
+
+    let geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+
+    let edges = new THREE.EdgesGeometry(geom);
+    let line = new THREE.LineSegments(edges, mat_geo);
+
+    scene.add(line);
     for(let i = 0; i < 5; ++i) line.layers.enable(i);
 }
 

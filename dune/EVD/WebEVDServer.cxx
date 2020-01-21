@@ -421,10 +421,14 @@ analyze(const T& evt,
     const TVector3 c = planegeo.GetCenter();
     const PNGView* dig_view = plane_dig_imgs[plane];
 
-    const auto d = planegeo.GetIncreasingWireDirection();
+    const TVector3 d = planegeo.GetIncreasingWireDirection();
     const TVector3 n = planegeo.GetNormalDirection();
 
-    const double tick_pitch = detprop->ConvertTicksToX(1, plane) - detprop->ConvertTicksToX(0, plane);
+    const TVector3 wiredir = planegeo.GetWireDirection();
+    const double depth = planegeo.Depth(); // really height
+
+    const double tick_origin = detprop->ConvertTicksToX(0, plane);
+    const double tick_pitch = detprop->ConvertTicksToX(1, plane) - tick_origin;
 
     PNGView* wire_view = plane_wire_imgs.count(plane) ? plane_wire_imgs[plane] : 0;
 
@@ -436,9 +440,12 @@ analyze(const T& evt,
          << "nwires: " << nwires << ", "
          << "pitch: " << pitch << ", "
          << "nticks: " << maxTick << ", "
+         << "tick_origin: " << tick_origin << ", "
          << "tick_pitch: " << tick_pitch << ", "
          << "center: " << c << ", "
          << "across: " << d << ", "
+         << "wiredir: " << wiredir << ", "
+         << "depth: " << depth << ", "
          << "normal: " << n << ", ";
 
     if(dig_view) json << "digs: " << *dig_view << ", ";

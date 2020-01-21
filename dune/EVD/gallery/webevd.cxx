@@ -69,6 +69,8 @@ int main(int argc, char** argv)
 "services:{@table::dunefd_services}        \n"
 "services.BackTrackerService: @erase       \n"
 "services.PhotonBackTrackerService: @erase \n"
+"services.LArFFT: @erase                   \n"
+"services.TFileService: @erase             \n"
 "services.Geometry.GDML: \"dune10kt_v1_1x2x6.gdml\" "
 );
 

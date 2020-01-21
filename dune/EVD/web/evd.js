@@ -41,6 +41,9 @@ renderer.setClearColor('black');
 renderer.alpha = true;
 renderer.antialias = false;
 
+// Disable depth buffer to get better handling for the transparent digits/wires
+renderer.getContext().disable(renderer.getContext().DEPTH_TEST);
+
 document.body.appendChild( renderer.domElement );
 
 function ArrToVec(arr)

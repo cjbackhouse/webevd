@@ -149,7 +149,10 @@ public:
   template<class T> JSONFormatter& operator<<(const std::vector<T>& v)
   {
     fStream << "[";
-    for(const T& x: v) (*this) << x << ", ";
+    for(const T& x: v){
+      (*this) << x;
+      if(&x != &v.back()) (*this) << ", ";
+    }
     fStream << "]";
     return *this;
   }
@@ -248,15 +251,19 @@ SerializeProduct(const TEvt& evt,
                  const std::string& label)
 {
   json << "var " << label << " = {\n";
-  for(const art::InputTag& tag: getInputTags<TProd>(evt)){
-    json << "  " << tag << ": ";
+  const std::vector<art::InputTag> tags = getInputTags<TProd>(evt);
+  for(const art::InputTag& tag: tags){
+    json << "  \"" << tag << "\": ";
 
     typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
     evt.getByLabel(tag, prods);
 
     json << *prods;
 
-    json << ",\n";
+    if(tag != tags.back()){
+      json << ",";
+    }
+    json << "\n";
   }
   json << "};\n\n";
 }
@@ -297,6 +304,7 @@ analyze(const T& evt,
   fTmp.symlink(webdir, "evd.js");
   fTmp.symlink(webdir, "index.html");
   fTmp.symlink(webdir, "httpd.conf");
+  fTmp.symlink(webdir, "favicon.ico");
 
   std::ofstream outf = fTmp.ofstream("coords.js");
 
@@ -404,7 +412,7 @@ analyze(const T& evt,
     }
   }
 
-  json << "planes = {\n";
+  json << "var planes = {\n";
   for(geo::PlaneID plane: geom->IteratePlaneIDs()){
     const geo::PlaneGeo& planegeo = geom->Plane(plane);
     const int view = planegeo.View();
@@ -449,7 +457,7 @@ analyze(const T& evt,
 
     json << "}},\n";
   }
-  json << "};\n";
+  json << "};\n\n";
 
   SerializeProduct<recob::Track>(evt, json, "tracks");
 
@@ -459,7 +467,7 @@ analyze(const T& evt,
 
   SerializeProductByLabel<simb::MCParticle>(evt, "largeant", json, "truth_trajs");
 
-  json << "cryos = [\n";
+  json << "var cryos = [\n";
   for(auto it = geom->begin_cryostat(); it != geom->end_cryostat(); ++it){
     const TVector3 r0(it->MinX(), it->MinY(), it->MinZ());
     const TVector3 r1(it->MaxX(), it->MaxY(), it->MaxZ());

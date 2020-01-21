@@ -417,6 +417,24 @@ for(let key in planes){
     for(let i = 0; i < 5; ++i) line.layers.enable(i);
 }
 
+// Physical OpDets
+for(let opdet of opdets){
+    let c = ArrToVec(opdet.center);
+    let dy = new THREE.Vector3(0, opdet.height/2., 0);
+    let dz = new THREE.Vector3(0, 0, opdet.length/2.);
+
+    let vtxs = [];
+    push_square_vtxs(c, dy, dz, vtxs);
+
+    let geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+
+    let edges = new THREE.EdgesGeometry(geom);
+    let line = new THREE.LineSegments(edges, mat_geo);
+
+    scene.add(line);
+    for(let i = 0; i < 5; ++i) line.layers.enable(i);
+}
 
 for(let key in spacepoints){
     let spvtxs = [];

@@ -475,10 +475,23 @@ analyze(const T& evt,
   SerializeProductByLabel<simb::MCParticle>(evt, "largeant", json, "truth_trajs");
 
   json << "var cryos = [\n";
-  for(auto it = geom->begin_cryostat(); it != geom->end_cryostat(); ++it){
-    const TVector3 r0(it->MinX(), it->MinY(), it->MinZ());
-    const TVector3 r1(it->MaxX(), it->MaxY(), it->MaxZ());
+  for(const geo::CryostatGeo& cryo: geom->IterateCryostats()){
+    const TVector3 r0(cryo.MinX(), cryo.MinY(), cryo.MinZ());
+    const TVector3 r1(cryo.MaxX(), cryo.MaxY(), cryo.MaxZ());
     json << "  { min: "  << r0 << ", max: " << r1 << " },\n";
+  }
+  json << "];\n\n";
+
+  json << "var opdets = [\n";
+  for(unsigned int i = 0; i < geom->NOpDets(); ++i){
+    const geo::OpDetGeo& opdet = geom->OpDetGeoFromOpDet(i);
+    json << "  { center: " << TVector3(opdet.GetCenter().X(),
+                                       opdet.GetCenter().Y(),
+                                       opdet.GetCenter().Z()) << ", "
+         << "length: " << opdet.Length() << ", "
+         << "width: " << opdet.Width() << ", "
+         << "height: " << opdet.Height() << " }";
+    if(i != geom->NOpDets()-1) json << ",\n"; else json << "\n";
   }
   json << "];\n";
 

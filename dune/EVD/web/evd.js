@@ -402,7 +402,7 @@ for(let key in spacepoints){
 
     let spgeom = new THREE.BufferGeometry();
     spgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
-    spgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(spidxs), 1));
+    spgeom.setIndex(new THREE.BufferAttribute(new Uint32Array(spidxs), 1));
     let sps = new THREE.Mesh(spgeom, mat_sps);
     for(let i = 0; i < 5; ++i) sps.layers.enable(i);
     scene.add(sps);

@@ -396,7 +396,7 @@ for(let key in cryos){
 
     line.position.set((r0.x+r1.x)/2, (r0.y+r1.y)/2, (r0.z+r1.z)/2);
 
-    for(let i = 0; i < 5; ++i) line.layers.enable(i);
+    for(let i = 0; i <= 5; ++i) line.layers.enable(i);
 
     cryogroup.add(line);
 }
@@ -423,7 +423,7 @@ for(let key in planes){
     let edges = new THREE.EdgesGeometry(geom);
     let line = new THREE.LineSegments(edges, mat_geo);
 
-    for(let i = 0; i < 5; ++i) line.layers.enable(i);
+    for(let i = 0; i <= 5; ++i) line.layers.enable(i);
 
     apas.add(line);
 }
@@ -447,7 +447,7 @@ for(let opdet of opdets){
     let edges = new THREE.EdgesGeometry(geom);
     let line = new THREE.LineSegments(edges, mat_geo);
 
-    for(let i = 0; i < 5; ++i) line.layers.enable(i);
+    for(let i = 0; i <= 5; ++i) line.layers.enable(i);
 
     opdetgroup.add(line);
 }
@@ -466,7 +466,7 @@ for(let key in spacepoints){
     spgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
     spgeom.setIndex(new THREE.BufferAttribute(new Uint32Array(spidxs), 1));
     let sps = new THREE.Mesh(spgeom, mat_sps);
-    for(let i = 0; i < 5; ++i) sps.layers.enable(i);
+    for(let i = 0; i <= 5; ++i) sps.layers.enable(i);
     scene.add(sps);
 
     let btn = document.createElement('button');
@@ -596,6 +596,8 @@ SetVisibilityById(opdetgroup, false, 'opdets', 'OpDets');
 
 let animStart = null;
 let animFunc = null;
+
+window.NoView = function(){camera.layers.set(5); requestAnimationFrame(animate);}
 
 // TODO these only really do what you expect when already in 3D mode. May want
 // to "re-diagonalize" this functionality.

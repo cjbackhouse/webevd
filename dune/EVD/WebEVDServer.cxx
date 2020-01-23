@@ -26,6 +26,11 @@
 #include "larcorealg/Geometry/GeometryCore.h"
 #include "lardataalg/DetectorInfo/DetectorProperties.h"
 
+#include <sys/types.h>
+#include <sys/socket.h>
+//#include <netinet/in.h>
+#include <netinet/ip.h> /* superset of previous */
+
 namespace std{
   bool operator<(const art::InputTag& a, const art::InputTag& b)
   {
@@ -47,6 +52,161 @@ template<class T> WebEVDServer<T>::~WebEVDServer()
 {
 }
 
+short swap_byte_order(short x)
+{
+  char* cx = (char*)&x;
+  std::swap(cx[0], cx[1]);
+  return x;
+}
+
+void write_ok200(int sock,
+                 const std::string content = "text/html",
+                 bool gzip = false)
+{
+  std::string str =
+    "HTTP/1.0 200 OK\r\n"
+    "Server: WebEVD/1.0.0\r\n"
+    "Content-Type: "+content+"\r\n";
+
+  if(gzip) str += "Content-Encoding: gzip\r\n";
+
+  str += "\r\n";
+
+  write(sock, &str.front(), str.size());
+}
+
+void write_unimp501(int sock)
+{
+  const char str[] =
+    "HTTP/1.0 501 Not Implemented\r\n"
+    "Server: WebEVD/1.0.0\r\n"
+    "Content-Type: text/plain\r\n"
+    "\r\n"
+    "I don't know how to do that\r\n";
+
+  write(sock, str, strlen(str));
+}
+
+void write_file(const std::string& fname, int sock)
+{
+  std::cout << "Serving " << fname << std::endl;
+
+  std::vector<char> buf(1024*1024);
+  FILE* f = fopen(fname.c_str(), "r");
+
+  if(!f){
+    std::cout << fname << " not found!" << std::endl;
+    return;
+  }
+
+  while(true){
+    int nread = fread(&buf.front(), 1, buf.size(), f);
+    if(nread <= 0){
+      std::cout << "Done\n" << std::endl;
+      fclose(f);
+      return;
+    }
+    std::cout << "Writing " << nread << " bytes" << std::endl;
+    write(sock, &buf.front(), nread);
+  }
+}
+
+std::string read_all(int sock)
+{
+  std::string ret;
+
+  std::vector<char> buf(1024*1024);
+  while(true){
+    const int nread = read(sock, &buf.front(), buf.size());
+    if(nread == 0) return ret;
+    ret.insert(ret.end(), buf.begin(), buf.begin()+nread);
+    // Only handle GETs, so no need to wait for payload (for which we'd need to
+    // check Content-Length too).
+    if(ret.find("\r\n\r\n") != std::string::npos) return ret;
+  }
+}
+
+int err(const char* call)
+{
+  std::cout << call << "() error! " << errno << std::endl;
+  return errno;
+}
+
+template<class T> int WebEVDServer<T>::serve_dir2(const std::string& dir, int port)
+{
+  int sock = socket(AF_INET, SOCK_STREAM, 0);
+  if(sock == -1) return err("socket");
+
+  // Reuse port immediately even if a previous instance just aborted.
+  const int one = 1;
+  if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
+                &one, sizeof(one)) != 0) return err("setsockopt");
+
+  sockaddr_in addr;
+  addr.sin_family = AF_INET;
+  addr.sin_port = swap_byte_order(port);
+  addr.sin_addr.s_addr = INADDR_ANY;
+
+  if(bind(sock, (sockaddr*)&addr, sizeof(addr)) != 0) return err("bind");
+
+  if(listen(sock, 128/*backlog*/) != 0) return err("listen");
+
+  while(true){
+    int newsock = accept(sock, 0, 0);
+    if(newsock == -1) return err("accept");
+
+    std::string req = read_all(newsock);
+
+    std::cout << req << std::endl;
+
+    char* verb = strtok(&req.front(), " ");
+
+    if(verb && std::string(verb) == "GET"){
+      char* freq = strtok(0, " ");
+      std::string sreq(freq);
+
+      if(sreq == "/QUIT"){
+        const std::string msg = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>Goodbye!</body></html>";
+        write_ok200(newsock, "text/html", false);
+        write(newsock, msg.c_str(), msg.size());
+        close(newsock);
+        break;
+      }
+
+      if(sreq == "/") sreq = "index.html";
+
+      // Serve all files except pngs compressed
+      const bool zip = sreq.find(".png") == std::string::npos;
+
+      // TODO - proper MIME type handling
+      const std::string mime = (sreq.find(".js") != std::string::npos) ? "application/javascript" : "text/html";
+
+      write_ok200(newsock, mime, zip);
+
+      write_file(zip ? fTmp.compress(sreq) : dir+"/"+sreq, newsock);
+    }
+    else{
+      write_unimp501(newsock);
+    }
+
+    close(newsock);
+  }
+
+  close(sock);
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+int serve_dir(const std::string& dir, int port)
+{
+  return system(TString::Format("./busybox httpd -f -p %d -h %s", port, dir.c_str()).Data());
+
+  // Alternative ways to start an HTTP server
+  // system("cd web; python -m SimpleHTTPServer 8000");
+  // system("cd web; python3 -m http.server 8000");
+}
+
 // ----------------------------------------------------------------------------
 template<class T> void WebEVDServer<T>::serve()
 {
@@ -63,7 +223,7 @@ template<class T> void WebEVDServer<T>::serve()
 
   // Search for an open port up-front
   while(system(TString::Format("ss -an | grep -q %d", port).Data()) == 0) ++port;
-  
+
   while(true){
     std::cout << "First run" << std::endl;
     std::cout << "ssh -L "
@@ -72,10 +232,7 @@ template<class T> void WebEVDServer<T>::serve()
     std::cout << "and then navigate to localhost:" << port << " in your favorite browser." << std::endl << std::endl;
     std::cout << "Press Ctrl-C here when done." << std::endl;
 
-    const int status = system(TString::Format("busybox httpd -f -p %d -h %s", port, fTmp.DirectoryName().c_str()).Data());
-    // Alternative ways to start an HTTP server
-    // system("cd web; python -m SimpleHTTPServer 8000");
-    // system("cd web; python3 -m http.server 8000");
+    const int status = serve_dir2(fTmp.DirectoryName(), port);
 
     std::cout << "\nStatus: " << status << std::endl;
 
@@ -516,4 +673,3 @@ template class WebEVDServer<art::Event>;
 template class WebEVDServer<gallery::Event>;
 
 } // namespace
-

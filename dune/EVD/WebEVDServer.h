@@ -20,8 +20,11 @@ namespace evd
                  const geo::GeometryCore* geom,
                  const detinfo::DetectorProperties* detprop);
     void serve();
+
   protected:
     template<class PROD> using HandleT = typename T::template HandleT<std::vector<PROD>>;
+
+    int serve_dir2(const std::string& dir, int port);
 
     Temporaries fTmp;
   };

@@ -22,6 +22,9 @@ namespace evd
     std::ofstream ofstream(const std::string& fname);
     int symlink(const std::string& dir, const std::string& fname);
 
+    // Returns the name of the compressed file
+    std::string compress(const std::string& fname);
+
   protected:
     std::string fTempDir;
     std::vector<std::string> fCleanup;

@@ -44,12 +44,14 @@ namespace evd
 
 // ----------------------------------------------------------------------------
 template<class T> WebEVDServer<T>::WebEVDServer()
+  : fSock(0)
 {
 }
 
 // ----------------------------------------------------------------------------
 template<class T> WebEVDServer<T>::~WebEVDServer()
 {
+  if(fSock) close(fSock);
 }
 
 short swap_byte_order(short x)
@@ -126,78 +128,62 @@ std::string read_all(int sock)
   }
 }
 
-int err(const char* call)
+EResult err(const char* call)
 {
-  std::cout << call << "() error! " << errno << std::endl;
-  return errno;
+  std::cout << call << "() error " << errno << " = " << strerror(errno) << std::endl;
+  return kERROR;
+  //  return errno;
 }
 
-template<class T> int WebEVDServer<T>::serve_dir2(const std::string& dir, int port)
+EResult HandleCommand(const std::string& cmd, int sock)
 {
-  int sock = socket(AF_INET, SOCK_STREAM, 0);
-  if(sock == -1) return err("socket");
+  EResult res;
+  if(cmd == "/QUIT") res = kQUIT;
+  if(cmd == "/NEXT") res = kNEXT;
+  if(cmd == "/PREV") res = kPREV;
 
-  // Reuse port immediately even if a previous instance just aborted.
-  const int one = 1;
-  if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
-                &one, sizeof(one)) != 0) return err("setsockopt");
+  write_ok200(sock, "text/html", false);
 
-  sockaddr_in addr;
-  addr.sin_family = AF_INET;
-  addr.sin_port = swap_byte_order(port);
-  addr.sin_addr.s_addr = INADDR_ANY;
+  std::string msg = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>";
 
-  if(bind(sock, (sockaddr*)&addr, sizeof(addr)) != 0) return err("bind");
-
-  if(listen(sock, 128/*backlog*/) != 0) return err("listen");
-
-  while(true){
-    int newsock = accept(sock, 0, 0);
-    if(newsock == -1) return err("accept");
-
-    std::string req = read_all(newsock);
-
-    std::cout << req << std::endl;
-
-    char* verb = strtok(&req.front(), " ");
-
-    if(verb && std::string(verb) == "GET"){
-      char* freq = strtok(0, " ");
-      std::string sreq(freq);
-
-      if(sreq == "/QUIT"){
-        const std::string msg = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>Goodbye!</body></html>";
-        write_ok200(newsock, "text/html", false);
-        write(newsock, msg.c_str(), msg.size());
-        close(newsock);
-        break;
-      }
-
-      if(sreq == "/") sreq = "index.html";
-
-      // Serve all files except pngs compressed
-      const bool zip = sreq.find(".png") == std::string::npos;
-
-      // TODO - proper MIME type handling
-      const std::string mime = (sreq.find(".js") != std::string::npos) ? "application/javascript" : "text/html";
-
-      write_ok200(newsock, mime, zip);
-
-      write_file(zip ? fTmp.compress(sreq) : dir+"/"+sreq, newsock);
-    }
-    else{
-      write_unimp501(newsock);
-    }
-
-    close(newsock);
+  if(res == kQUIT){
+    msg += "setTimeout(function(){window.location.replace('/');}, 2000);";
+  }
+  else{
+    msg += "window.location.replace('/');";
   }
 
+  msg += "</script></head><body>";
+
+  if(res == kQUIT) msg += "Goodbye!"; else msg += "You should be redirected";
+
+  msg += "</body></html>";
+
+  write(sock, msg.c_str(), msg.size());
   close(sock);
 
-  return 0;
+  return res;
+}
+
+void HandleGet(std::string doc, int sock, Temporaries& tmp)
+{
+  if(doc == "/") doc = "index.html";
+
+  // Serve all files except pngs compressed
+  const bool zip = doc.find(".png") == std::string::npos;
+
+  // TODO - proper MIME type handling
+  const std::string mime = (doc.find(".js") != std::string::npos) ? "application/javascript" : "text/html";
+
+  write_ok200(sock, mime, zip);
+
+  write_file(zip ? tmp.compress(doc) : tmp.DirectoryName()+"/"+doc, sock);
+
+  close(sock);
 }
 
 // ----------------------------------------------------------------------------
+/*
 int serve_dir(const std::string& dir, int port)
 {
   return system(TString::Format("./busybox httpd -f -p %d -h %s", port, dir.c_str()).Data());
@@ -206,11 +192,12 @@ int serve_dir(const std::string& dir, int port)
   // system("cd web; python -m SimpleHTTPServer 8000");
   // system("cd web; python3 -m http.server 8000");
 }
+*/
 
 // ----------------------------------------------------------------------------
-template<class T> void WebEVDServer<T>::serve()
+template<class T> int WebEVDServer<T>::EnsureListen()
 {
-  std::cout << "Temp dir: " << fTmp.DirectoryName() << std::endl;
+  if(fSock != 0) return 0;
 
   char host[1024];
   gethostname(host, 1024);
@@ -224,27 +211,72 @@ template<class T> void WebEVDServer<T>::serve()
   // Search for an open port up-front
   while(system(TString::Format("ss -an | grep -q %d", port).Data()) == 0) ++port;
 
+
+  fSock = socket(AF_INET, SOCK_STREAM, 0);
+  if(fSock == -1) return err("socket");
+
+  // Reuse port immediately even if a previous instance just aborted.
+  const int one = 1;
+  if(setsockopt(fSock, SOL_SOCKET, SO_REUSEADDR,
+                &one, sizeof(one)) != 0) return err("setsockopt");
+
+  sockaddr_in addr;
+  addr.sin_family = AF_INET;
+  addr.sin_port = swap_byte_order(port);
+  addr.sin_addr.s_addr = INADDR_ANY;
+
+  if(bind(fSock, (sockaddr*)&addr, sizeof(addr)) != 0) return err("bind");
+
+  if(listen(fSock, 128/*backlog*/) != 0) return err("listen");
+
+
+  std::cout << "First run" << std::endl;
+  std::cout << "ssh -L "
+            << port << ":localhost:" << port << " "
+            << user << "@" << host << std::endl << std::endl;
+  std::cout << "and then navigate to localhost:" << port << " in your favorite browser." << std::endl << std::endl;
+  //  std::cout << "Press Ctrl-C here when done." << std::endl;
+
+  return 0;
+}
+
+// ----------------------------------------------------------------------------
+template<class T> EResult WebEVDServer<T>::do_serve(Temporaries& tmp)
+{
+  std::cout << "Temp dir: " << tmp.DirectoryName() << std::endl;
+
+  if(EnsureListen() != 0) return kERROR;
+
   while(true){
-    std::cout << "First run" << std::endl;
-    std::cout << "ssh -L "
-              << port << ":localhost:" << port << " "
-              << user << "@" << host << std::endl << std::endl;
-    std::cout << "and then navigate to localhost:" << port << " in your favorite browser." << std::endl << std::endl;
-    std::cout << "Press Ctrl-C here when done." << std::endl;
+    int sock = accept(fSock, 0, 0);
+    if(sock == -1) return err("accept");
 
-    const int status = serve_dir2(fTmp.DirectoryName(), port);
+    std::string req = read_all(sock);
 
-    std::cout << "\nStatus: " << status << std::endl;
+    std::cout << req << std::endl;
 
-    if(status == 256){
-      // Deal with race condition by trying another port
-      ++port;
-      continue;
+    char* verb = strtok(&req.front(), " ");
+
+    if(verb && std::string(verb) == "GET"){
+      char* freq = strtok(0, " ");
+      std::string sreq(freq);
+
+      if(sreq == "/NEXT" ||
+         sreq == "/PREV" ||
+         sreq == "/QUIT"){
+        return HandleCommand(sreq, sock);
+      }
+      else{
+        HandleGet(sreq, sock, tmp);
+      }
     }
     else{
-      break;
+      write_unimp501(sock);
+      close(sock);
     }
   }
+
+  // unreachable
 }
 
 // ----------------------------------------------------------------------------
@@ -296,6 +328,16 @@ public:
     fStream << x;
     return *this;
   }
+
+  JSONFormatter& operator<<(double x)
+  {
+    if(isnan(x)) fStream << "NaN";
+    else if(isinf(x)) fStream << "Infinity";
+    else fStream << x;
+    return *this;
+  }
+
+  JSONFormatter& operator<<(float x){return *this << double(x);}
 
   JSONFormatter& operator<<(const char* x)
   {
@@ -455,9 +497,10 @@ SerializeProductByLabel(const TEvt& evt,
 
 // ----------------------------------------------------------------------------
 template<class T> void WebEVDServer<T>::
-analyze(const T& evt,
-        const geo::GeometryCore* geom,
-        const detinfo::DetectorProperties* detprop)
+WriteFiles(const T& evt,
+           const geo::GeometryCore* geom,
+           const detinfo::DetectorProperties* detprop,
+           Temporaries& tmp)
 {
   PNGArena arena("arena");
 
@@ -467,12 +510,12 @@ analyze(const T& evt,
   char webdir[PATH_MAX];
   realpath("web/", webdir);
 
-  fTmp.symlink(webdir, "evd.js");
-  fTmp.symlink(webdir, "index.html");
-  fTmp.symlink(webdir, "httpd.conf");
-  fTmp.symlink(webdir, "favicon.ico");
+  tmp.symlink(webdir, "evd.js");
+  tmp.symlink(webdir, "index.html");
+  tmp.symlink(webdir, "httpd.conf");
+  tmp.symlink(webdir, "favicon.ico");
 
-  std::ofstream outf = fTmp.ofstream("coords.js");
+  std::ofstream outf = tmp.ofstream("coords.js");
 
   JSONFormatter json(outf);
 
@@ -662,11 +705,22 @@ analyze(const T& evt,
   json << "];\n";
 
   std::cout << "Writing " << arena.name << std::endl;
-  WriteToPNGWithMipMaps(fTmp, arena.name, arena);
+  WriteToPNGWithMipMaps(tmp, arena.name, arena);
 
   // TODO use unique_ptr?
   for(auto it: plane_dig_imgs) delete it.second;
   for(auto it: plane_wire_imgs) delete it.second;
+}
+
+// ----------------------------------------------------------------------------
+template<class T> EResult WebEVDServer<T>::
+serve(const T& evt,
+      const geo::GeometryCore* geom,
+      const detinfo::DetectorProperties* detprop)
+{
+  Temporaries tmp;
+  WriteFiles(evt, geom, detprop, tmp);
+  return do_serve(tmp);
 }
 
 template class WebEVDServer<art::Event>;

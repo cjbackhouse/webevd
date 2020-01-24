@@ -10,7 +10,7 @@
 
 #include "dune/EVD/WebEVDServer.h"
 
-namespace reco3d
+namespace evd
 {
 
 class WebEVD: public art::EDAnalyzer
@@ -38,12 +38,29 @@ WebEVD::WebEVD(const fhicl::ParameterSet& pset)
 
 void WebEVD::endJob()
 {
-  fServer.serve();
+  std::cout << "Ran out of events. Goodbye!" << std::endl;
 }
 
 void WebEVD::analyze(const art::Event& evt)
 {
-  fServer.analyze(evt, fGeom.get(), fDetProp);
+  const EResult res = fServer.serve(evt, fGeom.get(), fDetProp);
+
+  if(res == kNEXT){
+    std::cout << "Next clicked in GUI. Going to next event" << std::endl;
+    // nothing, fall through to next
+  }
+  else if(res == kPREV){
+    std::cout << "Previous button unimplemented - doing Next" << std::endl;
+  }
+  else if(res == kQUIT){
+    // TODO cleanups
+    std::cout << "Quit clicked in GUI. Goodbye!" << std::endl;
+    exit(0);
+  }
+  else if(res == kERROR){
+    std::cout << "Error. Quitting" << std::endl;
+    exit(1);
+  }
 }
 
 } // namespace

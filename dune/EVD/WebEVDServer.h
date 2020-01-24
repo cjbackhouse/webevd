@@ -11,22 +11,31 @@ namespace detinfo{class DetectorProperties;}
 
 namespace evd
 {
+  enum EResult{kNEXT, kPREV, kQUIT, kERROR};
+
   template<class T> class WebEVDServer
   {
   public:
     WebEVDServer();
     ~WebEVDServer();
-    void analyze(const T& evt,
-                 const geo::GeometryCore* geom,
-                 const detinfo::DetectorProperties* detprop);
-    void serve();
+
+    EResult serve(const T& evt,
+                  const geo::GeometryCore* geom,
+                  const detinfo::DetectorProperties* detprop);
 
   protected:
     template<class PROD> using HandleT = typename T::template HandleT<std::vector<PROD>>;
 
-    int serve_dir2(const std::string& dir, int port);
+    void WriteFiles(const T& evt,
+                    const geo::GeometryCore* geom,
+                    const detinfo::DetectorProperties* detprop,
+                    Temporaries& tmp);
 
-    Temporaries fTmp;
+    EResult do_serve(Temporaries& tmp);
+
+    int EnsureListen();
+
+    int fSock;
   };
 }
 

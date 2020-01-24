@@ -132,33 +132,35 @@ int main(int argc, char** argv)
 
   std::cout << geom->GDMLFile() << std::endl;
 
-  for(gallery::Event evt(filenames); !evt.atEnd(); evt.next()){
+  for(gallery::Event evt(filenames); !evt.atEnd();){
     const art::EventAuxiliary& aux = evt.eventAuxiliary();
 
-    if((tgt_run >= 0 && aux.run() != tgt_run) ||
+    if((tgt_run    >= 0 && aux.run()    != tgt_run   ) ||
        (tgt_subrun >= 0 && aux.subRun() != tgt_subrun) ||
-       (tgt_evt >= 0 && aux.event() != tgt_evt)) continue;
-
-    server.analyze(evt, geom, detprop);
+       (tgt_evt    >= 0 && aux.event()  != tgt_evt   )) continue;
 
     std::cout << "\nDisplaying event " << aux.run() << ":" << aux.subRun() << ":" << aux.event() << std::endl << std::endl;
 
-    server.serve();
+    const evd::EResult res = server.serve(evt, geom, detprop);
 
-    /*
-    art::ProcessHistory ph = evt.processHistory();
-    std::cout << ph.size() << std::endl;
-    for(const art::ProcessConfiguration& it: ph){
-      //      int x = it;
-      const fhicl::ParameterSetID psetid = it.parameterSetID();
-      std::cout << psetid << std::endl;
-      //      std::cout << it << std::endl;
-      //      for(auto it2: it){
-      //        std::cout << "  " << it2 << std::endl;
-      //      }
+    if(res == evd::kNEXT){
+      std::cout << "Next event" << std::endl;
+      evt.next();
     }
-    //    fhicl::ParameterSet ps;
-    //    evt.getProcessParameterSet("foo", ps);
-    */
+    else if(res == evd::kPREV){
+      std::cout << "Previous event" << std::endl;
+      evt.previous();
+    }
+    else if(res == evd::kQUIT){
+      std::cout << "Quit" << std::endl;
+      return 0;
+    }
+    else if(res == evd::kERROR){
+      std::cout << "Error" << std::endl;
+      return 1;
+    }
   }
- }
+
+  std::cout << "End of file" << std::endl;
+  return 0;
+}

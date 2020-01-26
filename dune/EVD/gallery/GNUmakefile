@@ -2,6 +2,7 @@
 
 CFLAGS := -I${GALLERY_INC} \
 	  -I${CANVAS_INC} \
+	  -I${BOOST_INC} \
 	  -I${HEP_CONCURRENCY_INC} \
 	  -I${CETLIB_EXCEPT_INC} \
 	  -I${CETLIB_INC} \

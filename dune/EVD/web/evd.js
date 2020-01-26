@@ -365,7 +365,7 @@ for(let key in reco_vtxs){
     vgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vvtxs), 3));
     vgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(vidxs), 1));
     let vtxs = new THREE.Mesh(vgeom, mat_vtxs);
-    for(let i = 0; i < 5; ++i) vtxs.layers.enable(i);
+    for(let i = 0; i <= 5; ++i) vtxs.layers.enable(i);
     scene.add(vtxs);
 
 
@@ -495,7 +495,7 @@ function add_tracks(trajs, group){
         trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
 
         let trkline = new THREE.Line(trkgeom, mat_trk);
-        trkline.layers.enable(0); trkline.layers.enable(1); trkline.layers.enable(2); trkline.layers.enable(3); trkline.layers.enable(4);
+        for(let i = 0; i <= 5; ++i) trkline.layers.enable(i);
         group.add(trkline);
     }
 }

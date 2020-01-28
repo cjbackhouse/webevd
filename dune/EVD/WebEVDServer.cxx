@@ -31,6 +31,8 @@
 //#include <netinet/in.h>
 #include <netinet/ip.h> /* superset of previous */
 
+#include <thread>
+
 namespace std{
   bool operator<(const art::InputTag& a, const art::InputTag& b)
   {
@@ -155,7 +157,7 @@ EResult HandleCommand(const std::string& cmd, int sock)
   return res;
 }
 
-void HandleGet(std::string doc, int sock, Temporaries& tmp)
+void _HandleGet(std::string doc, int sock, Temporaries* tmp)
 {
   if(doc == "/") doc = "index.html";
 
@@ -167,9 +169,16 @@ void HandleGet(std::string doc, int sock, Temporaries& tmp)
 
   write_ok200(sock, mime, zip);
 
-  write_file(zip ? tmp.compress(doc) : tmp.DirectoryName()+"/"+doc, sock);
+  write_file(zip ? tmp->compress(doc) : tmp->DirectoryName()+"/"+doc, sock);
 
   close(sock);
+}
+
+// ----------------------------------------------------------------------------
+std::thread HandleGet(std::string doc, int sock, Temporaries& tmp)
+{
+  std::thread t(_HandleGet, doc, sock, &tmp);
+  return t;
 }
 
 // ----------------------------------------------------------------------------
@@ -237,6 +246,8 @@ template<class T> EResult WebEVDServer<T>::do_serve(Temporaries& tmp)
 
   if(EnsureListen() != 0) return kERROR;
 
+  std::list<std::thread> threads;
+
   while(true){
     int sock = accept(fSock, 0, 0);
     if(sock == -1) return err("accept");
@@ -254,10 +265,11 @@ template<class T> EResult WebEVDServer<T>::do_serve(Temporaries& tmp)
       if(sreq == "/NEXT" ||
          sreq == "/PREV" ||
          sreq == "/QUIT"){
+        for(std::thread& t: threads) t.join();
         return HandleCommand(sreq, sock);
       }
       else{
-        HandleGet(sreq, sock, tmp);
+        threads.emplace_back(_HandleGet, sreq, sock, &tmp);
       }
     }
     else{
@@ -494,8 +506,8 @@ WriteFiles(const T& evt,
 {
   PNGArena arena("arena");
 
-  std::map<geo::PlaneID, PNGView*> plane_dig_imgs;
-  std::map<geo::PlaneID, PNGView*> plane_wire_imgs;
+  std::map<geo::PlaneID, PNGView> plane_dig_imgs;
+  std::map<geo::PlaneID, PNGView> plane_wire_imgs;
 
   char webdir[PATH_MAX];
   realpath("web/", webdir);
@@ -536,10 +548,10 @@ WriteFiles(const T& evt,
       const unsigned int Nw = geom->Nwires(plane);
 
       if(plane_dig_imgs.count(plane) == 0){
-        plane_dig_imgs[plane] = new PNGView(arena, Nw, maxTick);
+        plane_dig_imgs.emplace(plane, PNGView(arena, Nw, maxTick));
       }
 
-      PNGView& bytes = *plane_dig_imgs[plane];
+      PNGView& bytes = plane_dig_imgs.find(plane)->second;
 
       raw::RawDigit::ADCvector_t adcs(dig.Samples());
       raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
@@ -572,10 +584,10 @@ WriteFiles(const T& evt,
       const unsigned int Nw = geom->Nwires(plane);
 
       if(plane_wire_imgs.count(plane) == 0){
-        plane_wire_imgs[plane] = new PNGView(arena, Nw, maxTick);
+        plane_wire_imgs.emplace(plane, PNGView(arena, Nw, maxTick));
       }
 
-      PNGView& bytes = *plane_wire_imgs[plane];
+      PNGView& bytes = plane_wire_imgs.find(plane)->second;
 
       const auto adcs = (*wires)[wireIdx].Signal();
       for(unsigned int tick = 0; tick < adcs.size(); ++tick){
@@ -618,7 +630,7 @@ WriteFiles(const T& evt,
     const unsigned int nwires = planegeo.Nwires();
     const double pitch = planegeo.WirePitch();
     const TVector3 c = planegeo.GetCenter();
-    const PNGView* dig_view = plane_dig_imgs[plane];
+    const PNGView* dig_view = plane_dig_imgs.count(plane) ? &plane_dig_imgs.find(plane)->second : 0;
 
     const TVector3 d = planegeo.GetIncreasingWireDirection();
     const TVector3 n = planegeo.GetNormalDirection();
@@ -629,7 +641,7 @@ WriteFiles(const T& evt,
     const double tick_origin = detprop->ConvertTicksToX(0, plane);
     const double tick_pitch = detprop->ConvertTicksToX(1, plane) - tick_origin;
 
-    PNGView* wire_view = plane_wire_imgs.count(plane) ? plane_wire_imgs[plane] : 0;
+    PNGView* wire_view = plane_wire_imgs.count(plane) ? &plane_wire_imgs.find(plane)->second : 0;
 
     // Skip completely empty planes (eg the wall-facing collection wires)
     if(!dig_view && !wire_view) continue;
@@ -695,11 +707,8 @@ WriteFiles(const T& evt,
   json << "];\n";
 
   std::cout << "Writing " << arena.name << std::endl;
-  WriteToPNGWithMipMaps(tmp, arena.name, arena);
 
-  // TODO use unique_ptr?
-  for(auto it: plane_dig_imgs) delete it.second;
-  for(auto it: plane_wire_imgs) delete it.second;
+  WriteToPNGWithMipMaps(tmp, arena.name, arena);
 }
 
 // ----------------------------------------------------------------------------

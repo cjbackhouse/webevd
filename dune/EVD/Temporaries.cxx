@@ -22,23 +22,30 @@ namespace evd
   }
 
   // --------------------------------------------------------------------------
+  void Temporaries::AddCleanup(const std::string& fname)
+  {
+    const std::scoped_lock l(fLock);
+    fCleanup.push_back(fname);
+  }
+
+  // --------------------------------------------------------------------------
   FILE* Temporaries::fopen(const std::string& fname, const char* mode)
   {
-    fCleanup.push_back(fname);
+    AddCleanup(fname);
     return ::fopen((fTempDir+"/"+fname).c_str(), mode);
   }
 
   // --------------------------------------------------------------------------
   std::ofstream Temporaries::ofstream(const std::string& fname)
   {
-    fCleanup.push_back(fname);
+    AddCleanup(fname);
     return std::ofstream(fTempDir+"/"+fname);
   }
 
   // --------------------------------------------------------------------------
   int Temporaries::symlink(const std::string& dir, const std::string& fname)
   {
-    fCleanup.push_back(fname);
+    AddCleanup(fname);
     return ::symlink(TString::Format("%s/%s", dir.c_str(),      fname.c_str()).Data(),
                      TString::Format("%s/%s", fTempDir.c_str(), fname.c_str()).Data());
   }
@@ -49,7 +56,7 @@ namespace evd
     const std::string tgt = fname+".gz";
     // Don't destroy original, use fastest compression
     system(("gzip -c -1 " + fTempDir+"/"+fname+" > " + fTempDir+"/"+tgt).c_str());
-    fCleanup.push_back(tgt);
+    AddCleanup(tgt);
     return fTempDir+"/"+tgt;
   }
 }

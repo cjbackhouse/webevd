@@ -6,6 +6,7 @@
 #include <iostream>
 #include <string>
 #include <unistd.h>
+#include <mutex>
 #include <vector>
 
 namespace evd
@@ -26,8 +27,12 @@ namespace evd
     std::string compress(const std::string& fname);
 
   protected:
+    void AddCleanup(const std::string& fname);
+
     std::string fTempDir;
     std::vector<std::string> fCleanup;
+
+    std::mutex fLock;
   };
 }
 

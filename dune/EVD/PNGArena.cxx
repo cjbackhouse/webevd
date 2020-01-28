@@ -3,6 +3,7 @@
 #include "TString.h"
 
 #include <png.h>
+#include <thread>
 
 namespace evd
 {
@@ -104,6 +105,41 @@ namespace evd
     }
   }
 
+  void _WriteToPNG(Temporaries* tmp,
+                   const std::string prefix,
+                   const PNGArena* bytes,
+                   int mipmapdim,
+                   int d)
+  {
+    const std::string fname = TString::Format("%s_%d_mip%d.png", prefix.c_str(), d, mipmapdim).Data();
+
+    FILE* fp = tmp->fopen(fname.c_str(), "wb");
+
+    png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    auto info_ptr = png_create_info_struct(png_ptr);
+
+    // Doesn't seem to have a huge effect. Setting zero generates huge files
+    //  png_set_compression_level(png_ptr, 9);
+
+    // Doesn't affect the file size, may be a small speedup
+    png_set_filter(png_ptr, 0, PNG_FILTER_NONE);
+
+    png_init_io(png_ptr, fp);
+    png_set_IHDR(png_ptr, info_ptr, mipmapdim, mipmapdim,
+                 8/*bit_depth*/, PNG_COLOR_TYPE_RGBA/*GRAY*/, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+
+    std::vector<png_byte*> pdatas(mipmapdim);
+    for(int i = 0; i < mipmapdim; ++i) pdatas[i] = const_cast<png_byte*>(&(*bytes)(d, 0, i, 0));
+    png_set_rows(png_ptr, info_ptr, &pdatas.front());
+
+    png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
+
+    fclose(fp);
+
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+  }
+
   // --------------------------------------------------------------------------
   void WriteToPNG(Temporaries& tmp,
                   const std::string& prefix,
@@ -112,35 +148,14 @@ namespace evd
   {
     if(mipmapdim == -1) mipmapdim = bytes.extent;
 
+    std::vector<std::thread> threads;
+    threads.reserve(bytes.data.size());
+
     for(unsigned int d = 0; d < bytes.data.size(); ++d){
-      const std::string fname = TString::Format("%s_%d_mip%d.png", prefix.c_str(), d, mipmapdim).Data();
-
-      FILE* fp = tmp.fopen(fname.c_str(), "wb");
-
-      png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-      auto info_ptr = png_create_info_struct(png_ptr);
-
-      // Doesn't seem to have a huge effect. Setting zero generates huge files
-      //  png_set_compression_level(png_ptr, 9);
-
-      // Doesn't affect the file size, may be a small speedup
-      png_set_filter(png_ptr, 0, PNG_FILTER_NONE);
-
-      png_init_io(png_ptr, fp);
-      png_set_IHDR(png_ptr, info_ptr, mipmapdim, mipmapdim,
-                   8/*bit_depth*/, PNG_COLOR_TYPE_RGBA/*GRAY*/, PNG_INTERLACE_NONE,
-                   PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
-
-      std::vector<png_byte*> pdatas(mipmapdim);
-      for(int i = 0; i < mipmapdim; ++i) pdatas[i] = const_cast<png_byte*>(&bytes(d, 0, i, 0));
-      png_set_rows(png_ptr, info_ptr, &pdatas.front());
-
-      png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
-
-      fclose(fp);
-
-      png_destroy_write_struct(&png_ptr, &info_ptr);
+      threads.emplace_back(_WriteToPNG, &tmp, prefix, &bytes, mipmapdim, d);
     }
+
+    for(std::thread& t: threads) t.join();
   }
 
   // --------------------------------------------------------------------------

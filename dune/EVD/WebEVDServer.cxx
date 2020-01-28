@@ -144,20 +144,10 @@ EResult HandleCommand(const std::string& cmd, int sock)
 
   write_ok200(sock, "text/html", false);
 
-  std::string msg = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>";
+  const int delay = (res == kQUIT) ? 2000 : 0;
+  const std::string txt = (res == kQUIT) ? "Goodbye!" : "Please wait...";
 
-  if(res == kQUIT){
-    msg += "setTimeout(function(){window.location.replace('/');}, 2000);";
-  }
-  else{
-    msg += "window.location.replace('/');";
-  }
-
-  msg += "</script></head><body>";
-
-  if(res == kQUIT) msg += "Goodbye!"; else msg += "You should be redirected";
-
-  msg += "</body></html>";
+  const std::string msg = TString::Format("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>setTimeout(function(){window.location.replace('/');}, %d);</script></head><body style=\"background-color:black;color:white;\"><h1>%s</h1></body></html>", delay, txt.c_str()).Data();
 
   write(sock, msg.c_str(), msg.size());
   close(sock);

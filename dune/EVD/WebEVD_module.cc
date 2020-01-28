@@ -9,6 +9,7 @@
 #include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
 
 #include "dune/EVD/WebEVDServer.h"
+#include "dune/EVD/InputSeeker.h"
 
 namespace evd
 {
@@ -50,7 +51,9 @@ void WebEVD::analyze(const art::Event& evt)
     // nothing, fall through to next
   }
   else if(res == kPREV){
-    std::cout << "Previous button unimplemented - doing Next" << std::endl;
+    std::cout << "Prev clicked in GUI. Going to previous event" << std::endl;
+    // Because we will automatically increment by one
+    art::ServiceHandle<InputSeeker>()->seekToEvent(-2);
   }
   else if(res == kQUIT){
     // TODO cleanups

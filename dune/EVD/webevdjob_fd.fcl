@@ -12,6 +12,7 @@ source:
 services:
 {
   @table::dunefd_services
+  InputSeeker: {}
 }
 
 # Faster

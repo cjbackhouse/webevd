@@ -12,6 +12,7 @@ source:
 services:
 {
   @table::protodune_services
+  InputSeeker: {}
 }
 
 # Faster

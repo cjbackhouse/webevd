@@ -47,6 +47,7 @@ int main(int argc, char** argv)
 
       argc -= 2;
       argv += 2;
+      continue;
     }
 
     if(std::string(argv[0]) == "-e"){
@@ -76,8 +77,21 @@ int main(int argc, char** argv)
 
       argc -= 2;
       argv += 2;
+      continue;
     }
+
+    if(std::string(argv[0]) == "--help" ||
+       std::string(argv[0]) == "-h") usage();
+
+    // Didn't match any of the conditions above
+    std::cout << "Unknown argument " << argv[0] << std::endl;
+    usage();
   } // end while options remain
+
+  if(argc == 0){
+    std::cout << "Must specify at least one input file" << std::endl;
+    usage();
+  }
 
   const std::vector<std::string> filenames(argv, argv + argc);
 

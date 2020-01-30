@@ -523,6 +523,7 @@ WriteFiles(const T& evt,
 
   HandleT<raw::RawDigit> digs;
   evt.getByLabel("daq", digs);
+  if(!digs.isValid()) evt.getByLabel("caldata:dataprep", digs);
 
   HandleT<recob::Wire> wires;
   evt.getByLabel("caldata", wires);
@@ -576,7 +577,7 @@ WriteFiles(const T& evt,
     }
   }
 
-  for(unsigned int wireIdx = 0; wireIdx < wires->size(); ++wireIdx){
+  for(unsigned int wireIdx = 0; wireIdx < wires.isValid() ? wires->size() : 0; ++wireIdx){
     for(geo::WireID wire: geom->ChannelToWire((*wires)[wireIdx].Channel())){
       const geo::TPCID tpc(wire);
       const geo::PlaneID plane(wire);

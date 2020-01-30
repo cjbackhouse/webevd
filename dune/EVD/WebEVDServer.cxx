@@ -526,6 +526,7 @@ WriteFiles(const T& evt,
 
   HandleT<recob::Wire> wires;
   evt.getByLabel("caldata", wires);
+  if(!wires.isValid()) evt.getByLabel("wclsdatasp:gauss", wires);
 
   // Find out empirically how many samples we took
   unsigned long maxTick = 0;

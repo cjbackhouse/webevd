@@ -1,6 +1,4 @@
 // TODO come up with a cool name
-// TODO back/fwd buttons (need to serve differently? httpd can do cgi...)
-// TODO work well on ProtoDUNE
 // TODO clear handling of disambiguation
 // TODO plot IDEs
 // TODO plot photons
@@ -8,6 +6,10 @@
 // TODO Use textures for hits at long distances so they're visible
 // TODO make SaveAs and Print work
 // TODO figure out z-order for objects in the plane
+
+document.getElementById('runbox').value = run;
+document.getElementById('subrunbox').value = subrun;
+document.getElementById('evtbox').value = evt;
 
 // TODO - probably we should ship our own (minified) copies of these
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@v0.110.0/build/three.module.js";

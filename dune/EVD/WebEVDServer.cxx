@@ -521,6 +521,20 @@ WriteFiles(const T& evt,
 
   JSONFormatter json(outf);
 
+  if constexpr (std::is_same_v<T, art::Event>){
+    // art
+    json << "var run = " << evt.run() << ";\n"
+         << "var subrun = " << evt.subRun() << ";\n"
+         << "var evt  = " << evt.event() << ";\n\n";
+  }
+  else{
+    // gallery
+    const art::EventAuxiliary& aux = evt.eventAuxiliary();
+    json << "var run = " << aux.run() << ";\n"
+         << "var subrun = " << aux.subRun() << ";\n"
+         << "var evt  = " << aux.event() << ";\n\n";
+  }
+
   HandleT<raw::RawDigit> digs;
   evt.getByLabel("daq", digs);
   if(!digs.isValid()) evt.getByLabel("caldata:dataprep", digs);

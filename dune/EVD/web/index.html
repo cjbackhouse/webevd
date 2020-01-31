@@ -23,7 +23,11 @@
       -ms-appearance: none;
        -o-appearance: none;
       appearance: none;
- }
+      }
+
+      input { background-color: transparent; height : 2em; border : 0px; }
+
+      .darktheme input { color : green; }
 
 /* The container <div> - needed to position the dropdown content */
 .dropdown {
@@ -55,7 +59,6 @@
   <body class="darktheme">
     <!-- "Float" buttons over the display -->
     <div style="position:absolute">
-
       <button onclick="location.href='PREV'" title="Previous">&#x2b05&#xfe0f</button>
       <button onclick="location.reload(true)" title="Reload">&#x1f504&#xfe0f</button>
       <button onclick="location.href='NEXT'" title="Next">&#x27a1&#xfe0f</button>
@@ -132,6 +135,14 @@
       <button id="truth" onclick="ToggleTruth()"></button>
 
     </div> <!-- position:absolute -->
+
+
+    <div style="position:absolute; bottom: 0; left: 0;">
+      Run: <input id="runbox"></input><br>
+      Subrun: <input id="subrunbox"></input><br>
+      Event: <input id="evtbox"></input>
+    </div>
+
     <script type="module" src="evd.js"></script>
   </body>
 </html>

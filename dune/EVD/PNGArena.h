@@ -16,7 +16,7 @@ namespace evd
     // Square because seems to be necessary for mipmapping. Larger than this
     // doesn't seem to work in the browser. Smaller won't fit the number of
     // ticks we have.
-    static const int kArenaSize = 2048;//8192;
+    static const int kArenaSize = 4096;//8192;
     static const int kBlockSize = 64;
 
     PNGArena(const std::string& name);

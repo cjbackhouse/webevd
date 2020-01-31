@@ -137,24 +137,40 @@ EResult err(const char* call)
   //  return errno;
 }
 
-EResult HandleCommand(const std::string& cmd, int sock)
+Result HandleCommand(std::string cmd, int sock)
 {
-  EResult res;
-  if(cmd == "/QUIT") res = kQUIT;
-  if(cmd == "/NEXT") res = kNEXT;
-  if(cmd == "/PREV") res = kPREV;
+  EResult code = kERROR;
+  int run = -1, subrun = -1, evt = -1;
+
+  if(cmd == "/QUIT") code = kQUIT;
+  if(cmd == "/NEXT") code = kNEXT;
+  if(cmd == "/PREV") code = kPREV;
+
+  if(cmd.find("/seek/") == 0){
+    code = kSEEK;
+    strtok(cmd.data(), "/"); // consumes the "seek" text
+    run    = atoi(strtok(0, "/"));
+    subrun = atoi(strtok(0, "/"));
+    evt    = atoi(strtok(0, "/"));
+    // if this goes wrong we get zeros, which seems a reasonable fallback
+  }
 
   write_ok200(sock, "text/html", false);
 
-  const int delay = (res == kQUIT) ? 2000 : 0;
-  const std::string txt = (res == kQUIT) ? "Goodbye!" : "Please wait...";
+  const int delay = (code == kQUIT) ? 2000 : 0;
+  const std::string txt = (code == kQUIT) ? "Goodbye!" : "Please wait...";
 
   const std::string msg = TString::Format("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>setTimeout(function(){window.location.replace('/');}, %d);</script></head><body style=\"background-color:black;color:white;\"><h1>%s</h1></body></html>", delay, txt.c_str()).Data();
 
   write(sock, msg.c_str(), msg.size());
   close(sock);
 
-  return res;
+  if(code == kSEEK){
+    return Result(kSEEK, run, subrun, evt);
+  }
+  else{
+    return code;
+  }
 }
 
 void _HandleGet(std::string doc, int sock, Temporaries* tmp)
@@ -240,7 +256,7 @@ template<class T> int WebEVDServer<T>::EnsureListen()
 }
 
 // ----------------------------------------------------------------------------
-template<class T> EResult WebEVDServer<T>::do_serve(Temporaries& tmp)
+template<class T> Result WebEVDServer<T>::do_serve(Temporaries& tmp)
 {
   std::cout << "Temp dir: " << tmp.DirectoryName() << std::endl;
 
@@ -264,7 +280,8 @@ template<class T> EResult WebEVDServer<T>::do_serve(Temporaries& tmp)
 
       if(sreq == "/NEXT" ||
          sreq == "/PREV" ||
-         sreq == "/QUIT"){
+         sreq == "/QUIT" ||
+         sreq.find("/seek/") == 0){
         for(std::thread& t: threads) t.join();
         return HandleCommand(sreq, sock);
       }
@@ -728,7 +745,7 @@ WriteFiles(const T& evt,
 }
 
 // ----------------------------------------------------------------------------
-template<class T> EResult WebEVDServer<T>::
+template<class T> Result WebEVDServer<T>::
 serve(const T& evt,
       const geo::GeometryCore* geom,
       const detinfo::DetectorProperties* detprop)

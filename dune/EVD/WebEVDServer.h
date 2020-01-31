@@ -11,7 +11,12 @@ namespace detinfo{class DetectorProperties;}
 
 namespace evd
 {
-  enum EResult{kNEXT, kPREV, kQUIT, kERROR};
+  enum EResult{kNEXT, kPREV, kQUIT, kERROR, kSEEK};
+  struct Result{
+    Result(EResult c) : code(c) {}
+    Result(EResult c, int r, int s, int e) : code(c), run(r), subrun(s), event(e) {}
+    EResult code; int run, subrun, event;
+  };
 
   template<class T> class WebEVDServer
   {
@@ -19,9 +24,9 @@ namespace evd
     WebEVDServer();
     ~WebEVDServer();
 
-    EResult serve(const T& evt,
-                  const geo::GeometryCore* geom,
-                  const detinfo::DetectorProperties* detprop);
+    Result serve(const T& evt,
+                 const geo::GeometryCore* geom,
+                 const detinfo::DetectorProperties* detprop);
 
   protected:
     template<class PROD> using HandleT = typename T::template HandleT<std::vector<PROD>>;
@@ -31,7 +36,7 @@ namespace evd
                     const detinfo::DetectorProperties* detprop,
                     Temporaries& tmp);
 
-    EResult do_serve(Temporaries& tmp);
+    Result do_serve(Temporaries& tmp);
 
     int EnsureListen();
 

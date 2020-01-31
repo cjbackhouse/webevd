@@ -11,6 +11,13 @@ document.getElementById('runbox').value = run;
 document.getElementById('subrunbox').value = subrun;
 document.getElementById('evtbox').value = evt;
 
+document.OnKeyDown = function(evt)
+{
+    if(evt.keyCode == 13) { // enter
+        window.location.href = "seek/" + document.getElementById('runbox').value + '/' + document.getElementById('subrunbox').value + '/' + document.getElementById('evtbox').value;
+    }
+}
+
 // TODO - probably we should ship our own (minified) copies of these
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@v0.110.0/build/three.module.js";
 import {OrbitControls} from "https://cdn.jsdelivr.net/npm/three@v0.110.0/examples/jsm/controls/OrbitControls.js";

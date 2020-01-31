@@ -151,27 +151,44 @@ int main(int argc, char** argv)
 
     if((tgt_run    >= 0 && aux.run()    != tgt_run   ) ||
        (tgt_subrun >= 0 && aux.subRun() != tgt_subrun) ||
-       (tgt_evt    >= 0 && aux.event()  != tgt_evt   )) continue;
+       (tgt_evt    >= 0 && aux.event()  != tgt_evt   )){
+      evt.next();
+      continue;
+    }
 
     std::cout << "\nDisplaying event " << aux.run() << ":" << aux.subRun() << ":" << aux.event() << std::endl << std::endl;
 
-    const evd::EResult res = server.serve(evt, geom, detprop);
+    const evd::Result res = server.serve(evt, geom, detprop);
 
-    if(res == evd::kNEXT){
+    switch(res.code){
+    case evd::kNEXT:
       std::cout << "Next event" << std::endl;
       evt.next();
-    }
-    else if(res == evd::kPREV){
+      break;
+
+    case evd::kPREV:
       std::cout << "Previous event" << std::endl;
       evt.previous();
-    }
-    else if(res == evd::kQUIT){
+      break;
+
+    case evd::kSEEK:
+      std::cout << "User requested seek to " << res.run << ":"<< res.subrun << ":" << res.event << std::endl;
+      tgt_run = res.run;
+      tgt_subrun = res.subrun;
+      tgt_evt = res.event;
+      continue;
+
+    case evd::kQUIT:
       std::cout << "Quit" << std::endl;
       return 0;
-    }
-    else if(res == evd::kERROR){
+
+    case evd::kERROR:
       std::cout << "Error" << std::endl;
       return 1;
+
+    default:
+      std::cout << "Unrecognized result code " << res.code << "!" << std::endl;
+      abort();
     }
   }
 

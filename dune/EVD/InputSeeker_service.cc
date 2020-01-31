@@ -24,7 +24,17 @@ namespace evd
   }
 
   //--------------------------------------------------------------------
-  void InputSeeker::seekToEvent(int evt)
+  void InputSeeker::seekToEvent(int offset)
+  {
+    if(!fSrc){
+      std::cout << "Unable to seek" << std::endl;
+      return;
+    }
+    fSrc->seekToEvent(offset);
+  }
+
+  //--------------------------------------------------------------------
+  void InputSeeker::seekToEvent(art::EventID evt)
   {
     if(!fSrc){
       std::cout << "Unable to seek" << std::endl;

@@ -47,13 +47,6 @@ void WebEVD::endJob()
 
 void WebEVD::analyze(const art::Event& evt)
 {
-  if(fSeeking){
-    if(fSeekRun != evt.run() ||
-       fSeekSubRun != evt.subRun() ||
-       fSeekEvent != evt.event()) return;
-    fSeeking = false; // found it
-  }
-
   const Result res = fServer.serve(evt, fGeom.get(), fDetProp);
 
   switch(res.code){
@@ -79,10 +72,9 @@ void WebEVD::analyze(const art::Event& evt)
 
   case kSEEK:
     std::cout << "User requested seek to " << res.run << ":"<< res.subrun << ":" << res.event << std::endl;
-    fSeeking = true;
-    fSeekRun = res.run;
-    fSeekSubRun = res.subrun;
-    fSeekEvent = res.event;
+    art::ServiceHandle<InputSeeker>()->seekToEvent(art::EventID(res.run,
+                                                                res.subrun,
+                                                                res.event));
     return;
 
   default:

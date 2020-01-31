@@ -13,7 +13,8 @@ namespace evd
   public:
     InputSeeker(const fhicl::ParameterSet& pset, art::ActivityRegistry& reg);
 
-    void seekToEvent(int evt);
+    void seekToEvent(int offset);
+    void seekToEvent(art::EventID evt);
 
   protected:
     void postBeginJobWorkers(art::InputSource* src,

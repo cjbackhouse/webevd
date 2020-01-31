@@ -146,14 +146,27 @@ int main(int argc, char** argv)
 
   std::cout << geom->GDMLFile() << std::endl;
 
+  std::cout << "Filling index of event numbers..." << std::endl;
+  std::map<art::EventID, std::pair<long long, long long>> seek_index;
+  for(gallery::Event evt(filenames); !evt.atEnd(); evt.next()){
+    seek_index[evt.eventAuxiliary().eventID()] = std::make_pair(evt.fileEntry(), evt.eventEntry());
+  }
+  std::cout << "Done" << std::endl;
+
   for(gallery::Event evt(filenames); !evt.atEnd();){
     const art::EventAuxiliary& aux = evt.eventAuxiliary();
 
-    if((tgt_run    >= 0 && aux.run()    != tgt_run   ) ||
-       (tgt_subrun >= 0 && aux.subRun() != tgt_subrun) ||
-       (tgt_evt    >= 0 && aux.event()  != tgt_evt   )){
-      evt.next();
-      continue;
+    if(tgt_run >= 0 || tgt_subrun >= 0 || tgt_evt >= 0){
+      if((tgt_run    >= 0 && aux.run()    != tgt_run   ) ||
+         (tgt_subrun >= 0 && aux.subRun() != tgt_subrun) ||
+         (tgt_evt    >= 0 && aux.event()  != tgt_evt   )){
+        evt.next();
+        continue;
+      }
+    }
+    else{
+      // We must have arrived, stop seeking
+      tgt_run = tgt_subrun = tgt_evt = -1;
     }
 
     std::cout << "\nDisplaying event " << aux.run() << ":" << aux.subRun() << ":" << aux.event() << std::endl << std::endl;
@@ -173,9 +186,16 @@ int main(int argc, char** argv)
 
     case evd::kSEEK:
       std::cout << "User requested seek to " << res.run << ":"<< res.subrun << ":" << res.event << std::endl;
-      tgt_run = res.run;
-      tgt_subrun = res.subrun;
-      tgt_evt = res.event;
+      {
+        const art::EventID tgt(res.run, res.subrun, res.event);
+        if(seek_index.find(tgt) == seek_index.end()){
+          std::cout << tgt << " not found in event index! Abort." << std::endl;
+          return 1;
+        }
+
+        while(std::make_pair(evt.fileEntry(), evt.eventEntry()) < seek_index[tgt]) evt.next();
+        while(std::make_pair(evt.fileEntry(), evt.eventEntry()) > seek_index[tgt]) evt.previous();
+      }
       continue;
 
     case evd::kQUIT:

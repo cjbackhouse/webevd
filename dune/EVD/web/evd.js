@@ -65,13 +65,18 @@ function AddLabel(pos, txt)
     return d;
 }
 
-for(var z = 0; z <= 1400; z += 50){
-    AddLabel(new THREE.Vector3(0, 0, z), z.toString());
-}
+for(var delta of [100, 50, 10, 5, 1]){
+    for(var z = 0; z <= cryos[0].max[2]; z += delta){
+        AddLabel(new THREE.Vector3(0, 0, z), z.toString());
+    }
 
-for(var x = 0; x <= 350; x += 50){
-    AddLabel(new THREE.Vector3(+x, 0, 0), '+'+x.toString());
-    AddLabel(new THREE.Vector3(-x, 0, 0), '-'+x.toString());
+    for(var x = 0; x <= cryos[0].max[0]; x += delta){
+        AddLabel(new THREE.Vector3(+x, 0, 0), '+'+x.toString());
+    }
+
+    for(var x = 0; x >= cryos[0].min[0]; x -= delta){
+        AddLabel(new THREE.Vector3(x, 0, 0), x.toString());
+    }
 }
 
 function ArrToVec(arr)
@@ -558,6 +563,49 @@ camera.lookAt(com);
 
 controls.update();
 
+function UpdateLabels()
+{
+    const W = renderer.domElement.width;
+    const H = renderer.domElement.height;
+
+    let ps = [];
+
+    for(var label of document.getElementsByClassName('label')){
+        // only show in collection view (1<<2) for now
+        if(camera.layers.mask != 4){
+            label.style.visibility = "hidden";
+            continue;
+        }
+
+        var pos = label.pos.clone();
+        pos.project(camera);
+
+        let p = {x: (1+pos.x)*W/2.,
+                 y: (1-pos.y)*H/2.};
+
+        if(p.x < 30) p.x = 30;
+        if(p.x > W-30) p.x = W-30;
+        if(p.y < 30) p.y = 30;
+        if(p.y > H-30) p.y = H-30;
+
+        let dsqmin = 1e10;
+        for(var q of ps){
+            const dsq = (p.x-q.x)*(p.x-q.x) + (p.y-q.y)*(p.y-q.y);
+            if(dsq < dsqmin) dsqmin = dsq;
+        }
+
+        if(dsqmin > 50*50){
+            label.style.visibility = "visible";
+            label.style.left = p.x + 'px';
+            label.style.top  = p.y + 'px';
+            ps.push(p);
+        }
+        else{
+            label.style.visibility = "hidden";
+        }
+    }
+}
+
 function animate() {
     if(gAnimReentrant) return;
     gAnimReentrant = true;
@@ -579,17 +627,7 @@ function animate() {
 
     gAnimReentrant = false;
 
-    // Update all the label positions
-    for(var label of document.getElementsByClassName('label')){
-        var pos = label.pos.clone();
-        pos.project(camera);
-
-        label.style.left = (1+pos.x)*50. + '%';
-        label.style.top  = (1-pos.y)*50. + '%';
-        // Hoped this would have better sub-pixel positioning. Seems not
-//        label.style.left = (1+pos.x)*renderer.domElement.width /2. + 'px';
-//        label.style.top  = (1-pos.y)*renderer.domElement.height/2. + 'px';
-    }
+    UpdateLabels();
 }
 
 function SetVisibility(col, state, elem, str)

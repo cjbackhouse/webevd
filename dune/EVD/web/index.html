@@ -119,28 +119,42 @@
         </div>
       </div>
 
-      <button id="rawdigits" onclick="ToggleRawDigits()"></button>
-      <button id="wires" onclick="ToggleWires()"></button>
+      <div class="dropdown">
+        <button>RawDigits...</button>
+        <div class="dropdown-content" id="digs_dropdown">
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button>Wires...</button>
+        <div class="dropdown-content" id="wires_dropdown">
+        </div>
+      </div>
+
       <div class="dropdown">
         <button>Hits...</button>
         <div class="dropdown-content" id="hits_dropdown">
         </div>
       </div>
+
       <div class="dropdown">
         <button>Tracks...</button>
         <div class="dropdown-content" id="tracks_dropdown">
         </div>
       </div>
+
       <div class="dropdown">
         <button>SpacePoints...</button>
         <div class="dropdown-content" id="spacepoints_dropdown">
         </div>
       </div>
+
       <div class="dropdown">
         <button>Vertices...</button>
         <div class="dropdown-content" id="vertices_dropdown">
         </div>
       </div>
+
       <button id="truth" onclick="ToggleTruth()"></button>
 
     </div> <!-- position:absolute -->

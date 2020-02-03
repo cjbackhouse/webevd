@@ -386,9 +386,10 @@ public:
 
   JSONFormatter& operator<<(const art::InputTag& t)
   {
-    fStream << t.label();
-    if(!t.instance().empty()) fStream << "_" << t.instance();
-    if(!t.process().empty()) fStream << "_" << t.process();
+    fStream << "\"" << t.label();
+    if(!t.instance().empty()) fStream << ":" << t.instance();
+    if(!t.process().empty()) fStream << ":" << t.process();
+    fStream << "\"";
     return *this;
   }
 
@@ -400,6 +401,14 @@ protected:
 JSONFormatter& operator<<(JSONFormatter& json, const geo::PlaneID& plane)
 {
   return json << "\"" << std::string(plane) << "\"";
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const recob::Hit& hit)
+{
+  return json << "{wire: " << geo::WireID(hit.WireID()).Wire
+              << ", tick: " << hit.PeakTime()
+              << ", rms: " << hit.RMS() << "}";
 }
 
 // ----------------------------------------------------------------------------
@@ -480,7 +489,7 @@ SerializeProduct(const TEvt& evt,
   json << "var " << label << " = {\n";
   const std::vector<art::InputTag> tags = getInputTags<TProd>(evt);
   for(const art::InputTag& tag: tags){
-    json << "  \"" << tag << "\": ";
+    json << "  " << tag << ": ";
 
     typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
     evt.getByLabel(tag, prods);
@@ -515,6 +524,204 @@ SerializeProductByLabel(const TEvt& evt,
 }
 
 // ----------------------------------------------------------------------------
+template<class TEvt>
+unsigned long HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
+                           PNGArena& arena, JSONFormatter& json)
+{
+  unsigned long maxTick = 0;
+
+  std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> imgs;
+
+  for(art::InputTag tag: getInputTags<raw::RawDigit>(evt)){
+    typename TEvt::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
+    evt.getByLabel(tag, digs);
+
+    for(const raw::RawDigit& dig: *digs) maxTick = std::max(maxTick, (unsigned long)dig.Samples());
+
+    for(const raw::RawDigit& dig: *digs){
+      for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
+        const geo::TPCID tpc(wire);
+        const geo::PlaneID plane(wire);
+
+        const geo::WireID w0 = geom->GetBeginWireID(plane);
+        const unsigned int Nw = geom->Nwires(plane);
+
+        if(imgs[tag].count(plane) == 0){
+          imgs[tag].emplace(plane, PNGView(arena, Nw, maxTick));
+        }
+
+        PNGView& bytes = imgs[tag].find(plane)->second;
+
+        raw::RawDigit::ADCvector_t adcs(dig.Samples());
+        raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
+
+        for(unsigned int tick = 0; tick < adcs.size(); ++tick){
+          const int adc = adcs[tick] ? int(adcs[tick])-dig.GetPedestal() : 0;
+
+          if(adc != 0){
+            // alpha
+            bytes(wire.Wire-w0.Wire, tick, 3) = std::min(abs(4*adc), 255);
+            if(adc > 0){
+              // red
+              bytes(wire.Wire-w0.Wire, tick, 0) = 255;
+            }
+            else{
+              // blue
+              bytes(wire.Wire-w0.Wire, tick, 2) = 255;
+            }
+          }
+        } // end for tick
+      } // end for wire
+    } // end for dig
+  } // end for tag
+
+  json << "var xdigs = {\n";
+  for(auto tag_it: imgs){
+    json << "  " << tag_it.first << ": {\n";
+    for(auto plane_it: tag_it.second){
+      json << "    " << plane_it.first << ": " << plane_it.second << ",\n";
+    }
+    json << "  },\n";
+  }
+  json << "};\n\n";
+
+  return maxTick;
+}
+
+// ----------------------------------------------------------------------------
+template<class TEvt>
+unsigned long HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
+                          PNGArena& arena, JSONFormatter& json)
+{
+  unsigned long maxTick = 0;
+
+  std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> imgs;
+
+  for(art::InputTag tag: getInputTags<recob::Wire>(evt)){
+    typename TEvt::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
+    evt.getByLabel(tag, wires);
+
+    for(const recob::Wire& wire: *wires) maxTick = std::max(maxTick, wire.NSignal());
+
+    for(const recob::Wire& rbwire: *wires){
+      for(geo::WireID wire: geom->ChannelToWire(rbwire.Channel())){
+        const geo::TPCID tpc(wire);
+        const geo::PlaneID plane(wire);
+
+        const geo::WireID w0 = geom->GetBeginWireID(plane);
+        const unsigned int Nw = geom->Nwires(plane);
+
+        if(imgs[tag].count(plane) == 0){
+          imgs[tag].emplace(plane, PNGView(arena, Nw, maxTick));
+        }
+
+        PNGView& bytes = imgs[tag].find(plane)->second;
+
+        const auto adcs = rbwire.Signal();
+        for(unsigned int tick = 0; tick < adcs.size(); ++tick){
+          if(adcs[tick] <= 0) continue;
+
+          // green channel
+          bytes(wire.Wire-w0.Wire, tick, 1) = 128; // dark green
+          // alpha channel
+          bytes(wire.Wire-w0.Wire, tick, 3) = std::max(0, std::min(int(10*adcs[tick]), 255));
+        } // end for tick
+      } // end for wire
+    } // end for rbwire
+  } // end for tag
+
+  json << "var xwires = {\n";
+  for(auto tag_it: imgs){
+    json << "  " << tag_it.first << ": {\n";
+    for(auto plane_it: tag_it.second){
+      json << "    " << plane_it.first << ": " << plane_it.second << ",\n";
+    }
+    json << "  },\n";
+  }
+  json << "};\n\n";
+
+  return maxTick;
+}
+
+// ----------------------------------------------------------------------------
+template<class TEvt>
+void HandleHits(const TEvt& evt, const geo::GeometryCore* geom,
+                JSONFormatter& json)
+{
+  std::map<art::InputTag, std::map<geo::PlaneID, std::vector<recob::Hit>>> plane_hits;
+
+  for(art::InputTag tag: getInputTags<recob::Hit>(evt)){
+    typename TEvt::template HandleT<std::vector<recob::Hit>> hits; // deduce handle type
+    evt.getByLabel(tag, hits);
+
+    for(const recob::Hit& hit: *hits){
+      // Would possibly be right for disambiguated hits?
+      //    const geo::WireID wire(hit.WireID());
+
+      for(geo::WireID wire: geom->ChannelToWire(hit.Channel())){
+        const geo::PlaneID plane(wire);
+
+        // Correct for disambiguated hits
+        //      plane_hits[plane].push_back(hit);
+
+        // Otherwise we have to update the wire number
+        plane_hits[tag][plane].emplace_back(hit.Channel(), hit.StartTick(), hit.EndTick(), hit.PeakTime(), hit.SigmaPeakTime(), hit.RMS(), hit.PeakAmplitude(), hit.SigmaPeakAmplitude(), hit.SummedADC(), hit.Integral(), hit.SigmaIntegral(), hit.Multiplicity(), hit.LocalIndex(), hit.GoodnessOfFit(), hit.DegreesOfFreedom(), hit.View(), hit.SignalType(), wire);
+      }
+    }
+  } // end for tag
+
+  json << "var xhits = {\n";
+  for(auto tag_it: plane_hits){
+    json << "  " << tag_it.first << ": {\n";
+    for(auto plane_it: tag_it.second){
+      json << "    " << plane_it.first << ": " << plane_it.second << ",\n";
+    }
+    json << "  },\n";
+  }
+  json << "};\n\n";
+}
+
+
+// ----------------------------------------------------------------------------
+template<class TEvt>
+void HandlePlanes(const TEvt& evt, const geo::GeometryCore* geom,
+                  const detinfo::DetectorProperties* detprop,
+                  JSONFormatter& json, unsigned long maxTick)
+{
+  json << "var planes = {\n";
+  for(geo::PlaneID plane: geom->IteratePlaneIDs()){
+    const geo::PlaneGeo& planegeo = geom->Plane(plane);
+    const int view = planegeo.View();
+    const unsigned int nwires = planegeo.Nwires();
+    const double pitch = planegeo.WirePitch();
+    const TVector3 c = planegeo.GetCenter();
+
+    const TVector3 d = planegeo.GetIncreasingWireDirection();
+    const TVector3 n = planegeo.GetNormalDirection();
+
+    const TVector3 wiredir = planegeo.GetWireDirection();
+    const double depth = planegeo.Depth(); // really height
+
+    const double tick_origin = detprop->ConvertTicksToX(0, plane);
+    const double tick_pitch = detprop->ConvertTicksToX(1, plane) - tick_origin;
+
+    json << "  " << plane << ": {"
+         << "view: " << view << ", "
+         << "nwires: " << nwires << ", "
+         << "pitch: " << pitch << ", "
+         << "nticks: " << maxTick << ", "
+         << "tick_origin: " << tick_origin << ", "
+         << "tick_pitch: " << tick_pitch << ", "
+         << "center: " << c << ", "
+         << "across: " << d << ", "
+         << "wiredir: " << wiredir << ", "
+         << "depth: " << depth << ", "
+         << "normal: " << n << "},\n";
+  }
+  json << "};\n\n";
+}
+
+// ----------------------------------------------------------------------------
 template<class T> void WebEVDServer<T>::
 WriteFiles(const T& evt,
            const geo::GeometryCore* geom,
@@ -522,9 +729,6 @@ WriteFiles(const T& evt,
            Temporaries& tmp)
 {
   PNGArena arena("arena");
-
-  std::map<geo::PlaneID, PNGView> plane_dig_imgs;
-  std::map<geo::PlaneID, PNGView> plane_wire_imgs;
 
   char webdir[PATH_MAX];
   realpath("web/", webdir);
@@ -552,163 +756,13 @@ WriteFiles(const T& evt,
          << "var evt  = " << aux.event() << ";\n\n";
   }
 
-  HandleT<raw::RawDigit> digs;
-  evt.getByLabel("daq", digs);
-  if(!digs.isValid()) evt.getByLabel("caldata:dataprep", digs);
-
-  HandleT<recob::Wire> wires;
-  evt.getByLabel("caldata", wires);
-  if(!wires.isValid()) evt.getByLabel("wclsdatasp:gauss", wires);
-
-  // Find out empirically how many samples we took
   unsigned long maxTick = 0;
-  if(digs.isValid()){
-    for(const raw::RawDigit& dig: *digs) maxTick = std::max(maxTick, (unsigned long)dig.Samples());
-  }
-  if(wires.isValid()){
-    for(const recob::Wire& wire: *wires) maxTick = std::max(maxTick, wire.NSignal());
-  }
-  std::cout << "Number of ticks " << maxTick << std::endl;
+  maxTick = std::max(maxTick, HandleDigits(evt, geom, arena, json));
+  maxTick = std::max(maxTick, HandleWires (evt, geom, arena, json));
 
-  for(unsigned int digIdx = 0; digIdx < (digs.isValid() ? digs->size() : 0); ++digIdx){
-    const raw::RawDigit& dig = (*digs)[digIdx];
+  HandleHits(evt, geom, json);
 
-    for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
-      const geo::TPCID tpc(wire);
-      const geo::PlaneID plane(wire);
-
-      const geo::WireID w0 = geom->GetBeginWireID(plane);
-      const unsigned int Nw = geom->Nwires(plane);
-
-      if(plane_dig_imgs.count(plane) == 0){
-        plane_dig_imgs.emplace(plane, PNGView(arena, Nw, maxTick));
-      }
-
-      PNGView& bytes = plane_dig_imgs.find(plane)->second;
-
-      raw::RawDigit::ADCvector_t adcs(dig.Samples());
-      raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
-
-      for(unsigned int tick = 0; tick < adcs.size(); ++tick){
-        const int adc = adcs[tick] ? int(adcs[tick])-dig.GetPedestal() : 0;
-
-        if(adc != 0){
-          // alpha
-          bytes(wire.Wire-w0.Wire, tick, 3) = std::min(abs(4*adc), 255);
-          if(adc > 0){
-            // red
-            bytes(wire.Wire-w0.Wire, tick, 0) = 255;
-          }
-          else{
-            // blue
-            bytes(wire.Wire-w0.Wire, tick, 2) = 255;
-          }
-        }
-      }
-    }
-  }
-
-  for(unsigned int wireIdx = 0; wireIdx < wires.isValid() ? wires->size() : 0; ++wireIdx){
-    for(geo::WireID wire: geom->ChannelToWire((*wires)[wireIdx].Channel())){
-      const geo::TPCID tpc(wire);
-      const geo::PlaneID plane(wire);
-
-      const geo::WireID w0 = geom->GetBeginWireID(plane);
-      const unsigned int Nw = geom->Nwires(plane);
-
-      if(plane_wire_imgs.count(plane) == 0){
-        plane_wire_imgs.emplace(plane, PNGView(arena, Nw, maxTick));
-      }
-
-      PNGView& bytes = plane_wire_imgs.find(plane)->second;
-
-      const auto adcs = (*wires)[wireIdx].Signal();
-      for(unsigned int tick = 0; tick < adcs.size(); ++tick){
-        if(adcs[tick] <= 0) continue;
-
-        // green channel
-        bytes(wire.Wire-w0.Wire, tick, 1) = 128; // dark green
-        // alpha channel
-        bytes(wire.Wire-w0.Wire, tick, 3) = std::max(0, std::min(int(10*adcs[tick]), 255));
-      }
-    }
-  }
-
-  std::map<geo::PlaneID, std::map<art::InputTag, std::vector<recob::Hit>>> plane_hits;
-
-  for(art::InputTag tag: getInputTags<recob::Hit>(evt)){
-    HandleT<recob::Hit> hits;
-    evt.getByLabel(tag, hits);
-
-    for(const recob::Hit& hit: *hits){
-      // Would possibly be right for disambiguated hits?
-      //    const geo::WireID wire(hit.WireID());
-
-      for(geo::WireID wire: geom->ChannelToWire(hit.Channel())){
-        const geo::PlaneID plane(wire);
-
-        // Correct for disambiguated hits
-        //      plane_hits[plane].push_back(hit);
-
-        // Otherwise we have to update the wire number
-        plane_hits[plane][tag].emplace_back(hit.Channel(), hit.StartTick(), hit.EndTick(), hit.PeakTime(), hit.SigmaPeakTime(), hit.RMS(), hit.PeakAmplitude(), hit.SigmaPeakAmplitude(), hit.SummedADC(), hit.Integral(), hit.SigmaIntegral(), hit.Multiplicity(), hit.LocalIndex(), hit.GoodnessOfFit(), hit.DegreesOfFreedom(), hit.View(), hit.SignalType(), wire);
-      }
-    }
-  }
-
-  json << "var planes = {\n";
-  for(geo::PlaneID plane: geom->IteratePlaneIDs()){
-    const geo::PlaneGeo& planegeo = geom->Plane(plane);
-    const int view = planegeo.View();
-    const unsigned int nwires = planegeo.Nwires();
-    const double pitch = planegeo.WirePitch();
-    const TVector3 c = planegeo.GetCenter();
-    const PNGView* dig_view = plane_dig_imgs.count(plane) ? &plane_dig_imgs.find(plane)->second : 0;
-
-    const TVector3 d = planegeo.GetIncreasingWireDirection();
-    const TVector3 n = planegeo.GetNormalDirection();
-
-    const TVector3 wiredir = planegeo.GetWireDirection();
-    const double depth = planegeo.Depth(); // really height
-
-    const double tick_origin = detprop->ConvertTicksToX(0, plane);
-    const double tick_pitch = detprop->ConvertTicksToX(1, plane) - tick_origin;
-
-    PNGView* wire_view = plane_wire_imgs.count(plane) ? &plane_wire_imgs.find(plane)->second : 0;
-
-    // Skip completely empty planes (eg the wall-facing collection wires)
-    if(!dig_view && !wire_view) continue;
-
-    json << "  " << plane << ": {"
-         << "view: " << view << ", "
-         << "nwires: " << nwires << ", "
-         << "pitch: " << pitch << ", "
-         << "nticks: " << maxTick << ", "
-         << "tick_origin: " << tick_origin << ", "
-         << "tick_pitch: " << tick_pitch << ", "
-         << "center: " << c << ", "
-         << "across: " << d << ", "
-         << "wiredir: " << wiredir << ", "
-         << "depth: " << depth << ", "
-         << "normal: " << n << ", ";
-
-    if(dig_view) json << "digs: " << *dig_view << ", ";
-    if(wire_view) json << "wires: " << *wire_view << ", ";
-
-    json << "hits: {";
-    for(auto it: plane_hits[plane]){
-      json << it.first << ": [";
-      for(const recob::Hit& hit: it.second){
-        json << "{wire: " << geo::WireID(hit.WireID()).Wire
-             << ", tick: " << hit.PeakTime()
-             << ", rms: " << hit.RMS() << "}, ";
-      }
-      json << "], ";
-    }
-
-    json << "}},\n";
-  }
-  json << "};\n\n";
+  HandlePlanes(evt, geom, detprop, json, maxTick);
 
   SerializeProduct<recob::Track>(evt, json, "tracks");
 

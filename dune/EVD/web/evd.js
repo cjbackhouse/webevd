@@ -182,13 +182,11 @@ function TextureMaterial(fname, texdim){
 
 
 let outlines = new THREE.Group();
-let digs = new THREE.Group();
-let wires = new THREE.Group();
+let digs = {}; // Groups indexed by label
+let wires = {};
 let truth = new THREE.Group();
 
 scene.add(outlines);
-scene.add(digs);
-scene.add(wires);
 scene.add(truth);
 
 let com = new THREE.Vector3();
@@ -297,53 +295,71 @@ for(let key in planes){
     line.layers.set(plane.view);
     line.layers.enable(uvlayer);
 
-    for(let dw of [plane.digs, plane.wires]){
-        if(dw == undefined) continue; // sometimes wires are missing
-        for(let block of dw.blocks){
-            // TODO - would want to combine all the ones with the same texture
-            // file into a single geometry.
-            let geom = new THREE.BufferGeometry();
+    for(let dws of [xdigs, xwires]){
+        for(let label in dws){
+            let dw = dws[label][key];
+            if(dw == undefined) continue; // sometimes wires are missing
 
-            let blockc = c.clone();
-            blockc.addScaledVector(ArrToVec(plane.across), (block.dx+32-plane.nwires/2)*plane.pitch);
-            blockc.addScaledVector(ArrToVec(plane.normal), (block.dy+32-plane.nticks/2)*Math.abs(plane.tick_pitch));
+            for(let block of dw.blocks){
+                // TODO - would want to combine all the ones with the same
+                // texture file into a single geometry.
+                let geom = new THREE.BufferGeometry();
 
-            // TODO hardcoding in (half) block size isn't good
-            let blocka = ArrToVec(plane.across).multiplyScalar(32*plane.pitch);
-            let blockd = ArrToVec(plane.normal).multiplyScalar(32*Math.abs(plane.tick_pitch));
+                let blockc = c.clone();
+                blockc.addScaledVector(ArrToVec(plane.across), (block.dx+32-plane.nwires/2)*plane.pitch);
+                blockc.addScaledVector(ArrToVec(plane.normal), (block.dy+32-plane.nticks/2)*Math.abs(plane.tick_pitch));
 
-            vtxs = [];
-            push_square_vtxs(blockc, blocka, blockd, vtxs);
-            geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+                // TODO hardcoding in (half) block size isn't good
+                let blocka = ArrToVec(plane.across).multiplyScalar(32*plane.pitch);
+                let blockd = ArrToVec(plane.normal).multiplyScalar(32*Math.abs(plane.tick_pitch));
 
-            // TODO ditto here
-            let u0 =   (block.texdx   )/block.texdim;
-            let v0 = 1-(block.texdy   )/block.texdim;
-            let u1 =   (block.texdx+64)/block.texdim;
-            let v1 = 1-(block.texdy+64)/block.texdim;
+                vtxs = [];
+                push_square_vtxs(blockc, blocka, blockd, vtxs);
+                geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
-            let uvs = new Float32Array( [u1, v0,
-                                         u1, v1,
-                                         u0, v1,
+                // TODO ditto here
+                let u0 =   (block.texdx   )/block.texdim;
+                let v0 = 1-(block.texdy   )/block.texdim;
+                let u1 =   (block.texdx+64)/block.texdim;
+                let v1 = 1-(block.texdy+64)/block.texdim;
 
-                                         u1, v0,
-                                         u0, v1,
-                                         u0, v0] );
+                let uvs = new Float32Array( [u1, v0,
+                                             u1, v1,
+                                             u0, v1,
 
-            geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+                                             u1, v0,
+                                             u0, v1,
+                                             u0, v0] );
 
-            let mat = TextureMaterial(block.fname, block.texdim);
-            let dmesh = new THREE.Mesh(geom, mat);
-            dmesh.layers.set(plane.view);
-            if(dw === plane.digs) digs.add(dmesh); else wires.add(dmesh);
+                geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 
-            dmesh.layers.enable(uvlayer);
-        }
-    }
+                let mat = TextureMaterial(block.fname, block.texdim);
+                let dmesh = new THREE.Mesh(geom, mat);
+                dmesh.layers.set(plane.view);
+                if(dws === xdigs){
+                    if(!(label in digs)){
+                        digs[label] = new THREE.Group();
+                        scene.add(digs[label]);
+                    }
+                    digs[label].add(dmesh);
+                }
+                else{
+                    if(!(label in wires)){
+                        wires[label] = new THREE.Group();
+                        scene.add(wires[label]);
+                    }
+                    wires[label].add(dmesh);
+                }
 
-    for(let key in plane.hits){
-        if(!(key in hitvtxs)) hitvtxs[key] = {}; // indexed by pair of layers
-        for(let hit of plane.hits[key]){
+                dmesh.layers.enable(uvlayer);
+            } // end for block
+        } // end for label
+    } // end for dws
+
+    for(let label in xhits){
+        if(!(label in hitvtxs)) hitvtxs[label] = {}; // indexed by pair of layers
+        if(xhits[label][key] == undefined) continue; // not necessarily hits on all planes
+        for(let hit of xhits[label][key]){
             let hc = c.clone();
             hc.addScaledVector(a, (2.*hit.wire+1)/plane.nwires-1);
             hc.addScaledVector(d, (2.*hit.tick+1)/plane.nticks-1);
@@ -352,22 +368,23 @@ for(let key in planes){
             let dv = ArrToVec(plane.normal).multiplyScalar(hit.rms*Math.abs(plane.tick_pitch));
 
             let views = (plane.view, uvlayer);
-            if(!(views in hitvtxs[key])) hitvtxs[key][views] = [];
-            push_square_vtxs(hc, du, dv, hitvtxs[key][views]);
-        }
-    }
+            if(!(views in hitvtxs[label])) hitvtxs[label][views] = [];
+            push_square_vtxs(hc, du, dv, hitvtxs[label][views]);
+        } // end for hit
+    } // end for label
 }
 
 com.divideScalar(nplanes);
 
-for(let key in hitvtxs){
+
+for(let label in hitvtxs){
     let hits = new THREE.Group();
     scene.add(hits);
 
-    for(let views in hitvtxs[key]){
+    for(let views in hitvtxs[label]){
         let hitgeom = new THREE.BufferGeometry();
 
-        hitgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs[key][views]), 3));
+        hitgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs[label][views]), 3));
 
         let h = new THREE.Mesh(hitgeom, mat_hit);
         h.layers.set(views[0]);
@@ -376,12 +393,12 @@ for(let key in hitvtxs){
     }
 
     let btn = document.createElement('button');
-    SetVisibility(hits, false, btn, key);
+    SetVisibility(hits, false, btn, label);
 
     btn.addEventListener('click', function(){
-            SetVisibility(hits, !hits.visible, btn, key);
-            requestAnimationFrame(animate);
-        });
+        SetVisibility(hits, !hits.visible, btn, label);
+        requestAnimationFrame(animate);
+    });
 
     document.getElementById('hits_dropdown').appendChild(btn);
 }
@@ -488,10 +505,23 @@ for(let opdet of opdets){
 scene.add(opdetgroup);
 
 
-for(let key in spacepoints){
+function AddDropdownToggle(dropdown_id, what, label, init = false)
+{
+    let btn = document.createElement('button');
+    SetVisibility(what, init, btn, label);
+
+    btn.addEventListener('click', function(){
+        SetVisibility(what, !what.visible, btn, label);
+        requestAnimationFrame(animate);
+    });
+
+    document.getElementById(dropdown_id).appendChild(btn);
+}
+
+for(let label in spacepoints){
     let spvtxs = [];
     let spidxs = [];
-    for(let sp of spacepoints[key]){
+    for(let sp of spacepoints[label]){
         push_icosahedron_vtxs(ArrToVec(sp), .4, spvtxs, spidxs);
     }
 
@@ -502,15 +532,7 @@ for(let key in spacepoints){
     for(let i = 0; i <= 5; ++i) sps.layers.enable(i);
     scene.add(sps);
 
-    let btn = document.createElement('button');
-    SetVisibility(sps, false, btn, key);
-
-    btn.addEventListener('click', function(){
-            SetVisibility(sps, !sps.visible, btn, key);
-            requestAnimationFrame(animate);
-        });
-
-    document.getElementById('spacepoints_dropdown').appendChild(btn);
+    AddDropdownToggle('spacepoints_dropdown', sps, label);
 }
 
 
@@ -533,23 +555,25 @@ function add_tracks(trajs, group){
     }
 }
 
-for(let key in tracks){
+for(let label in tracks){
     let reco_tracks = new THREE.Group();
-    add_tracks(tracks[key], reco_tracks);
+    add_tracks(tracks[label], reco_tracks);
     scene.add(reco_tracks);
 
-    let btn = document.createElement('button');
-    SetVisibility(reco_tracks, false, btn, key);
-
-    btn.addEventListener('click', function(){
-            SetVisibility(reco_tracks, !reco_tracks.visible, btn, key);
-            requestAnimationFrame(animate);
-        });
-
-    document.getElementById('tracks_dropdown').appendChild(btn);
+    AddDropdownToggle('tracks_dropdown', reco_tracks, label);
 }
 
 add_tracks(truth_trajs, truth);
+
+
+for(let label in xdigs){
+    AddDropdownToggle('digs_dropdown', digs[label], label);
+}
+
+for(let label in xwires){
+    AddDropdownToggle('wires_dropdown', wires[label], label);
+}
+
 
 let controls = new OrbitControls(camera, renderer.domElement);
 
@@ -649,10 +673,7 @@ function Toggle(col, id, str){
 
 // TODO - would be better to have this javascript look up the buttons in the
 // HTML and attach the handlers to them.
-window.ToggleRawDigits = function(){Toggle(digs, 'rawdigits', 'RawDigits');}
-window.ToggleWires = function(){Toggle(wires, 'wires', 'Wires');}
 window.ToggleTruth = function(){Toggle(truth, 'truth', 'Truth');}
-
 window.ToggleCryos = function(){Toggle(cryogroup, 'cryos', 'Cryostats');}
 window.ToggleAPAs = function(){Toggle(apas, 'apas', 'APAs');}
 window.ToggleOpDets = function(){Toggle(opdetgroup, 'opdets', 'OpDets');}
@@ -664,8 +685,8 @@ ThreeDControls();
 // Try to pre-load all textures - doesn't work
 //renderer.compile(scene, camera);
 
-SetVisibilityById(digs, false, 'rawdigits', 'RawDigits');
-SetVisibilityById(wires, false, 'wires', 'Wires');
+//SetVisibilityById(digs, false, 'rawdigits', 'RawDigits');
+//SetVisibilityById(wires, false, 'wires', 'Wires');
 SetVisibilityById(truth, true, 'truth', 'Truth');
 
 SetVisibilityById(cryogroup, true, 'cryos', 'Cryostats');

@@ -55,6 +55,25 @@ renderer.getContext().disable(renderer.getContext().DEPTH_TEST);
 
 document.body.appendChild( renderer.domElement );
 
+function AddLabel(pos, txt)
+{
+    var d = document.createElement('div');
+    d.className = 'label';
+    d.pos = pos; // stash position on the element
+    d.appendChild(document.createTextNode(txt));
+    document.body.appendChild(d);
+    return d;
+}
+
+for(var z = 0; z <= 1400; z += 50){
+    AddLabel(new THREE.Vector3(0, 0, z), z.toString());
+}
+
+for(var x = 0; x <= 350; x += 50){
+    AddLabel(new THREE.Vector3(+x, 0, 0), '+'+x.toString());
+    AddLabel(new THREE.Vector3(-x, 0, 0), '-'+x.toString());
+}
+
 function ArrToVec(arr)
 {
     return new THREE.Vector3(arr[0], arr[1], arr[2]);
@@ -559,6 +578,18 @@ function animate() {
     if(animStart != null) requestAnimationFrame(animate);
 
     gAnimReentrant = false;
+
+    // Update all the label positions
+    for(var label of document.getElementsByClassName('label')){
+        var pos = label.pos.clone();
+        pos.project(camera);
+
+        label.style.left = (1+pos.x)*50. + '%';
+        label.style.top  = (1-pos.y)*50. + '%';
+        // Hoped this would have better sub-pixel positioning. Seems not
+//        label.style.left = (1+pos.x)*renderer.domElement.width /2. + 'px';
+//        label.style.top  = (1-pos.y)*renderer.domElement.height/2. + 'px';
+    }
 }
 
 function SetVisibility(col, state, elem, str)

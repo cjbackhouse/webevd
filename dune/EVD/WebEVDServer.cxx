@@ -375,6 +375,20 @@ public:
     return *this;
   }
 
+  template<class T, class U>
+  JSONFormatter& operator<<(const std::map<T, U>& m)
+  {
+    fStream << "{\n";
+    unsigned int n = 0;
+    for(auto& it: m){
+      (*this) << "  " << it.first << ": " << it.second;
+      ++n;
+      if(n != m.size()) (*this) << ",\n";
+    }
+    fStream << "\n}";
+    return *this;
+  }
+
   JSONFormatter& operator<<(const TVector3& v)
   {
     fStream << "["
@@ -451,6 +465,25 @@ JSONFormatter& operator<<(JSONFormatter& json, const simb::MCParticle& part)
   }
 
   return json << pts;
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const geo::CryostatGeo& cryo)
+{
+  const TVector3 r0(cryo.MinX(), cryo.MinY(), cryo.MinZ());
+  const TVector3 r1(cryo.MaxX(), cryo.MaxY(), cryo.MaxZ());
+  return json << "{ min: "  << r0 << ", max: " << r1 << " }";
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetGeo& opdet)
+{
+  return json << "{ center: " << TVector3(opdet.GetCenter().X(),
+                                          opdet.GetCenter().Y(),
+                                          opdet.GetCenter().Z()) << ", "
+              << "length: " << opdet.Length() << ", "
+              << "width: " << opdet.Width() << ", "
+              << "height: " << opdet.Height() << " }";
 }
 
 // ----------------------------------------------------------------------------
@@ -575,15 +608,7 @@ unsigned long HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
     } // end for dig
   } // end for tag
 
-  json << "var xdigs = {\n";
-  for(auto tag_it: imgs){
-    json << "  " << tag_it.first << ": {\n";
-    for(auto plane_it: tag_it.second){
-      json << "    " << plane_it.first << ": " << plane_it.second << ",\n";
-    }
-    json << "  },\n";
-  }
-  json << "};\n\n";
+  json << "var xdigs = " << imgs << ";\n\n";
 
   return maxTick;
 }
@@ -630,15 +655,7 @@ unsigned long HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
     } // end for rbwire
   } // end for tag
 
-  json << "var xwires = {\n";
-  for(auto tag_it: imgs){
-    json << "  " << tag_it.first << ": {\n";
-    for(auto plane_it: tag_it.second){
-      json << "    " << plane_it.first << ": " << plane_it.second << ",\n";
-    }
-    json << "  },\n";
-  }
-  json << "};\n\n";
+  json << "var xwires = " << imgs << ";\n\n";
 
   return maxTick;
 }
@@ -670,15 +687,7 @@ void HandleHits(const TEvt& evt, const geo::GeometryCore* geom,
     }
   } // end for tag
 
-  json << "var xhits = {\n";
-  for(auto tag_it: plane_hits){
-    json << "  " << tag_it.first << ": {\n";
-    for(auto plane_it: tag_it.second){
-      json << "    " << plane_it.first << ": " << plane_it.second << ",\n";
-    }
-    json << "  },\n";
-  }
-  json << "};\n\n";
+  json << "var xhits = " << plane_hits << ";\n\n";
 }
 
 
@@ -774,21 +783,13 @@ WriteFiles(const T& evt,
 
   json << "var cryos = [\n";
   for(const geo::CryostatGeo& cryo: geom->IterateCryostats()){
-    const TVector3 r0(cryo.MinX(), cryo.MinY(), cryo.MinZ());
-    const TVector3 r1(cryo.MaxX(), cryo.MaxY(), cryo.MaxZ());
-    json << "  { min: "  << r0 << ", max: " << r1 << " },\n";
+    json << "  " << cryo << ",\n";
   }
   json << "];\n\n";
 
   json << "var opdets = [\n";
   for(unsigned int i = 0; i < geom->NOpDets(); ++i){
-    const geo::OpDetGeo& opdet = geom->OpDetGeoFromOpDet(i);
-    json << "  { center: " << TVector3(opdet.GetCenter().X(),
-                                       opdet.GetCenter().Y(),
-                                       opdet.GetCenter().Z()) << ", "
-         << "length: " << opdet.Length() << ", "
-         << "width: " << opdet.Width() << ", "
-         << "height: " << opdet.Height() << " }";
+    json << "  " << geom->OpDetGeoFromOpDet(i);
     if(i != geom->NOpDets()-1) json << ",\n"; else json << "\n";
   }
   json << "];\n";

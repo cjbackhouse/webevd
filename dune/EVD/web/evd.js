@@ -700,18 +700,19 @@ window.NoView = function(){camera.layers.set(5); requestAnimationFrame(animate);
 
 // TODO these only really do what you expect when already in 3D mode. May want
 // to "re-diagonalize" this functionality.
-function ZView(){camera.layers.set(2); requestAnimationFrame(animate);}
-function UView(){camera.layers.set(0); requestAnimationFrame(animate);}
-function VView(){camera.layers.set(1); requestAnimationFrame(animate);}
+window.ZView  = function(){camera.layers.set(2); requestAnimationFrame(animate);}
+window.UView  = function(){camera.layers.set(0); requestAnimationFrame(animate);}
+window.VView  = function(){camera.layers.set(1); requestAnimationFrame(animate);}
+window.UVView = function(){camera.layers.set(3); requestAnimationFrame(animate);}
+window.VUView = function(){camera.layers.set(4); requestAnimationFrame(animate);}
 
-function UVView(){camera.layers.set(3); requestAnimationFrame(animate);}
-function VUView(){camera.layers.set(4); requestAnimationFrame(animate);}
-
+// Remains as a free function so others can call it
 function AllViews(){
     camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2);
 }
+window.AllViews = AllViews;
 
-function ThreeDView(){
+window.ThreeDView = function(){
     AllViews();
 
     // A hack to make sure the Z->3D transition doesn't end up completely
@@ -726,14 +727,6 @@ function ThreeDView(){
 
     ThreeDControls();
 }
-
-window.ZView = ZView;
-window.UView = UView;
-window.VView = VView;
-window.UVView = UVView;
-window.VUView = VUView;
-window.AllViews = AllViews;
-window.ThreeDView = ThreeDView;
 
 // https://en.wikipedia.org/wiki/Slerp#Geometric_Slerp
 // p0 and p1 must be unit vectors
@@ -842,7 +835,7 @@ function ThreeDControls(){
     controls.update();
 }
 
-function ZView2D(){
+window.ZView2D = function(){
     camera.layers.enable(2);
     AnimateTo(new THREE.Vector3(0, 1, 0),
               new THREE.Vector3(1, 0, 0),
@@ -850,36 +843,22 @@ function ZView2D(){
     TwoDControls();
 }
 
-function UVView2D(){
+window.UVView2D = function(){
     camera.layers.enable(3);
     AnimateTo(vperp, new THREE.Vector3(1, 0, 0), 1e-6, UVView);
     TwoDControls();
 }
 
-function VUView2D(){
+window.VUView2D = function(){
     camera.layers.enable(4);
     AnimateTo(uperp, new THREE.Vector3(1, 0, 0), 1e-6, VUView);
     TwoDControls();
 }
 
-window.ZView2D = ZView2D;
-window.UVView2D = UVView2D;
-window.VUView2D = VUView2D;
+window.Perspective = function(){AnimateTo(null, null,   50, null);}
+window.Ortho       = function(){AnimateTo(null, null, 1e-6, null);}
 
-function Perspective()
-{
-    AnimateTo(null, null, 50, null);
-}
-
-function Ortho()
-{
-    AnimateTo(null, null, 1e-6, null);
-}
-
-window.Perspective = Perspective;
-window.Ortho = Ortho;
-
-function Theme(theme)
+window.Theme = function(theme)
 {
     document.body.className = theme;
 
@@ -890,8 +869,6 @@ function Theme(theme)
 
     requestAnimationFrame(animate);
 }
-
-window.Theme = Theme;
 
 
 window.addEventListener( 'resize', onWindowResize, false );

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>WebEVD</title>
+    <link rel="shortcut icon" href="favicon.ico">
+    <link rel="stylesheet" type="text/css" href="evd.css">
+    <script src="coords.js"></script>
+  </head>
+
+  <body class="darktheme">
+    <!-- "Float" buttons over the display -->
+    <div style="position:absolute">
+      <button onclick="location.href='PREV'" title="Previous">&#x2b05&#xfe0f</button>
+      <button onclick="location.reload(true)" title="Reload">&#x1f504&#xfe0f</button>
+      <button onclick="location.href='NEXT'" title="Next">&#x27a1&#xfe0f</button>
+
+      <!-- <button onclick="document.documentElement.requestFullscreen();">Fullscreen</button> -->
+
+      <button onclick="location.href='QUIT'">&#x1f6d1 Quit</button>
+
+      <div class="dropdown">
+        <button>View...</button>
+        <div class="dropdown-content">
+          <button onclick="NoView()">None</button>
+          <b>3D</b>
+          <button onclick="ZView()">Z</button>
+          <button onclick="UView()">U</button>
+          <button onclick="VView()">V</button>
+          <button onclick="UVView()">U/V</button>
+          <button onclick="VUView()">V/U</button>
+          <button onclick="ThreeDView()">All</button>
+          <b>2D</b>
+          <button onclick="ZView2D()">Z</button>
+          <button onclick="UVView2D()">U/V</button>
+          <button onclick="VUView2D()">V/U</button>
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button>Projection...</button>
+        <div class="dropdown-content">
+          <button onclick="Perspective()">Perspective</button>
+          <button onclick="Ortho()">Orthogonal</button>
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button>Theme...</button>
+        <div class="dropdown-content">
+          <button onclick="Theme('darktheme')">Dark</button>
+          <button onclick="Theme('lighttheme')">Light</button>
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button>Physical...</button>
+        <div class="dropdown-content">
+          <button id="cryos" onclick="ToggleCryos()"></button>
+          <button id="apas" onclick="ToggleAPAs()"></button>
+          <button id="opdets" onclick="ToggleOpDets()"></button>
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button>RawDigits...</button>
+        <div class="dropdown-content" id="digs_dropdown">
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button>Wires...</button>
+        <div class="dropdown-content" id="wires_dropdown">
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button>Hits...</button>
+        <div class="dropdown-content" id="hits_dropdown">
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button>Tracks...</button>
+        <div class="dropdown-content" id="tracks_dropdown">
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button>SpacePoints...</button>
+        <div class="dropdown-content" id="spacepoints_dropdown">
+        </div>
+      </div>
+
+      <div class="dropdown">
+        <button>Vertices...</button>
+        <div class="dropdown-content" id="vertices_dropdown">
+        </div>
+      </div>
+
+      <button id="truth" onclick="ToggleTruth()"></button>
+
+    </div> <!-- position:absolute -->
+
+
+    <div style="position:absolute; bottom: 0; left: 0;">
+      Run:    <input id="runbox"    onkeydown="OnKeyDown(event);"></input><br>
+      Subrun: <input id="subrunbox" onkeydown="OnKeyDown(event);"></input><br>
+      Event:  <input id="evtbox"    onkeydown="OnKeyDown(event);"></input>
+    </div>
+
+    <script type="module" src="evd.js"></script>
+  </body>
+</html>

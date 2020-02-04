@@ -1,0 +1,9 @@
+BEGIN_PROLOG
+
+standard_webevd:
+{
+  module_type: "WebEVD"
+}
+
+END_PROLOG
+

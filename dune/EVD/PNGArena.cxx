@@ -42,38 +42,29 @@ namespace evd
   // --------------------------------------------------------------------------
   void MipMap(PNGArena& bytes, int newdim)
   {
-    // The algorithm here is only really suitable for the specific way we're
-    // encoding hits, not for general images.
-    //
-    // The alpha channel is set to the max of any of the source pixels. The
-    // colour channels are averaged, weighted by the alpha values, and then
-    // scaled so that the most intense colour retains its same maximum
-    // intensity (this is relevant for green, where we use "dark green", 128).
+    // The alpha channel is set to twice the average of the source pixels. The
+    // intuition is that a linear feature should remain equally as bright, but
+    // would be expected to only hit 2 of the 4 source pixels. The colour
+    // channels are averaged, weighted by the alpha values.
     for(unsigned int d = 0; d < bytes.data.size(); ++d){
       for(int y = 0; y < newdim; ++y){
         for(int x = 0; x < newdim; ++x){
-          double totc[3] = {0,};
-          double maxtotc = 0;
-          png_byte maxc[3] = {0,};
-          png_byte maxmaxc = 0;
-          png_byte maxa = 0;
+          int totc[3] = {0,};
+          int tota = 0;
           for(int dy = 0; dy <= 1; ++dy){
             for(int dx = 0; dx <= 1; ++dx){
               const png_byte va = bytes(d, x*2+dx, y*2+dy, 3); // alpha value
-              maxa = std::max(maxa, va);
+              tota += va;
 
               for(int c = 0; c < 3; ++c){
                 const png_byte vc = bytes(d, x*2+dx, y*2+dy, c); // colour value
                 totc[c] += vc * va;
-                maxc[c] = std::max(maxc[c], vc);
-                maxtotc = std::max(maxtotc, totc[c]);
-                maxmaxc = std::max(maxmaxc, maxc[c]);
               } // end for c
             } // end for dx
           } // end for dy
 
-          for(int c = 0; c < 3; ++c) bytes(d, x, y, c) = maxtotc ? maxmaxc*totc[c]/maxtotc : 0;
-          bytes(d, x, y, 3) = maxa;
+          for(int c = 0; c < 3; ++c) bytes(d, x, y, c) = tota > 0 ? std::min(totc[c]/tota, 255) : 0;
+          bytes(d, x, y, 3) = std::min(tota/2, 255);
         } // end for x
       } // end for y
     } // end for d

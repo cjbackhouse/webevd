@@ -180,8 +180,10 @@ void _HandleGet(std::string doc, int sock, Temporaries* tmp)
   // Serve all files except pngs compressed
   const bool zip = doc.find(".png") == std::string::npos;
 
-  // TODO - proper MIME type handling
-  const std::string mime = (doc.find(".js") != std::string::npos) ? "application/javascript" : "text/html";
+  // TODO - more sophisticated MIME type handling
+  std::string mime = "text/html";
+  if(doc.find(".js") != std::string::npos) mime = "application/javascript";
+  if(doc.find(".css") != std::string::npos) mime = "text/css";
 
   write_ok200(sock, mime, zip);
 
@@ -755,8 +757,9 @@ WriteFiles(const T& evt,
   std::cout << "Web source files from " << webdir << std::endl;
 
   tmp.symlink(webdir, "evd.js");
+  tmp.symlink(webdir, "evd.css");
   tmp.symlink(webdir, "index.html");
-  tmp.symlink(webdir, "httpd.conf");
+  //  tmp.symlink(webdir, "httpd.conf");
   tmp.symlink(webdir, "favicon.ico");
 
   std::ofstream outf = tmp.ofstream("coords.js");

@@ -4,65 +4,8 @@
     <meta charset="utf-8">
     <title>WebEVD</title>
     <link rel="shortcut icon" href="favicon.ico">
-    <style>
-      body { margin: 0; }
-      canvas { margin : 0;}
-      div { margin : 0;}
-
-      body.darktheme { color: green; background-color: black; }
-      body.lighttheme { background-color: white; }
-
-      .darktheme button { background-color: black; color : green; border-color: green; height : 2em; }
-      .lighttheme button { background-color: white; border-color: gray; height : 2em; }
-
-      .darktheme select { background-color: black; color : green; border-color: green; height : 2em;
-
-      /* Hide the dropdown arrow */
-      -webkit-appearance: none;
-      -moz-appearance: none;
-      -ms-appearance: none;
-       -o-appearance: none;
-      appearance: none;
-      }
-
-      input { background-color: transparent; height : 2em; border : 0px; }
-
-      .darktheme input { color : green; }
-
-/* The container <div> - needed to position the dropdown content */
-.dropdown {
-  position: relative;
-  display: inline-block;
-}
-
-/* Dropdown Content (Hidden by Default) */
-.dropdown-content {
-  display: none;
-  position: absolute;
-  z-index: 1;
-}
-
-/* Match parent button width */
-/*.dropdown-content > button { width:100%;}*/
-/* HACK - allows track dropdown not to overflow */
-.dropdown-content > button { width:120%;}
-
-/* Show the dropdown menu on hover */
-.dropdown:hover .dropdown-content {display: block;}
-
-.label {
-        position: absolute;
-        pointer-events: none;
-        transform: translate(-50%, -50%); /* center */
-}
-
-.darktheme .label { color: white; }
-.lighttheme .label { color: black; }
-
-    </style>
-
+    <link rel="stylesheet" type="text/css" href="evd.css">
     <script src="coords.js"></script>
-
   </head>
 
   <body class="darktheme">

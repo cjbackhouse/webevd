@@ -157,9 +157,9 @@ int main(int argc, char** argv)
     const art::EventAuxiliary& aux = evt.eventAuxiliary();
 
     if(tgt_run >= 0 || tgt_subrun >= 0 || tgt_evt >= 0){
-      if((tgt_run    >= 0 && aux.run()    != tgt_run   ) ||
-         (tgt_subrun >= 0 && aux.subRun() != tgt_subrun) ||
-         (tgt_evt    >= 0 && aux.event()  != tgt_evt   )){
+      if((tgt_run    >= 0 && int(aux.run())    != tgt_run   ) ||
+         (tgt_subrun >= 0 && int(aux.subRun()) != tgt_subrun) ||
+         (tgt_evt    >= 0 && int(aux.event())  != tgt_evt   )){
         evt.next();
         continue;
       }

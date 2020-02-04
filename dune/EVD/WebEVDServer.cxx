@@ -739,8 +739,20 @@ WriteFiles(const T& evt,
 {
   PNGArena arena("arena");
 
-  char webdir[PATH_MAX];
-  realpath("web/", webdir);
+  std::string webdir;
+  // For development purposes we prefer to serve the files from the source
+  // directory, which allows them to be live-edited with just a refresh of the
+  // browser window to see them.
+  if(getenv("MRB_SOURCE")) cet::search_path("MRB_SOURCE").find_file("dunetpc/dune/EVD/web/", webdir);
+  // Otherwise, serve the files from where they get installed
+  if(webdir.empty() && getenv("PRODUCTS") && getenv("DUNETPC_VERSION")) cet::search_path("PRODUCTS").find_file("dunetpc/"+std::string(getenv("DUNETPC_VERSION"))+"/webevd/", webdir);
+
+  if(webdir.empty()){
+    std::cout << "Unable to find webevd files under $MRB_SOURCE or $PRODUCTS" << std::endl;
+    abort();
+  }
+
+  std::cout << "Web source files from " << webdir << std::endl;
 
   tmp.symlink(webdir, "evd.js");
   tmp.symlink(webdir, "index.html");

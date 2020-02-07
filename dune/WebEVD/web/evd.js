@@ -43,7 +43,7 @@ let camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHe
 
 let renderer = new THREE.WebGLRenderer();
 // I have no idea why these 4 pixels are necessary
-renderer.setSize( window.innerWidth, window.innerHeight-4);
+renderer.setSize( window.innerWidth, window.innerHeight);
 
 renderer.setClearColor('black');
 
@@ -61,7 +61,7 @@ function AddLabel(pos, txt)
     d.className = 'label';
     d.pos = pos; // stash position on the element
     d.appendChild(document.createTextNode(txt));
-    document.body.appendChild(d);
+    document.getElementById('labels_div').appendChild(d);
     return d;
 }
 
@@ -874,7 +874,7 @@ window.Theme = function(theme)
 window.addEventListener( 'resize', onWindowResize, false );
 
 function onWindowResize() {
-    renderer.setSize( window.innerWidth, window.innerHeight-4);
+    renderer.setSize( window.innerWidth, window.innerHeight);
 
     // Keep aspect ratio correct
     camera.top = -512*window.innerHeight/window.innerWidth;

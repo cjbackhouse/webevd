@@ -8,7 +8,7 @@
     <script src="coords.js"></script>
   </head>
 
-  <body class="darktheme">
+  <body class="darktheme" style="overflow:hidden">
     <!-- "Float" buttons over the display -->
     <div style="position:absolute">
       <button onclick="location.href='PREV'" title="Previous">&#x2b05&#xfe0f</button>
@@ -108,6 +108,8 @@
       Subrun: <input id="subrunbox" onkeydown="OnKeyDown(event);"></input><br>
       Event:  <input id="evtbox"    onkeydown="OnKeyDown(event);"></input>
     </div>
+
+    <div style="overflow:hidden" id="labels_div"></div>
 
     <script type="module" src="evd.js"></script>
   </body>

@@ -47,6 +47,8 @@ renderer.setSize( window.innerWidth, window.innerHeight);
 
 renderer.setClearColor('black');
 
+renderer.domElement.addEventListener("click", OnClick, true);
+
 renderer.alpha = true;
 renderer.antialias = false;
 
@@ -582,9 +584,6 @@ controls.target = com;
 camera.translateX(1000);
 camera.lookAt(com);
 
-//controls.autoRotate = true;
-//controls.autoRotateSpeed *= 10;
-
 controls.update();
 
 function UpdateLabels()
@@ -645,9 +644,12 @@ function animate() {
         animFunc(frac);
     }
 
+    if(controls.autoRotate) controls.update();
+
     renderer.render( scene, camera );
 
-    if(animStart != null) requestAnimationFrame(animate);
+    if(animStart != null || controls.autoRotate)
+        requestAnimationFrame(animate);
 
     gAnimReentrant = false;
 
@@ -761,6 +763,8 @@ function UpdateFOV(cam, newFOV)
 }
 
 function AnimateTo(targetDiff, targetUp, targetFOV, endFunc){
+    controls.autoRotate = false;
+
     let initDiff = camera.position.clone();
     initDiff.sub(controls.target);
     initDiff.normalize();
@@ -857,6 +861,17 @@ window.VUView2D = function(){
 
 window.Perspective = function(){AnimateTo(null, null,   50, null);}
 window.Ortho       = function(){AnimateTo(null, null, 1e-6, null);}
+
+window.Orbit = function()
+{
+    controls.autoRotate = !controls.autoRotate;
+    requestAnimationFrame(animate);
+}
+
+function OnClick()
+{
+    controls.autoRotate = false;
+}
 
 window.Theme = function(theme)
 {

@@ -57,26 +57,28 @@ renderer.getContext().disable(renderer.getContext().DEPTH_TEST);
 
 document.body.appendChild( renderer.domElement );
 
+let gLabels = []
 function AddLabel(pos, txt)
 {
-    var d = document.createElement('div');
+    let d = document.createElement('div');
     d.className = 'label';
-    d.pos = pos; // stash position on the element
+    d.pos3 = pos; // stash position on the element
+    d.pos2 = new THREE.Vector3(); // the projected 2D position
     d.appendChild(document.createTextNode(txt));
     document.getElementById('labels_div').appendChild(d);
-    return d;
+    gLabels.push(d);
 }
 
-for(var delta of [100, 50, 10, 5, 1]){
-    for(var z = 0; z <= cryos[0].max[2]; z += delta){
+for(let delta of [100, 50, 10, 5, 1]){
+    for(let z = 0; z <= cryos[0].max[2]; z += delta){
         AddLabel(new THREE.Vector3(0, 0, z), z.toString());
     }
 
-    for(var x = 0; x <= cryos[0].max[0]; x += delta){
+    for(let x = 0; x <= cryos[0].max[0]; x += delta){
         AddLabel(new THREE.Vector3(+x, 0, 0), '+'+x.toString());
     }
 
-    for(var x = 0; x >= cryos[0].min[0]; x -= delta){
+    for(let x = 0; x >= cryos[0].min[0]; x -= delta){
         AddLabel(new THREE.Vector3(x, 0, 0), x.toString());
     }
 }
@@ -588,23 +590,27 @@ controls.update();
 
 function UpdateLabels()
 {
+    // TODO this function is terrible at triggering re-layouts and screwing up
+    // the framerate when the labels are on. Figure out why.
+
+    // Take all the labels out of the document in case we trigger reflows or
+    // something?
+    document.getElementById('labels_div').style.display = "none";
+
+    // only show in collection view (1<<2) for now
+    if(camera.layers.mask != 4) return;
+
     const W = renderer.domElement.width;
     const H = renderer.domElement.height;
 
     let ps = [];
 
-    for(var label of document.getElementsByClassName('label')){
-        // only show in collection view (1<<2) for now
-        if(camera.layers.mask != 4){
-            label.style.visibility = "hidden";
-            continue;
-        }
+    for(let label of gLabels){
+        label.pos2.copy(label.pos3);
+        label.pos2.project(camera);
 
-        var pos = label.pos.clone();
-        pos.project(camera);
-
-        let p = {x: (1+pos.x)*W/2.,
-                 y: (1-pos.y)*H/2.};
+        let p = {x: (1+label.pos2.x)*W/2.,
+                 y: (1-label.pos2.y)*H/2.};
 
         if(p.x < 30) p.x = 30;
         if(p.x > W-30) p.x = W-30;
@@ -612,21 +618,24 @@ function UpdateLabels()
         if(p.y > H-30) p.y = H-30;
 
         let dsqmin = 1e10;
-        for(var q of ps){
+        for(let q of ps){
             const dsq = (p.x-q.x)*(p.x-q.x) + (p.y-q.y)*(p.y-q.y);
             if(dsq < dsqmin) dsqmin = dsq;
         }
 
         if(dsqmin > 50*50){
-            label.style.visibility = "visible";
+            label.style.display = "initial";
             label.style.left = p.x + 'px';
             label.style.top  = p.y + 'px';
             ps.push(p);
         }
         else{
-            label.style.visibility = "hidden";
+            label.style.display = "none";
         }
     }
+
+    // Put the labels back now we're done fiddling
+    document.getElementById('labels_div').style.display = "initial";
 }
 
 function animate() {
@@ -907,5 +916,11 @@ controls.addEventListener('change', animate);
 window.addEventListener('resize', animate);
 
 animate();
+
+// Amazingly these dominate render times, and we never change any objects'
+// position after the initial setup.
+scene.matrixAutoUpdate = false;
+scene.autoUpdate = false;
+
 
 console.log(renderer.info);

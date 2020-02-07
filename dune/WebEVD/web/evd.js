@@ -277,7 +277,8 @@ for(let key in planes){
         uperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
     }
     if(plane.view == 1){
-        vperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
+        // This ordering happens to give us beam left-to-right
+        vperp = ArrToVec(plane.normal).cross(ArrToVec(plane.across));
     }
 
     let vtxs = [];
@@ -590,6 +591,8 @@ controls.update();
 
 function UpdateLabels()
 {
+    if(document.getElementById('labels_div').style.display == "none") return;
+
     // TODO this function is terrible at triggering re-layouts and screwing up
     // the framerate when the labels are on. Figure out why.
 
@@ -598,7 +601,7 @@ function UpdateLabels()
     document.getElementById('labels_div').style.display = "none";
 
     // only show in collection view (1<<2) for now
-    if(camera.layers.mask != 4) return;
+    //    if(camera.layers.mask != 4) return;
 
     const W = renderer.domElement.width;
     const H = renderer.domElement.height;
@@ -875,6 +878,18 @@ window.Orbit = function()
 {
     controls.autoRotate = !controls.autoRotate;
     requestAnimationFrame(animate);
+}
+
+window.NoAxes = function()
+{
+    document.getElementById('labels_div').style.display = "none";
+}
+
+window.PhysicalAxes = function()
+{
+    // For now these are the only type implemented
+    document.getElementById('labels_div').style.display = "initial";
+    UpdateLabels();
 }
 
 function OnClick()

@@ -47,6 +47,14 @@
       </div>
 
       <div class="dropdown">
+        <button>Axes...</button>
+        <div class="dropdown-content">
+          <button onclick="NoAxes()">None</button>
+          <button onclick="PhysicalAxes()">cm/cm</button>
+        </div>
+      </div>
+
+      <div class="dropdown">
         <button>Theme...</button>
         <div class="dropdown-content">
           <button onclick="Theme('darktheme')">Dark</button>
@@ -110,7 +118,7 @@
       Event:  <input id="evtbox"    onkeydown="OnKeyDown(event);"></input>
     </div>
 
-    <div style="overflow:hidden" id="labels_div"></div>
+    <div style="overflow:hidden;display:none" id="labels_div"></div>
 
     <script type="module" src="evd.js"></script>
   </body>

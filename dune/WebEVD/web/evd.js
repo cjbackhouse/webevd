@@ -42,7 +42,6 @@ let scene = new THREE.Scene();
 let camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 0.1, 1e6 );
 
 let renderer = new THREE.WebGLRenderer();
-// I have no idea why these 4 pixels are necessary
 renderer.setSize( window.innerWidth, window.innerHeight);
 
 renderer.setClearColor('black');
@@ -56,32 +55,6 @@ renderer.antialias = false;
 renderer.getContext().disable(renderer.getContext().DEPTH_TEST);
 
 document.body.appendChild( renderer.domElement );
-
-let gLabels = []
-function AddLabel(pos, txt)
-{
-    let d = document.createElement('div');
-    d.className = 'label';
-    d.pos3 = pos; // stash position on the element
-    d.pos2 = new THREE.Vector3(); // the projected 2D position
-    d.appendChild(document.createTextNode(txt));
-    document.getElementById('labels_div').appendChild(d);
-    gLabels.push(d);
-}
-
-for(let delta of [100, 50, 10, 5, 1]){
-    for(let z = 0; z <= cryos[0].max[2]; z += delta){
-        AddLabel(new THREE.Vector3(0, 0, z), z.toString());
-    }
-
-    for(let x = 0; x <= cryos[0].max[0]; x += delta){
-        AddLabel(new THREE.Vector3(+x, 0, 0), '+'+x.toString());
-    }
-
-    for(let x = 0; x >= cryos[0].min[0]; x -= delta){
-        AddLabel(new THREE.Vector3(x, 0, 0), x.toString());
-    }
-}
 
 function ArrToVec(arr)
 {
@@ -589,56 +562,93 @@ camera.lookAt(com);
 
 controls.update();
 
-function UpdateLabels()
+function ProjectToScreenPixels(r)
 {
-    if(document.getElementById('labels_div').style.display == "none") return;
-
-    // TODO this function is terrible at triggering re-layouts and screwing up
-    // the framerate when the labels are on. Figure out why.
-
-    // Take all the labels out of the document in case we trigger reflows or
-    // something?
-    document.getElementById('labels_div').style.display = "none";
-
-    // only show in collection view (1<<2) for now
-    //    if(camera.layers.mask != 4) return;
-
     const W = renderer.domElement.width;
     const H = renderer.domElement.height;
 
-    let ps = [];
+    r.project(camera);
 
-    for(let label of gLabels){
-        label.pos2.copy(label.pos3);
-        label.pos2.project(camera);
+    r.x = (1+r.x)*W/2.;
+    r.y = (1-r.y)*H/2.;
+}
 
-        let p = {x: (1+label.pos2.x)*W/2.,
-                 y: (1-label.pos2.y)*H/2.};
+let gLabels = []; // divs of the labels
 
-        if(p.x < 30) p.x = 30;
-        if(p.x > W-30) p.x = W-30;
-        if(p.y < 30) p.y = 30;
-        if(p.y > H-30) p.y = H-30;
+// NB destroys r0 and r1. Returns new idx
+function PaintAxis(idx, r0, r1, w1, sign = '')
+{
+    let labels_div = document.getElementById('labels_div');
 
-        let dsqmin = 1e10;
-        for(let q of ps){
-            const dsq = (p.x-q.x)*(p.x-q.x) + (p.y-q.y)*(p.y-q.y);
-            if(dsq < dsqmin) dsqmin = dsq;
-        }
+    ProjectToScreenPixels(r0);
+    ProjectToScreenPixels(r1);
 
-        if(dsqmin > 50*50){
-            label.style.display = "initial";
-            label.style.left = p.x + 'px';
-            label.style.top  = p.y + 'px';
-            ps.push(p);
-        }
-        else{
-            label.style.display = "none";
-        }
+    if(Math.abs(r0.x-r1.x) < 1){ // vertical axis
+        const W = renderer.domElement.width;
+        if(r0.x < 30) r0.x = r1.x = 30;
+        if(r0.x > W-30) r0.x = r1.x = W-30;
     }
 
-    // Put the labels back now we're done fiddling
-    document.getElementById('labels_div').style.display = "initial";
+    if(Math.abs(r0.y-r1.y) < 1){ // horizontal axis
+        const H = renderer.domElement.height;
+        if(r0.y < 30) r0.y = r1.y = 30;
+        if(r0.y > H-30) r0.y = r1.y = H-30;
+    }
+
+    const Lsq = (r0.x-r1.x)*(r0.x-r1.x) + (r0.y-r1.y)*(r0.y-r1.y);
+
+    // Find the smallest stride without clashes
+    let stride = 0;
+    for(stride of [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]){
+        let N = w1/stride;
+        if(Lsq/(N*N) > 50*50) break; // enough spacing to not clash, accept
+    }
+    if(stride == 0) return 0;
+
+    for(let w = 0; w <= w1; w += stride){
+        // TODO with Vector2
+        let r = new THREE.Vector3(0, 0, 0);
+        r.addScaledVector(r0, 1-w/w1);
+        r.addScaledVector(r1,   w/w1);
+
+        while(idx >= gLabels.length){
+            let d = document.createElement('div');
+            d.className = 'label';
+            labels_div.appendChild(d);
+            gLabels.push(d);
+        }
+
+        let label = gLabels[idx];
+        idx += 1;
+        label.innerHTML = (w == 0) ? '0' : sign + w;
+        label.style.left = r.x + 'px';
+        label.style.top  = r.y + 'px';
+    }
+
+    return idx;
+}
+
+function PaintAxes()
+{
+    let labels_div = document.getElementById('labels_div');
+
+    let idx = 0;
+    idx = PaintAxis(idx,
+                    new THREE.Vector3(0, 0, 0),
+                    new THREE.Vector3(0, 0, 1400),
+                    1400);
+    idx = PaintAxis(idx,
+                    new THREE.Vector3(0, 0, 0),
+                    new THREE.Vector3(360, 0, 0),
+                    360, '+');
+    idx = PaintAxis(idx,
+                    new THREE.Vector3(0, 0, 0),
+                    new THREE.Vector3(-360, 0, 0),
+                    360, '-');
+
+    // TODO maybe just hide them unless there was a large change in length?
+    for(let i = idx; i < gLabels.length; ++i) labels_div.removeChild(gLabels[i]);
+    gLabels.length = idx; // discard unused labels in JS too
 }
 
 function animate() {
@@ -663,9 +673,9 @@ function animate() {
     if(animStart != null || controls.autoRotate)
         requestAnimationFrame(animate);
 
-    gAnimReentrant = false;
+    if(document.getElementById('labels_div').style.display != "none") PaintAxes();
 
-    UpdateLabels();
+    gAnimReentrant = false;
 }
 
 function SetVisibility(col, state, elem, str)
@@ -889,7 +899,7 @@ window.PhysicalAxes = function()
 {
     // For now these are the only type implemented
     document.getElementById('labels_div').style.display = "initial";
-    UpdateLabels();
+    requestAnimationFrame(animate);
 }
 
 function OnClick()

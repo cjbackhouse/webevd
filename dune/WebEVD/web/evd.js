@@ -11,6 +11,13 @@ document.getElementById('runbox').value = run;
 document.getElementById('subrunbox').value = subrun;
 document.getElementById('evtbox').value = evt;
 
+const AXES_NONE = 0;
+const AXES_CMCM = 1;
+const AXES_WIRECM = 2;
+const AXES_WIRETICK = 3;
+
+let gAxesType = AXES_NONE;
+
 document.OnKeyDown = function(evt)
 {
     if(evt.keyCode == 13) { // enter
@@ -235,6 +242,9 @@ let hitvtxs = {}; // map indexed by reco algo
 
 let apalabels_div = document.getElementById('apalabels_div');
 
+let wireaxes = [[], [], [], [], []];
+let tickaxes = [[], [], [], [], []];
+
 for(let key in planes){
     let plane = planes[key];
     let c = ArrToVec(plane.center);
@@ -344,6 +354,20 @@ for(let key in planes){
         div.pos = c; // stash the 3D position on the HTML element
         apalabels_div.appendChild(div);
     }
+
+    let r0 = c.clone();
+    r0.addScaledVector(a, -1);
+    r0.addScaledVector(d, -1);
+    let r1 = c.clone();
+    r1.addScaledVector(a, +1);
+    r1.addScaledVector(d, -1);
+    wireaxes[plane.view].push({r0: r0, r1: r1, w: plane.nwires});
+    if(uvlayer != plane.view) wireaxes[uvlayer].push({r0: r0, r1: r1, w: plane.nwires});
+    let r2 = c.clone();
+    r2.addScaledVector(a, -1);
+    r2.addScaledVector(d, +1);
+    tickaxes[plane.view].push({r0: r0, r1: r2, w: plane.nticks});
+    if(uvlayer != plane.view) tickaxes[uvlayer].push({r0: r0, r1: r2, w: plane.nticks});
 
     for(let label in xhits){
         if(!(label in hitvtxs)) hitvtxs[label] = {}; // indexed by pair of layers
@@ -595,19 +619,24 @@ function ProjectToScreenPixels(r)
 let axislabels_div = document.getElementById('axislabels_div');
 
 // NB destroys r0 and r1. Returns new idx
-function PaintAxis(idx, r0, r1, w1, sign = '')
+function PaintAxis(ax, idx)
 {
+    if(ax.sign == undefined) ax.sign = '';
+
+    const W = renderer.domElement.width;
+    const H = renderer.domElement.height;
+
+    let r0 = ax.r0.clone();
+    let r1 = ax.r1.clone();
     ProjectToScreenPixels(r0);
     ProjectToScreenPixels(r1);
 
     if(Math.abs(r0.x-r1.x) < 1){ // vertical axis
-        const W = renderer.domElement.width;
         if(r0.x < 30) r0.x = r1.x = 30;
         if(r0.x > W-30) r0.x = r1.x = W-30;
     }
 
     if(Math.abs(r0.y-r1.y) < 1){ // horizontal axis
-        const H = renderer.domElement.height;
         if(r0.y < 30) r0.y = r1.y = 30;
         if(r0.y > H-30) r0.y = r1.y = H-30;
     }
@@ -616,17 +645,20 @@ function PaintAxis(idx, r0, r1, w1, sign = '')
 
     // Find the smallest stride without clashes
     let stride = 0;
-    for(stride of [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]){
-        let N = w1/stride;
+    for(stride of [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000]){
+        let N = ax.w/stride;
         if(Lsq/(N*N) > 50*50) break; // enough spacing to not clash, accept
     }
     if(stride == 0) return idx;
 
-    for(let w = 0; w <= w1; w += stride){
+    for(let w = 0; w <= ax.w; w += stride){
         // TODO with Vector2
         let r = new THREE.Vector3(0, 0, 0);
-        r.addScaledVector(r0, 1-w/w1);
-        r.addScaledVector(r1,   w/w1);
+        r.addScaledVector(r0, 1-w/ax.w);
+        r.addScaledVector(r1,   w/ax.w);
+
+        // Don't paint off the screen
+        if(r.x < 0 || r.y < 0 || r.x > W || r.y > H) continue;
 
         while(idx >= axislabels_div.children.length){
             let d = document.createElement('div');
@@ -636,7 +668,7 @@ function PaintAxis(idx, r0, r1, w1, sign = '')
 
         let label = axislabels_div.children[idx];
         idx += 1;
-        label.innerHTML = (w == 0) ? '0' : sign + w;
+        label.innerHTML = (w == 0) ? '0' : ax.sign + w;
         label.style.left = r.x + 'px';
         label.style.top  = r.y + 'px';
     }
@@ -644,23 +676,51 @@ function PaintAxis(idx, r0, r1, w1, sign = '')
     return idx;
 }
 
+let cmzaxes = [];
+cmzaxes.push({r0: new THREE.Vector3(0, 0, 0),
+              r1: new THREE.Vector3(0, 0, 1400),
+              w: 1400});
+let cmxaxes = [];
+cmxaxes.push({r0: new THREE.Vector3(0, 0, 0),
+              r1: new THREE.Vector3(360, 0, 0),
+              w: 360, sign: '+'});
+cmxaxes.push({r0: new THREE.Vector3(0, 0, 0),
+              r1: new THREE.Vector3(-360, 0, 0),
+              w: 360, sign: '-'});
+let cmyaxes = [];
+cmyaxes.push({r0: new THREE.Vector3(0, 0, 0),
+              r1: new THREE.Vector3(0, 600, 0),
+              w: 600, sign: '+'});
+cmyaxes.push({r0: new THREE.Vector3(0, 0, 0),
+              r1: new THREE.Vector3(0, -600, 0),
+              w: 600, sign: '-'});
+
 function PaintAxes()
 {
-    let labels_div = document.getElementById('labels_div');
-
     let idx = 0;
-    idx = PaintAxis(idx,
-                    new THREE.Vector3(0, 0, 0),
-                    new THREE.Vector3(0, 0, 1400),
-                    1400);
-    idx = PaintAxis(idx,
-                    new THREE.Vector3(0, 0, 0),
-                    new THREE.Vector3(360, 0, 0),
-                    360, '+');
-    idx = PaintAxis(idx,
-                    new THREE.Vector3(0, 0, 0),
-                    new THREE.Vector3(-360, 0, 0),
-                    360, '-');
+    if(gAxesType == AXES_CMCM){
+        for(let ax of cmxaxes) idx = PaintAxis(ax, idx);
+        for(let ax of cmyaxes) idx = PaintAxis(ax, idx);
+        for(let ax of cmzaxes) idx = PaintAxis(ax, idx);
+    }
+
+    if(gAxesType == AXES_WIRECM){
+        for(let ax of cmxaxes) idx = PaintAxis(ax, idx);
+    }
+
+    let layer = new THREE.Layers();
+    for(let i = 0; i <= 4; ++i){
+        layer.set(i);
+        if(camera.layers.test(layer)){
+            if(gAxesType == AXES_WIRECM){
+                for(let ax of wireaxes[i]) idx = PaintAxis(ax, idx);
+            }
+            if(gAxesType == AXES_WIRETICK){
+                for(let ax of wireaxes[i]) idx = PaintAxis(ax, idx);
+                for(let ax of tickaxes[i]) idx = PaintAxis(ax, idx);
+            }
+        }
+    }
 
     // TODO maybe just hide them unless there was a large change in length?
     for(let i = axislabels_div.children.length-1; i >= idx; --i){
@@ -700,7 +760,7 @@ function animate() {
     if(animStart != null || controls.autoRotate)
         requestAnimationFrame(animate);
 
-    if(axislabels_div.style.display != "none") PaintAxes();
+    PaintAxes();
     if(opdetlabels_div.style.display != "none") PaintLabels(opdetlabels_div);
     if(apalabels_div.style.display != "none") PaintLabels(apalabels_div);
 
@@ -921,13 +981,25 @@ window.Orbit = function()
 
 window.NoAxes = function()
 {
-    axislabels_div.style.display = "none";
+    gAxesType = AXES_NONE;
+    requestAnimationFrame(animate);
 }
 
 window.PhysicalAxes = function()
 {
-    // For now these are the only type implemented
-    axislabels_div.style.display = "initial";
+    gAxesType = AXES_CMCM;
+    requestAnimationFrame(animate);
+}
+
+window.WireCmAxes = function()
+{
+    gAxesType = AXES_WIRECM;
+    requestAnimationFrame(animate);
+}
+
+window.WireTickAxes = function()
+{
+    gAxesType = AXES_WIRETICK;
     requestAnimationFrame(animate);
 }
 

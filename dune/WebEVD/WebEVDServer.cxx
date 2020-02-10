@@ -345,7 +345,8 @@ public:
   {
     static_assert(std::is_arithmetic_v<T> ||
                   std::is_enum_v<T> ||
-                  std::is_same_v<T, std::string>);
+                  std::is_same_v<T, std::string> ||
+                  std::is_same_v<T, geo::OpDetID>);
     fStream << x;
     return *this;
   }
@@ -406,6 +407,12 @@ public:
     if(!t.instance().empty()) fStream << ":" << t.instance();
     if(!t.process().empty()) fStream << ":" << t.process();
     fStream << "\"";
+    return *this;
+  }
+
+  JSONFormatter& operator<<(const geo::OpDetID& id)
+  {
+    fStream << "\"" << id << "\"";
     return *this;
   }
 
@@ -480,9 +487,10 @@ JSONFormatter& operator<<(JSONFormatter& json, const geo::CryostatGeo& cryo)
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetGeo& opdet)
 {
-  return json << "{ center: " << TVector3(opdet.GetCenter().X(),
-                                          opdet.GetCenter().Y(),
-                                          opdet.GetCenter().Z()) << ", "
+  return json << "{ name: " << opdet.ID() << ", "
+              << "center: " << TVector3(opdet.GetCenter().X(),
+                                        opdet.GetCenter().Y(),
+                                        opdet.GetCenter().Z()) << ", "
               << "length: " << opdet.Length() << ", "
               << "width: " << opdet.Width() << ", "
               << "height: " << opdet.Height() << " }";

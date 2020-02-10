@@ -233,6 +233,8 @@ function push_icosahedron_vtxs(c, radius, vtxs, indices){
 
 let hitvtxs = {}; // map indexed by reco algo
 
+let apalabels_div = document.getElementById('apalabels_div');
+
 for(let key in planes){
     let plane = planes[key];
     let c = ArrToVec(plane.center);
@@ -334,6 +336,15 @@ for(let key in planes){
         } // end for label
     } // end for dws
 
+    if(plane.view == 2){ // collection
+        let div = document.createElement('div');
+        div.className = 'label';
+        // Cut off the plane number, we want the name of the whole APA/TPC
+        div.appendChild(document.createTextNode(key.slice(0, key.lastIndexOf(' '))));
+        div.pos = c; // stash the 3D position on the HTML element
+        apalabels_div.appendChild(div);
+    }
+
     for(let label in xhits){
         if(!(label in hitvtxs)) hitvtxs[label] = {}; // indexed by pair of layers
         if(xhits[label][key] == undefined) continue; // not necessarily hits on all planes
@@ -350,7 +361,7 @@ for(let key in planes){
             push_square_vtxs(hc, du, dv, hitvtxs[label][views]);
         } // end for hit
     } // end for label
-}
+} // end for planes
 
 com.divideScalar(nplanes);
 
@@ -461,6 +472,8 @@ scene.add(apas);
 // Physical OpDets
 let opdetgroup = new THREE.Group();
 
+let opdetlabels_div = document.getElementById('opdetlabels_div');
+
 for(let opdet of opdets){
     let c = ArrToVec(opdet.center);
     let dy = new THREE.Vector3(0, opdet.height/2., 0);
@@ -478,6 +491,12 @@ for(let opdet of opdets){
     for(let i = 0; i <= 5; ++i) line.layers.enable(i);
 
     opdetgroup.add(line);
+
+    let d = document.createElement('div');
+    d.className = 'label';
+    d.appendChild(document.createTextNode(opdet.name));
+    d.pos = c; // stash the 3D position on the HTML element
+    opdetlabels_div.appendChild(d);
 }
 
 scene.add(opdetgroup);
@@ -573,13 +592,11 @@ function ProjectToScreenPixels(r)
     r.y = (1-r.y)*H/2.;
 }
 
-let gLabels = []; // divs of the labels
+let axislabels_div = document.getElementById('axislabels_div');
 
 // NB destroys r0 and r1. Returns new idx
 function PaintAxis(idx, r0, r1, w1, sign = '')
 {
-    let labels_div = document.getElementById('labels_div');
-
     ProjectToScreenPixels(r0);
     ProjectToScreenPixels(r1);
 
@@ -603,7 +620,7 @@ function PaintAxis(idx, r0, r1, w1, sign = '')
         let N = w1/stride;
         if(Lsq/(N*N) > 50*50) break; // enough spacing to not clash, accept
     }
-    if(stride == 0) return 0;
+    if(stride == 0) return idx;
 
     for(let w = 0; w <= w1; w += stride){
         // TODO with Vector2
@@ -611,14 +628,13 @@ function PaintAxis(idx, r0, r1, w1, sign = '')
         r.addScaledVector(r0, 1-w/w1);
         r.addScaledVector(r1,   w/w1);
 
-        while(idx >= gLabels.length){
+        while(idx >= axislabels_div.children.length){
             let d = document.createElement('div');
             d.className = 'label';
-            labels_div.appendChild(d);
-            gLabels.push(d);
+            axislabels_div.appendChild(d);
         }
 
-        let label = gLabels[idx];
+        let label = axislabels_div.children[idx];
         idx += 1;
         label.innerHTML = (w == 0) ? '0' : sign + w;
         label.style.left = r.x + 'px';
@@ -647,8 +663,19 @@ function PaintAxes()
                     360, '-');
 
     // TODO maybe just hide them unless there was a large change in length?
-    for(let i = idx; i < gLabels.length; ++i) labels_div.removeChild(gLabels[i]);
-    gLabels.length = idx; // discard unused labels in JS too
+    for(let i = axislabels_div.children.length-1; i >= idx; --i){
+        axislabels_div.removeChild(axislabels_div.children[i]);
+    }
+}
+
+function PaintLabels(div)
+{
+    for(let label of div.children){
+        let r = label.pos.clone();
+        ProjectToScreenPixels(r);
+        label.style.left = r.x + 'px';
+        label.style.top  = r.y + 'px';
+    }
 }
 
 function animate() {
@@ -673,7 +700,9 @@ function animate() {
     if(animStart != null || controls.autoRotate)
         requestAnimationFrame(animate);
 
-    if(document.getElementById('labels_div').style.display != "none") PaintAxes();
+    if(axislabels_div.style.display != "none") PaintAxes();
+    if(opdetlabels_div.style.display != "none") PaintLabels(opdetlabels_div);
+    if(apalabels_div.style.display != "none") PaintLabels(apalabels_div);
 
     gAnimReentrant = false;
 }
@@ -892,13 +921,31 @@ window.Orbit = function()
 
 window.NoAxes = function()
 {
-    document.getElementById('labels_div').style.display = "none";
+    axislabels_div.style.display = "none";
 }
 
 window.PhysicalAxes = function()
 {
     // For now these are the only type implemented
-    document.getElementById('labels_div').style.display = "initial";
+    axislabels_div.style.display = "initial";
+    requestAnimationFrame(animate);
+}
+
+window.OpDetLabels = function()
+{
+    if(opdetlabels_div.style.display == "none")
+        opdetlabels_div.style.display = "initial";
+    else
+        opdetlabels_div.style.display = "none";
+    requestAnimationFrame(animate);
+}
+
+window.APALabels = function()
+{
+    if(apalabels_div.style.display == "none")
+        apalabels_div.style.display = "initial";
+    else
+        apalabels_div.style.display = "none";
     requestAnimationFrame(animate);
 }
 

@@ -47,11 +47,16 @@
       </div>
 
       <div class="dropdown">
-        <button>Axes...</button>
+        <button>Labels...</button>
         <div class="dropdown-content">
+          <b>Axes</b>
           <button onclick="NoAxes()">None</button>
           <button onclick="PhysicalAxes()">cm/cm</button>
+          <b>Labels</b>
+          <button onclick="APALabels()">APAs</button>
+          <button onclick="OpDetLabels()">OpDets</button>
         </div>
+
       </div>
 
       <div class="dropdown">
@@ -118,7 +123,9 @@
       Event:  <input id="evtbox"    onkeydown="OnKeyDown(event);"></input>
     </div>
 
-    <div style="overflow:hidden;display:none" id="labels_div"></div>
+    <div style="overflow:hidden;display:none" id="axislabels_div"></div>
+    <div style="overflow:hidden;display:none" id="apalabels_div"></div>
+    <div style="overflow:hidden;display:none" id="opdetlabels_div"></div>
 
     <script type="module" src="evd.js"></script>
   </body>

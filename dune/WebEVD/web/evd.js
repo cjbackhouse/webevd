@@ -92,74 +92,80 @@ function TextureLoadCallback(tex, mat, mipdim, texdim){
 
     // Until all the mipmaps are ready we stash them in the material
     if(mat.tmpmipmaps == undefined) mat.tmpmipmaps = {};
-    mat.tmpmipmaps[mipdim] = tex.image;
+    mat.tmpmipmaps[mipdim] = tex;
 
-    // Did we just succeed in loading the main texture?
-    if(mipdim == texdim){
-        tex.generateMipMaps = false;
+    // Longest run of mipmap levels
+    let maxdim;
+    for(maxdim = 1; maxdim <= texdim; maxdim *= 2){
+        if(!(maxdim in mat.tmpmipmaps)) break;
+    }
+    if(maxdim == 1) return;
+    maxdim /= 2;
+
+    // We have something to show so undo the temporary loading style
+    mat.opacity = 1;
+
+    // TODO - is it bad that the largest resolution image is in the
+    // main map and also the first element in the mipmap list?
+    mat.map = mat.tmpmipmaps[maxdim];
+
+    mat.map.mipmaps.length = 0;
+    for(let i = maxdim; i >= 1; i /= 2){
+        mat.map.mipmaps.push(mat.tmpmipmaps[i].image);
+    }
+
+    mat.generateMipMaps = false;
+    if(maxdim == texdim){
         // Go pixely rather than blurry when zoomed right in
-        tex.magFilter = THREE.NearestFilter;
-
-        // Assign to the material and undo the temporary loading style
-        mat.map = tex;
-        mat.opacity = 1;
-        mat.needsUpdate = true;
-        requestAnimationFrame(animate);
+        mat.map.magFilter = THREE.NearestFilter;
     }
-
-    // If the main texture is loaded
-    if(mat.map != null){
-        // And we have now loaded all of the mipmaps
-        let ok = true;
-        for(let i = 1; i <= texdim; i *= 2){
-            if(!(i in mat.tmpmipmaps)) ok = false;
-        }
-
-        if(ok){
-            // TODO - is it bad that the largest resolution image is in the
-            // main map and also the first element in the mipmap list?
-            for(let i = texdim; i >= 1; i /= 2){
-                mat.map.mipmaps.push(mat.tmpmipmaps[i]);
-            }
-            delete mat.tmpmipmaps;
-
-            mat.map.minFilter = THREE.LinearMipmapLinearFilter;
-            // Necessary to not see block edges, but is super ugly...
-            // Mostly because the wires are much wider than the ticks
-            // mat.map.minFilter = THREE.NearestMipmapLinearFilter;
-
-            mat.map.needsUpdate = true;
-            mat.needsUpdate = true;
-            requestAnimationFrame(animate);
-        }
+    else{
+        mat.map.magFilter = THREE.LinearMipmapLinearFilter;
     }
+    mat.map.minFilter = THREE.LinearMipmapLinearFilter;
+
+    // No more need for the temporaries
+    if(maxdim == texdim) delete mat.tmpmipmaps;
+
+    requestAnimationFrame(animate);
 }
 
 // Cache so we can request the same texture material multiple times without
 // duplication
 let gtexmats = {};
+let gmaxtexdim = 0;
 
 function TextureMaterial(fname, texdim){
-    if(fname in gtexmats) return gtexmats[fname];
+    if(fname in gtexmats) return gtexmats[fname].mat;
 
     // Make the material a transparent solid colour until the texture loads
     let mat = new THREE.MeshBasicMaterial( { color: 'white', opacity: .1, side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
-    gtexmats[fname] = mat;
+    gtexmats[fname] = {mat: mat, texdim: texdim};
 
+    if(texdim > gmaxtexdim) gmaxtexdim = texdim;
+
+    return mat;
+}
+
+function FinalizeTextures(){
     // Load all the mipmaps
-    for(let d = texdim; d >= 1; d /= 2){
-        new THREE.TextureLoader().load(fname+'_mip'+d+'.png',
-                                       function(t){
-                                           TextureLoadCallback(t, mat, d, texdim);
-                                       },
-                                       undefined,
-                                       function(err){
-                                           mat.opacity = 0;
-                                           mat.needsUpdate;
-                                           requestAnimationFrame(animate);
-                                           console.log('error loading', fname, d, err);
-                                       });
-    }
+    for(let d = 1; d <= gmaxtexdim; d *= 2){
+        for(let fname in gtexmats){
+            let mat = gtexmats[fname].mat;
+            let texdim = gtexmats[fname].texdim;
+            new THREE.TextureLoader().load(fname+'_mip'+d+'.png',
+                                           function(t){
+                                               TextureLoadCallback(t, mat, d, texdim);
+                                           },
+                                           undefined,
+                                           function(err){
+                                               mat.opacity = 0;
+                                               mat.needsUpdate = true;
+                                               requestAnimationFrame(animate);
+                                               console.log('error loading', fname, d, err);
+                                           });
+        } // end for fname
+    } // end for d
 
     return mat;
 }
@@ -1074,12 +1080,13 @@ window.addEventListener('unload', function(event){renderer.dispose();});
 controls.addEventListener('change', animate);
 window.addEventListener('resize', animate);
 
+FinalizeTextures();
+
 animate();
 
 // Amazingly these dominate render times, and we never change any objects'
 // position after the initial setup.
 scene.matrixAutoUpdate = false;
 scene.autoUpdate = false;
-
 
 console.log(renderer.info);

@@ -153,6 +153,7 @@ function FinalizeTextures(){
         for(let fname in gtexmats){
             let mat = gtexmats[fname].mat;
             let texdim = gtexmats[fname].texdim;
+            if(texdim < d) continue;
             new THREE.TextureLoader().load(fname+'_mip'+d+'.png',
                                            function(t){
                                                TextureLoadCallback(t, mat, d, texdim);

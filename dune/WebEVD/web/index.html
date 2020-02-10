@@ -55,8 +55,8 @@
           <button onclick="WireCmAxes()">wire/cm</button>
           <button onclick="WireTickAxes()">wire/tick</button>
           <b>Labels</b>
-          <button onclick="APALabels()">APAs</button>
-          <button onclick="OpDetLabels()">OpDets</button>
+          <button id="tpclabels" onclick="TPCLabels()">TPCs</button>
+          <button id="opdetlabels" onclick="OpDetLabels()">OpDets</button>
         </div>
 
       </div>
@@ -126,7 +126,7 @@
     </div>
 
     <div style="overflow:hidden;" id="axislabels_div"></div>
-    <div style="overflow:hidden;display:none" id="apalabels_div"></div>
+    <div style="overflow:hidden;display:none" id="tpclabels_div"></div>
     <div style="overflow:hidden;display:none" id="opdetlabels_div"></div>
 
     <script type="module" src="evd.js"></script>

@@ -1,21 +1,39 @@
 body { margin: 0; }
-canvas { margin : 0;}
-div { margin : 0;}
+canvas { margin : 0; }
+div { margin : 0; }
 
 body.darktheme { color: green; background-color: black; }
 body.lighttheme { background-color: white; }
 
-.darktheme button { background-color: black; color : green; border-color: green; height : 2em; }
-.lighttheme button { background-color: white; border-color: gray; height : 2em; }
+button {
+    z-index: 1; /* doesn't seem to work (labels overdraw buttons) */
+    height: 2em;
+}
 
-input { background-color: transparent; height : 2em; border : 0px; }
+.darktheme button {
+    background-color: black;
+    color: green;
+    border-color: green;
+}
 
-.darktheme input { color : green; }
+.lighttheme button {
+    background-color: white;
+    border-color: gray;
+}
+
+input {
+    background-color: transparent;
+    height: 2em;
+    border: 0px;
+}
+
+.darktheme input { color: green; }
 
 /* The container <div> - needed to position the dropdown content */
 .dropdown {
     position: relative;
     display: inline-block;
+    z-index: 1;
 }
 
 /* Dropdown Content (Hidden by Default) */
@@ -28,10 +46,10 @@ input { background-color: transparent; height : 2em; border : 0px; }
 /* Match parent button width */
 /*.dropdown-content > button { width:100%;}*/
 /* HACK - allows track dropdown not to overflow */
-.dropdown-content > button { width:120%;}
+.dropdown-content > button { width: 120%; }
 
 /* Show the dropdown menu on hover */
-.dropdown:hover .dropdown-content {display: block;}
+.dropdown:hover .dropdown-content { display: block; }
 
 .label {
     position: absolute;

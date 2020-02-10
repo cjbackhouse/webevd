@@ -240,7 +240,7 @@ function push_icosahedron_vtxs(c, radius, vtxs, indices){
 
 let hitvtxs = {}; // map indexed by reco algo
 
-let apalabels_div = document.getElementById('apalabels_div');
+let tpclabels_div = document.getElementById('tpclabels_div');
 
 let wireaxes = [[], [], [], [], []];
 let tickaxes = [[], [], [], [], []];
@@ -352,7 +352,7 @@ for(let key in planes){
         // Cut off the plane number, we want the name of the whole APA/TPC
         div.appendChild(document.createTextNode(key.slice(0, key.lastIndexOf(' '))));
         div.pos = c; // stash the 3D position on the HTML element
-        apalabels_div.appendChild(div);
+        tpclabels_div.appendChild(div);
     }
 
     let r0 = c.clone();
@@ -762,7 +762,7 @@ function animate() {
 
     PaintAxes();
     if(opdetlabels_div.style.display != "none") PaintLabels(opdetlabels_div);
-    if(apalabels_div.style.display != "none") PaintLabels(apalabels_div);
+    if(tpclabels_div.style.display != "none") PaintLabels(tpclabels_div);
 
     gAnimReentrant = false;
 }
@@ -781,6 +781,25 @@ function SetVisibilityById(col, state, id, str)
 
 function Toggle(col, id, str){
     SetVisibilityById(col, !col.visible, id, str);
+    requestAnimationFrame(animate);
+}
+
+function SetVisibilityLabel(col, state, elem, str)
+{
+    col.style.display = state ? "initial" : "none";
+    // Tick and Cross emojis respectively
+    elem.innerHTML = (state ? '&#x2705 ' : '&#x274c ')+str;
+}
+
+function SetVisibilityByIdLabel(col, state, id, str)
+{
+    SetVisibilityLabel(col, state, document.getElementById(id), str);
+}
+
+function ToggleLabel(col, id, str){
+    SetVisibilityByIdLabel(col,
+                           col.style.display == "none",
+                           id, str);
     requestAnimationFrame(animate);
 }
 
@@ -1005,21 +1024,17 @@ window.WireTickAxes = function()
 
 window.OpDetLabels = function()
 {
-    if(opdetlabels_div.style.display == "none")
-        opdetlabels_div.style.display = "initial";
-    else
-        opdetlabels_div.style.display = "none";
-    requestAnimationFrame(animate);
+    ToggleLabel(opdetlabels_div, 'opdetlabels', 'OpDets');
 }
+// default
+SetVisibilityByIdLabel(opdetlabels_div, false, 'opdetlabels', 'OpDets')
 
-window.APALabels = function()
+window.TPCLabels = function()
 {
-    if(apalabels_div.style.display == "none")
-        apalabels_div.style.display = "initial";
-    else
-        apalabels_div.style.display = "none";
-    requestAnimationFrame(animate);
+    ToggleLabel(tpclabels_div, 'tpclabels', 'TPCs');
 }
+// default
+SetVisibilityByIdLabel(tpclabels_div, false, 'tpclabels', 'TPCs');
 
 function OnClick()
 {

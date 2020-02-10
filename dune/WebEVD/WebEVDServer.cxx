@@ -603,7 +603,7 @@ unsigned long HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
 
           if(adc != 0){
             // alpha
-            bytes(wire.Wire-w0.Wire, tick, 3) = std::min(abs(4*adc), 255);
+            bytes(wire.Wire-w0.Wire, tick, 3) = std::min(abs(adc), 255);
             if(adc > 0){
               // red
               bytes(wire.Wire-w0.Wire, tick, 0) = 255;

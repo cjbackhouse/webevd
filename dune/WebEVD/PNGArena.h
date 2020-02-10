@@ -14,10 +14,11 @@ namespace evd
   {
   public:
     // Square because seems to be necessary for mipmapping. Larger than this
-    // doesn't seem to work in the browser. Smaller won't fit the number of
-    // ticks we have.
-    static const int kArenaSize = 4096;//8192;
-    static const int kBlockSize = 64;
+    // doesn't seem to work in the browser.
+    static const int kArenaSize = 4096;
+    // We have APAs with 480 and 1148 wires. This fits them in 1 and 3 blocks
+    // without being too wasteful.
+    static const int kBlockSize = 512;
 
     PNGArena(const std::string& name);
 

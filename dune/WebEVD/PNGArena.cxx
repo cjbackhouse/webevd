@@ -4,6 +4,7 @@
 
 #include <png.h>
 #include <thread>
+#include <zlib.h>
 
 namespace evd
 {
@@ -109,11 +110,11 @@ namespace evd
     png_struct_def* png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     auto info_ptr = png_create_info_struct(png_ptr);
 
-    // Doesn't seem to have a huge effect. Setting zero generates huge files
-    //  png_set_compression_level(png_ptr, 9);
-
-    // Doesn't affect the file size, may be a small speedup
-    png_set_filter(png_ptr, 0, PNG_FILTER_NONE);
+    // I'm trying to optimize the compression speed, without blowing the file
+    // size up. It's far from clear these are the best parameters, but they do
+    // seem to be an improvement on the defaults.
+    png_set_compression_level(png_ptr, 1);
+    png_set_compression_strategy(png_ptr, Z_RLE);
 
     png_init_io(png_ptr, fp);
     png_set_IHDR(png_ptr, info_ptr, mipmapdim, mipmapdim,

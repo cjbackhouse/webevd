@@ -322,12 +322,16 @@ template<class T> T& operator<<(T& os, const PNGView& v)
       const int texdy = ((b-&v.arena.data[dataidx].front())/4)/v.arena.extent;
 
       os << "{"
-         << "dx: " << ix*PNGArena::kBlockSize << ", "
-         << "dy: " << iy*PNGArena::kBlockSize << ", "
+         << "x: " << ix*PNGArena::kBlockSize << ", "
+         << "y: " << iy*PNGArena::kBlockSize << ", "
+         << "dx: " << PNGArena::kBlockSize << ", "
+         << "dy: " << PNGArena::kBlockSize << ", "
          << "fname: \"" << v.arena.name << "_" << dataidx << "\", "
          << "texdim: " << v.arena.extent << ", "
-         << "texdx: " << texdx << ", "
-         << "texdy: " << texdy
+         << "u: " << texdx << ", "
+         << "v: " << texdy << ", "
+         << "du: " << PNGArena::kBlockSize << ", "
+         << "dv: " << PNGArena::kBlockSize
          << "}, ";
     }
   }

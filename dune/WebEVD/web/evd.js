@@ -304,21 +304,21 @@ for(let key in planes){
 
                 let blockc = c.clone();
                 // TODO hardcoding in (half) block size isn't good
-                blockc.addScaledVector(ArrToVec(plane.across), (block.dx+256-plane.nwires/2)*plane.pitch);
-                blockc.addScaledVector(ArrToVec(plane.normal), (block.dy+256-plane.nticks/2)*Math.abs(plane.tick_pitch));
+                blockc.addScaledVector(ArrToVec(plane.across), (block.x+block.dx/2-plane.nwires/2)*plane.pitch);
+                blockc.addScaledVector(ArrToVec(plane.normal), (block.y+block.dy/2-plane.nticks/2)*Math.abs(plane.tick_pitch));
 
-                let blocka = ArrToVec(plane.across).multiplyScalar(256*plane.pitch);
-                let blockd = ArrToVec(plane.normal).multiplyScalar(256*Math.abs(plane.tick_pitch));
+                let blocka = ArrToVec(plane.across).multiplyScalar(block.dx/2*plane.pitch);
+                let blockd = ArrToVec(plane.normal).multiplyScalar(block.dy/2*Math.abs(plane.tick_pitch));
 
                 vtxs = [];
                 push_square_vtxs(blockc, blocka, blockd, vtxs);
                 geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
                 // TODO ditto here
-                let u0 =   (block.texdx    )/block.texdim;
-                let v0 = 1-(block.texdy    )/block.texdim;
-                let u1 =   (block.texdx+512)/block.texdim;
-                let v1 = 1-(block.texdy+512)/block.texdim;
+                let u0 =   (block.u         )/block.texdim;
+                let v0 = 1-(block.v         )/block.texdim;
+                let u1 =   (block.u+block.du)/block.texdim;
+                let v1 = 1-(block.v+block.dv)/block.texdim;
 
                 let uvs = new Float32Array( [u1, v0,
                                              u1, v1,

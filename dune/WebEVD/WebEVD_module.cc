@@ -27,16 +27,13 @@ protected:
 
   art::ServiceHandle<geo::Geometry> fGeom;
   const detinfo::DetectorProperties* fDetProp;
-
-  bool fSeeking;
-  unsigned int fSeekRun, fSeekSubRun, fSeekEvent;
 };
 
 DEFINE_ART_MODULE(WebEVD)
 
 // ---------------------------------------------------------------------------
 WebEVD::WebEVD(const fhicl::ParameterSet& pset)
-  : EDAnalyzer(pset), fDetProp(art::ServiceHandle<detinfo::DetectorPropertiesService>()->provider()), fSeeking(false)
+  : EDAnalyzer(pset), fDetProp(art::ServiceHandle<detinfo::DetectorPropertiesService>()->provider())
 {
 }
 

@@ -398,10 +398,10 @@ public:
 
   JSONFormatter& operator<<(const TVector3& v)
   {
-    fStream << "["
-            << v.X() << ", "
-            << v.Y() << ", "
-            << v.Z() << "]";
+    *this << "["
+          << v.X() << ", "
+          << v.Y() << ", "
+          << v.Z() << "]";
     return *this;
   }
 

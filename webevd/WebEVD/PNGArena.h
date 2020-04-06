@@ -1,7 +1,7 @@
 #ifndef WEBEVD_PNGARENA_H
 #define WEBEVD_PNGARENA_H
 
-#include "dune/WebEVD/Temporaries.h"
+#include "webevd/WebEVD/Temporaries.h"
 
 #include <string>
 #include <vector>

@@ -1,7 +1,7 @@
 #ifndef WEBEVDSERVER_H
 #define WEBEVDSERVER_H
 
-#include "dune/WebEVD/Temporaries.h"
+#include "webevd/WebEVD/Temporaries.h"
 
 #include <string>
 #include <vector>

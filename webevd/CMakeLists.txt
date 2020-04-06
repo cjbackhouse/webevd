@@ -1,7 +1,3 @@
-# basic source code CMakeLists.txt
+set( IFDH_ART_DIR $ENV{IFDH_ART_DIR} )
 
-art_make( )
-
-install_headers()
-install_source()
-install_fhicl()
+add_subdirectory(WebEVD)

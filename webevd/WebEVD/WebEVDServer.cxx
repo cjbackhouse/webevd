@@ -1,8 +1,8 @@
 // Chris Backhouse - bckhouse@fnal.gov
 
-#include "dune/WebEVD/WebEVDServer.h"
+#include "webevd/WebEVD/WebEVDServer.h"
 
-#include "dune/WebEVD/PNGArena.h"
+#include "webevd/WebEVD/PNGArena.h"
 
 #include <string>
 
@@ -757,9 +757,9 @@ WriteFiles(const T& evt,
   // For development purposes we prefer to serve the files from the source
   // directory, which allows them to be live-edited with just a refresh of the
   // browser window to see them.
-  if(getenv("MRB_SOURCE")) cet::search_path("MRB_SOURCE").find_file("dunetpc/dune/WebEVD/web/", webdir);
+  if(getenv("MRB_SOURCE")) cet::search_path("MRB_SOURCE").find_file("webevd/webevd/WebEVD/web/", webdir);
   // Otherwise, serve the files from where they get installed
-  if(webdir.empty() && getenv("PRODUCTS") && getenv("DUNETPC_VERSION")) cet::search_path("PRODUCTS").find_file("dunetpc/"+std::string(getenv("DUNETPC_VERSION"))+"/webevd/", webdir);
+  if(webdir.empty() && getenv("PRODUCTS") && getenv("WEBEVD_VERSION")) cet::search_path("PRODUCTS").find_file("webevd/"+std::string(getenv("WEBEVD_VERSION"))+"/webevd/", webdir);
 
   if(webdir.empty()){
     std::cout << "Unable to find webevd files under $MRB_SOURCE or $PRODUCTS" << std::endl;

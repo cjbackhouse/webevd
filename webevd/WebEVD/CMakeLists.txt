@@ -40,8 +40,8 @@ set( evd_lib_list larcorealg_Geometry
 
 art_make( BASENAME_ONLY
           LIB_LIBRARIES ${evd_lib_list}
-          MODULE_LIBRARIES ${evd_lib_list} dune_WebEVD InputSeeker_service
-          SERVICE_LIBRARIES ${evd_lib_list} dune_WebEVD
+          MODULE_LIBRARIES ${evd_lib_list} webevd_WebEVD InputSeeker_service
+          SERVICE_LIBRARIES ${evd_lib_list} webevd_WebEVD
         )
 
 install_headers()

@@ -8,8 +8,8 @@
 #include "larcore/Geometry/Geometry.h"
 #include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
 
-#include "dune/WebEVD/WebEVDServer.h"
-#include "dune/WebEVD/InputSeeker.h"
+#include "webevd/WebEVD/WebEVDServer.h"
+#include "webevd/WebEVD/InputSeeker.h"
 
 namespace evd
 {

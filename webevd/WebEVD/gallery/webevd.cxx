@@ -10,7 +10,7 @@
 #include "larcore/Geometry/Geometry.h"
 #include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
 
-#include "dune/WebEVD/WebEVDServer.h"
+#include "webevd/WebEVD/WebEVDServer.h"
 
 void usage()
 {

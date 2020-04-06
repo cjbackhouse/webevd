@@ -13,7 +13,8 @@ link_directories( $ENV{LARCOREALG_LIB}
                   $ENV{LARDATAOBJ_LIB}
                   $ENV{LARDATAALG_LIB}
                   $ENV{FHICLCPP_LIB}
-                  $ENV{MRB_BUILDDIR}/dunetpc/lib/
+                  $ENV{DUNETPC_LIB} # For dune_artSupport
+                  $ENV{MRB_BUILDDIR}/webevd/lib/
                   )
 
 link_libraries( pthread
@@ -28,7 +29,7 @@ link_libraries( pthread
                 art_Framework_Services_Registry
                 png
                 fhiclcpp
-                dune_WebEVD
+                webevd_WebEVD
                 )
 
 add_executable(webevd webevd.cxx)

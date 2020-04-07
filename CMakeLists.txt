@@ -45,20 +45,16 @@ cet_set_compiler_flags(DIAGS CAUTIOUS
 cet_report_compiler_flags()
 
 # these are minimum required versions, not the actual product versions
-find_ups_product( larcoreobj )
-find_ups_product( larcore v1_00_00 )
-find_ups_product( larevt v1_00_00 )
+find_ups_product( art )
+find_ups_product( art_root_io )
+find_ups_product( larcore )
+find_ups_product( larcorealg )
+find_ups_product( lardata )
 find_ups_product( lardataobj )
 find_ups_product( lardataalg )
-find_ups_product( lardata v1_00_00 )
-find_ups_product( nutools v1_00_00 )
-find_ups_product( nurandom )
-find_ups_product( art v1_09_00 )
-find_ups_product( art_root_io )
-find_ups_product( clhep v2_1_3_0 )
-find_ups_product( messagefacility v1_10_00 )
-find_ups_product( cetbuildtools v3_10_00 )
-find_ups_product( gallery ) # TODO do I need gallery explicitly in ups/product_deps ?
+find_ups_product( nusimdata )
+find_ups_product( gallery )
+find_ups_product( cetbuildtools )
 
 # macros for dictionary and simple_plugin
 include(ArtDictionary)

@@ -5,7 +5,8 @@
 #include "canvas/Utilities/InputTag.h"
 #include "gallery/Event.h"
 
-#include "dune/ArtSupport/ArtServiceHelper.h"
+#include "webevd/ArtSupport/ArtServiceHelper.h"
+
 #include "art/Framework/Services/Registry/ServiceHandle.h"
 #include "larcore/Geometry/Geometry.h"
 #include "lardata/DetectorInfoServices/DetectorPropertiesService.h"

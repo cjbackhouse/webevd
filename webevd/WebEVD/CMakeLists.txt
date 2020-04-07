@@ -1,38 +1,21 @@
 include_directories( ${CMAKE_CURRENT_SOURCE_DIR} )
 
 # TODO rationalize
-set( evd_lib_list larcorealg_Geometry
-                  ${ART_FRAMEWORK_CORE}
+set( evd_lib_list ${ART_FRAMEWORK_CORE}
                   ${ART_FRAMEWORK_PRINCIPAL}
-                  ${ART_FRAMEWORK_SERVICES_REGISTRY}
-                  ${ART_FRAMEWORK_SERVICES_BASIC}
                   ${ART_ROOT_IO}
                   ${ART_ROOT_IO_ROOTINPUT_SOURCE}
-                  ${ART_ROOT_IO_TFILESERVICE_SERVICE}
-                  ${ART_ROOT_IO_TFILE_SUPPORT}
                   ${ROOT_BASIC_LIB_LIST}
-                  ${ROOT_CORE}
-                  ${ROOT_GEOM}
-                  ${ROOT_XMLIO}
-                  ${ROOT_GDML}
                   canvas
                   cetlib
                   cetlib_except
-                  ${Boost_SYSTEM_LIBRARY}
-                  larcore_Geometry_Geometry_service
-                  lardata_Utilities
-                  larevt_Filters
+                  larcorealg_Geometry
                   lardataobj_RawData
                   lardataobj_RecoBase
-                  larsim_MCCheater_BackTrackerService_service
-                  larsim_MCCheater_ParticleInventoryService_service
-                  lardata_ArtDataHelper
                   nusimdata_SimulationBase
                   art_Persistency_Common
                   art_Persistency_Provenance
-                  art_Utilities
                   ${MF_MESSAGELOGGER}
-                  ${FHICLCPP}
                   png
                   pthread
                   gallery

@@ -41,7 +41,8 @@ void ArtServiceHelper::load_services(std::string const& config)
 {
   cet::filepath_lookup lookup{"FHICL_FILE_PATH"};
   fhicl::intermediate_table table;
-  fhicl::parse_document(config, lookup, table);
+  std::istringstream is{config};
+  fhicl::parse_document(is, lookup, table);
   fhicl::ParameterSet pset;
   fhicl::make_ParameterSet(table, pset);
   static ArtServiceHelper helper{fully_processed(std::move(pset))};

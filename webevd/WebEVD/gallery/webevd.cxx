@@ -125,20 +125,20 @@ int main(int argc, char** argv)
   std::string fclConfig = "#include \"services_dune.fcl\"\n";
   if(isFD){
     fclConfig +=
-      "services:{@table::dunefd_services}\n"
-      "services.Geometry.GDML: \"dune10kt_v1_1x2x6.gdml\"\n";
+      "@table::dunefd_services\n"
+      "Geometry.GDML: \"dune10kt_v1_1x2x6.gdml\"\n";
     // TODO why is it necessary to manually specify the GDML?
   }
   else{
     fclConfig +=
-      "services:{@table::protodune_services}\n";
+      "@table::protodune_services\n";
   }
 
   fclConfig +=
-    "services.BackTrackerService: @erase       \n"
-    "services.PhotonBackTrackerService: @erase \n"
-    "services.LArFFT: @erase                   \n"
-    "services.TFileService: @erase             \n";
+    "BackTrackerService: @erase       \n"
+    "PhotonBackTrackerService: @erase \n"
+    "LArFFT: @erase                   \n"
+    "TFileService: @erase             \n";
 
   ArtServiceHelper::load_services(fclConfig);
 

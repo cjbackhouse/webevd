@@ -301,45 +301,6 @@ template<class T> Result WebEVDServer<T>::do_serve(Temporaries& tmp)
 }
 
 // ----------------------------------------------------------------------------
-template<class T> T& operator<<(T& os, const PNGView& v)
-{
-  os << "{blocks: [";
-  for(unsigned int ix = 0; ix < v.blocks.size(); ++ix){
-    for(unsigned int iy = 0; iy < v.blocks[ix].size(); ++iy){
-      const png_byte* b = v.blocks[ix][iy];
-      if(!b) continue;
-
-      int dataidx = 0;
-      for(unsigned int d = 0; d < v.arena.data.size(); ++d){
-        if(b >= &v.arena.data[d].front() &&
-           b <  &v.arena.data[d].front() + 4*v.arena.extent*v.arena.extent){
-          dataidx = d;
-          break;
-        }
-      }
-
-      const int texdx = ((b-&v.arena.data[dataidx].front())/4)%v.arena.extent;
-      const int texdy = ((b-&v.arena.data[dataidx].front())/4)/v.arena.extent;
-
-      os << "{"
-         << "x: " << ix*PNGArena::kBlockSize << ", "
-         << "y: " << iy*PNGArena::kBlockSize << ", "
-         << "dx: " << PNGArena::kBlockSize << ", "
-         << "dy: " << PNGArena::kBlockSize << ", "
-         << "fname: \"" << v.arena.name << "_" << dataidx << "\", "
-         << "texdim: " << v.arena.extent << ", "
-         << "u: " << texdx << ", "
-         << "v: " << texdy << ", "
-         << "du: " << PNGArena::kBlockSize << ", "
-         << "dv: " << PNGArena::kBlockSize
-         << "}, ";
-    }
-  }
-  os << "]}";
-  return os;
-}
-
-// ----------------------------------------------------------------------------
 class JSONFormatter
 {
 public:
@@ -500,6 +461,46 @@ JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetGeo& opdet)
               << "height: " << opdet.Height() << " }";
 }
 
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
+{
+  os << "{blocks: [";
+  for(unsigned int ix = 0; ix < v.blocks.size(); ++ix){
+    for(unsigned int iy = 0; iy < v.blocks[ix].size(); ++iy){
+      const png_byte* b = v.blocks[ix][iy];
+      if(!b) continue;
+
+      int dataidx = 0;
+      for(unsigned int d = 0; d < v.arena.data.size(); ++d){
+        if(b >= &v.arena.data[d].front() &&
+           b <  &v.arena.data[d].front() + 4*v.arena.extent*v.arena.extent){
+          dataidx = d;
+          break;
+        }
+      }
+
+      const int texdx = ((b-&v.arena.data[dataidx].front())/4)%v.arena.extent;
+      const int texdy = ((b-&v.arena.data[dataidx].front())/4)/v.arena.extent;
+
+      os << "{"
+         << "x: " << ix*PNGArena::kBlockSize << ", "
+         << "y: " << iy*PNGArena::kBlockSize << ", "
+         << "dx: " << PNGArena::kBlockSize << ", "
+         << "dy: " << PNGArena::kBlockSize << ", "
+         << "fname: \"" << v.arena.name << "_" << dataidx << "\", "
+         << "texdim: " << v.arena.extent << ", "
+         << "u: " << texdx << ", "
+         << "v: " << texdy << ", "
+         << "du: " << PNGArena::kBlockSize << ", "
+         << "dv: " << PNGArena::kBlockSize
+         << "}, ";
+    }
+  }
+  os << "]}";
+  return os;
+}
+
 // ----------------------------------------------------------------------------
 template<class T> std::vector<art::InputTag>
 getInputTags(const art::Event& evt)
@@ -587,7 +588,7 @@ unsigned long HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
 
     for(const raw::RawDigit& dig: *digs){
       for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
-        const geo::TPCID tpc(wire);
+        //        const geo::TPCID tpc(wire);
         const geo::PlaneID plane(wire);
 
         const geo::WireID w0 = geom->GetBeginWireID(plane);
@@ -644,7 +645,7 @@ unsigned long HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
 
     for(const recob::Wire& rbwire: *wires){
       for(geo::WireID wire: geom->ChannelToWire(rbwire.Channel())){
-        const geo::TPCID tpc(wire);
+        //        const geo::TPCID tpc(wire);
         const geo::PlaneID plane(wire);
 
         const geo::WireID w0 = geom->GetBeginWireID(plane);

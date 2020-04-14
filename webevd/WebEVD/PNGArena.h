@@ -10,6 +10,8 @@ typedef unsigned char png_byte;
 
 namespace evd
 {
+  class JSONFormatter;
+
   class PNGArena
   {
   public:
@@ -65,7 +67,7 @@ namespace evd
     }
 
   protected:
-    template<class T> friend T& operator<<(T&, const PNGView&);
+    friend JSONFormatter& operator<<(JSONFormatter&, const PNGView&);
 
     PNGArena& arena;
     int width, height;

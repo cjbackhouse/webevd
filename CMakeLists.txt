@@ -38,6 +38,8 @@ find_ups_product( nusimdata )
 find_ups_product( gallery )
 find_ups_product( art )
 find_ups_product( art_root_io )
+find_ups_product( lardataobj )
+find_ups_product( lardataalg )
 find_ups_product( lardata )
 
 # macros for dictionary and simple_plugin

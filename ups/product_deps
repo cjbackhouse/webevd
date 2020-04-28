@@ -34,7 +34,7 @@ flcdir  product_dir     fcl
 # These versions are based on the versions set up by larsoft v08_48_01
 
 product         version
-lardata         v08_15_01
+lardata         v08_15_04
 gallery         v1_14_02
 cetbuildtools   v7_15_01  -  only_for_build
 end_product_list

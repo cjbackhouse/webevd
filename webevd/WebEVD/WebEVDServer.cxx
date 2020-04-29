@@ -482,18 +482,20 @@ JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
 
       const int texdx = ((b-&v.arena.data[dataidx].front())/4)%v.arena.extent;
       const int texdy = ((b-&v.arena.data[dataidx].front())/4)/v.arena.extent;
+      // workaround for the debug build since static const int's have strange attributes
+      const int mykBlockSize = PNGArena::kBlockSize;
 
       os << "{"
          << "x: " << ix*PNGArena::kBlockSize << ", "
          << "y: " << iy*PNGArena::kBlockSize << ", "
-         << "dx: " << PNGArena::kBlockSize << ", "
-         << "dy: " << PNGArena::kBlockSize << ", "
+         << "dx: " << mykBlockSize << ", "
+         << "dy: " << mykBlockSize << ", "
          << "fname: \"" << v.arena.name << "_" << dataidx << "\", "
          << "texdim: " << v.arena.extent << ", "
          << "u: " << texdx << ", "
          << "v: " << texdy << ", "
-         << "du: " << PNGArena::kBlockSize << ", "
-         << "dv: " << PNGArena::kBlockSize
+         << "du: " << mykBlockSize << ", "
+         << "dv: " << mykBlockSize
          << "}, ";
     }
   }

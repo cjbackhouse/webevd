@@ -1,8 +1,8 @@
-# This @product_deps@ file defines dependencies for this package. 
+# This @product_deps@ file defines dependencies for this package.
 
 # The *parent* line must the first non-commented line and defines this product and version
 # The version should be of the form vxx_yy_zz (e.g. v01_02_03)
-parent webevd v08_48_01
+parent webevd v08_00_00
 defaultqual e19
 
 # These optional lines define the installed directories where headers,
@@ -20,8 +20,8 @@ defaultqual e19
 # fcldir  product_dir  fcl
 # libdir  fq_dir       lib
 # bindir  fq_dir       bin
-# gdmldir -  
-# fwdir   -  
+# gdmldir -
+# fwdir   -
 #
 incdir	product_dir	include
 libdir	fq_dir		lib
@@ -40,12 +40,16 @@ cetbuildtools   v7_15_01  -  only_for_build
 end_product_list
 
 # We now define allowed qualifiers and the corresponding qualifiers for the depdencies.
-# Make a table by adding columns before "notes". 
+# Make a table by adding columns before "notes".
 qualifier      lardata       gallery     notes
 e19:debug      e19:debug     e19:debug
 e19:prof       e19:prof      e19:prof
 c7:debug       c7:debug      c7:debug
 c7:prof        c7:prof       c7:prof
+e19:py2:debug  e19:py2:debug e19:py2:debug
+e19:py2:prof   e19:py2:prof  e19:py2:prof
+c7:py2:debug   c7:py2:debug  c7:py2:debug
+c7:py2:prof    c7:py2:prof   c7:py2:prof
 end_qualifier_list
 
 # Preserve tabs and formatting in emacs and vi / vim:

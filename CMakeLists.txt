@@ -1,25 +1,15 @@
 # ======================================================================
-#  larsoft main build file
+#  webevd main build file
 #
 #  cd .../path/to/build/directory
-#  source .../path/to/larsoft/ups/setup_for_development <-d|-p>
-#  cmake [-DCMAKE_INSTALL_PREFIX=/install/path]
-#        -DCMAKE_BUILD_TYPE=$CETPKG_TYPE
-#        $CETPKG_SOURCE
-#  make
-#  make test
-#  make install
-#  make package (builds distribution tarfile)
-# ======================================================================
-# LarSoft is an empty product
-# It sets up all of the larsoft ups products (lardata, larsim, larreco, etc.)
+#  source .../path/to/webevd/ups/setup_for_development <-d|-p>
+#  buildtool [-I /install/path] -bt[i] -jN
 # ======================================================================
 
+# use cmake 3.14 or later
+cmake_minimum_required (VERSION 3.12...3.14 FATAL_ERROR)
 
-# use cmake 2.8 or later
-cmake_minimum_required (VERSION 2.8)
-
-project(webevd)
+project(webevd LANGUAGES CXX)
 
 # cetbuildtools contains our cmake modules
 SET ( CETBUILDTOOLS_VERSION $ENV{CETBUILDTOOLS_VERSION} )
@@ -34,8 +24,6 @@ set(CMAKE_MODULE_PATH $ENV{CANVAS_ROOT_IO_DIR}/Modules
 include(CetCMakeEnv)
 cet_cmake_env()
 
-set_install_root()
-
 cet_set_compiler_flags(DIAGS CAUTIOUS
   WERROR
   NO_UNDEFINED
@@ -45,9 +33,12 @@ cet_set_compiler_flags(DIAGS CAUTIOUS
 cet_report_compiler_flags()
 
 # these are minimum required versions, not the actual product versions
-find_ups_product( lardata )
-find_ups_product( gallery )
 find_ups_product( cetbuildtools )
+find_ups_product( nusimdata )
+find_ups_product( gallery )
+find_ups_product( art )
+find_ups_product( art_root_io )
+find_ups_product( lardata )
 
 # macros for dictionary and simple_plugin
 include(ArtDictionary)

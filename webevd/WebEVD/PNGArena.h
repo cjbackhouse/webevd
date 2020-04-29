@@ -15,12 +15,14 @@ namespace evd
   class PNGArena
   {
   public:
-    // Square because seems to be necessary for mipmapping. Larger than this
-    // doesn't seem to work in the browser.
-    static const int kArenaSize = 4096;
-    // We have APAs with 480 and 1148 wires. This fits them in 1 and 3 blocks
-    // without being too wasteful.
-    static const int kBlockSize = 512;
+    enum{
+      // Square because seems to be necessary for mipmapping. Larger than this
+      // doesn't seem to work in the browser.
+      kArenaSize = 4096,
+      // We have APAs with 480 and 1148 wires. This fits them in 1 and 3 blocks
+      // without being too wasteful.
+      kBlockSize = 512
+    };
 
     PNGArena(const std::string& name);
 

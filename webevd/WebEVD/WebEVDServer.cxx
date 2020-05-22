@@ -24,7 +24,7 @@
 #include "lardataobj/RawData/raw.h" // Uncompress()
 
 #include "larcorealg/Geometry/GeometryCore.h"
-#include "lardataalg/DetectorInfo/DetectorProperties.h"
+#include "lardataalg/DetectorInfo/DetectorPropertiesData.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -709,7 +709,7 @@ void HandleHits(const TEvt& evt, const geo::GeometryCore* geom,
 // ----------------------------------------------------------------------------
 template<class TEvt>
 void HandlePlanes(const TEvt& evt, const geo::GeometryCore* geom,
-                  const detinfo::DetectorProperties* detprop,
+                  const detinfo::DetectorPropertiesData& detprop,
                   JSONFormatter& json, unsigned long maxTick)
 {
   json << "var planes = {\n";
@@ -726,8 +726,8 @@ void HandlePlanes(const TEvt& evt, const geo::GeometryCore* geom,
     const TVector3 wiredir = planegeo.GetWireDirection();
     const double depth = planegeo.Depth(); // really height
 
-    const double tick_origin = detprop->ConvertTicksToX(0, plane);
-    const double tick_pitch = detprop->ConvertTicksToX(1, plane) - tick_origin;
+    const double tick_origin = detprop.ConvertTicksToX(0, plane);
+    const double tick_pitch = detprop.ConvertTicksToX(1, plane) - tick_origin;
 
     json << "  " << plane << ": {"
          << "view: " << view << ", "
@@ -749,7 +749,7 @@ void HandlePlanes(const TEvt& evt, const geo::GeometryCore* geom,
 template<class T> void WebEVDServer<T>::
 WriteFiles(const T& evt,
            const geo::GeometryCore* geom,
-           const detinfo::DetectorProperties* detprop,
+           const detinfo::DetectorPropertiesData& detprop,
            Temporaries& tmp)
 {
   PNGArena arena("arena");
@@ -831,7 +831,7 @@ WriteFiles(const T& evt,
 template<class T> Result WebEVDServer<T>::
 serve(const T& evt,
       const geo::GeometryCore* geom,
-      const detinfo::DetectorProperties* detprop)
+      const detinfo::DetectorPropertiesData& detprop)
 {
   Temporaries tmp;
   WriteFiles(evt, geom, detprop, tmp);

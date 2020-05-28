@@ -26,14 +26,13 @@ protected:
   evd::WebEVDServer<art::Event> fServer;
 
   art::ServiceHandle<geo::Geometry> fGeom;
-  const detinfo::DetectorProperties* fDetProp;
 };
 
 DEFINE_ART_MODULE(WebEVD)
 
 // ---------------------------------------------------------------------------
 WebEVD::WebEVD(const fhicl::ParameterSet& pset)
-  : EDAnalyzer(pset), fDetProp(art::ServiceHandle<detinfo::DetectorPropertiesService>()->provider())
+  : EDAnalyzer(pset)
 {
 }
 
@@ -44,7 +43,8 @@ void WebEVD::endJob()
 
 void WebEVD::analyze(const art::Event& evt)
 {
-  const Result res = fServer.serve(evt, fGeom.get(), fDetProp);
+  auto const detProp = art::ServiceHandle<detinfo::DetectorPropertiesService>()->DataFor(evt);
+  const Result res = fServer.serve(evt, fGeom.get(), detProp);
 
   switch(res.code){
   case kNEXT:

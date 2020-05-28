@@ -12,6 +12,7 @@ set( evd_lib_list ${ART_FRAMEWORK_CORE}
                   larcorealg_Geometry
                   lardataobj_RawData
                   lardataobj_RecoBase
+                  lardataalg_DetectorInfo
                   nusimdata_SimulationBase
                   art_Persistency_Common
                   art_Persistency_Provenance

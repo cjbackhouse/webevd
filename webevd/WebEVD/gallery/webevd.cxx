@@ -143,7 +143,7 @@ int main(int argc, char** argv)
   ArtServiceHelper::load_services(fclConfig);
 
   const geo::GeometryCore* geom = art::ServiceHandle<geo::Geometry>()->provider();
-  const detinfo::DetectorProperties* detprop = art::ServiceHandle<detinfo::DetectorPropertiesService>()->provider();
+  const detinfo::DetectorPropertiesData detprop = art::ServiceHandle<detinfo::DetectorPropertiesService>()->DataForJob();
 
   std::cout << geom->GDMLFile() << std::endl;
 

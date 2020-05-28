@@ -7,7 +7,7 @@
 #include <vector>
 
 namespace geo{class GeometryCore;}
-namespace detinfo{class DetectorProperties;}
+namespace detinfo{class DetectorPropertiesData;}
 
 namespace evd
 {
@@ -26,14 +26,14 @@ namespace evd
 
     Result serve(const T& evt,
                  const geo::GeometryCore* geom,
-                 const detinfo::DetectorProperties* detprop);
+                 const detinfo::DetectorPropertiesData& detprop);
 
   protected:
     template<class PROD> using HandleT = typename T::template HandleT<std::vector<PROD>>;
 
     void WriteFiles(const T& evt,
                     const geo::GeometryCore* geom,
-                    const detinfo::DetectorProperties* detprop,
+                    const detinfo::DetectorPropertiesData& detprop,
                     Temporaries& tmp);
 
     Result do_serve(Temporaries& tmp);

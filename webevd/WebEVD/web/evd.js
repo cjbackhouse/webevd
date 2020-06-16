@@ -582,13 +582,23 @@ function add_tracks(trajs, group, must_be_charged){
             col = other_colours[i % other_colours.length];
 
         i += 1;
-        let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
-        let trkgeom = new THREE.BufferGeometry();
         let ptarr = [];
         for(let pt of track.positions) ptarr = ptarr.concat(pt);
+
+        let trkgeom = new THREE.BufferGeometry();
         trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
 
-        let trkline = new THREE.Line(trkgeom, mat_trk);
+        // Draw track-like as a line.
+        // Draw shower-like as a point cloud.
+        let trkline = undefined
+        if (('pdg' in track) && (track.pdg == '11' || track.pdg == '22')) {
+            let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 3});
+            trkline = new THREE.Points(trkgeom, mat_trk);
+        } else {
+            let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
+            trkline = new THREE.Line(trkgeom, mat_trk);
+        }
+
         for(let i = 0; i <= 5; ++i) trkline.layers.enable(i);
         group.add(trkline);
     }

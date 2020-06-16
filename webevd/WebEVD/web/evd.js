@@ -176,9 +176,11 @@ let outlines = new THREE.Group();
 let digs = {}; // Groups indexed by label
 let wires = {};
 let truth = new THREE.Group();
+let chargedTruth = new THREE.Group();
 
 scene.add(outlines);
 scene.add(truth);
+scene.add(chargedTruth);
 
 let com = new THREE.Vector3();
 let nplanes = 0;
@@ -564,17 +566,26 @@ for(let label in spacepoints){
 }
 
 
-let colors = ['red', 'blue', 'green', 'orange', 'purple', 'skyblue'];
+let other_colours = ['green', 'purple', 'pink', 'red', 'violet']
+let pdg_colours = {'13': 'blue', '11': 'skyblue', '2212': 'orange', '211': 'magenta'}
 
-function add_tracks(trajs, group){
+function add_tracks(trajs, group, must_be_charged){
     let i = 0;
     for(let track of trajs){
-        let col = colors[i%colors.length];
+        let col = 'white';
+
+        if (('pdg' in track) && (track.pdg in pdg_colours))
+            col = pdg_colours[track.pdg];
+        else if (must_be_charged)
+            continue;
+        else
+            col = other_colours[i % other_colours.length];
+
         i += 1;
         let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
         let trkgeom = new THREE.BufferGeometry();
         let ptarr = [];
-        for(let pt of track) ptarr = ptarr.concat(pt);
+        for(let pt of track.positions) ptarr = ptarr.concat(pt);
         trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
 
         let trkline = new THREE.Line(trkgeom, mat_trk);
@@ -591,7 +602,8 @@ for(let label in tracks){
     AddDropdownToggle('tracks_dropdown', reco_tracks, label);
 }
 
-add_tracks(truth_trajs, truth);
+add_tracks(truth_trajs, truth, 0);
+add_tracks(truth_trajs, chargedTruth, 1);
 
 
 for(let label in xdigs){
@@ -812,7 +824,8 @@ function ToggleLabel(col, id, str){
 
 // TODO - would be better to have this javascript look up the buttons in the
 // HTML and attach the handlers to them.
-window.ToggleTruth = function(){Toggle(truth, 'truth', 'Truth');}
+window.ToggleAllTruth = function(){Toggle(truth, 'allTruth', 'All');}
+window.ToggleChargedTruth = function(){Toggle(chargedTruth, 'chargedTruth', 'Charged');}
 window.ToggleCryos = function(){Toggle(cryogroup, 'cryos', 'Cryostats');}
 window.ToggleAPAs = function(){Toggle(apas, 'apas', 'APAs');}
 window.ToggleOpDets = function(){Toggle(opdetgroup, 'opdets', 'OpDets');}
@@ -826,7 +839,8 @@ ThreeDControls();
 
 //SetVisibilityById(digs, false, 'rawdigits', 'RawDigits');
 //SetVisibilityById(wires, false, 'wires', 'Wires');
-SetVisibilityById(truth, true, 'truth', 'Truth');
+SetVisibilityById(truth, true, 'allTruth', 'All');
+SetVisibilityById(chargedTruth, false, 'chargedTruth', 'Charged');
 
 SetVisibilityById(cryogroup, true, 'cryos', 'Cryostats');
 SetVisibilityById(apas, true, 'apas', 'APAs');

@@ -425,20 +425,20 @@ JSONFormatter& operator<<(JSONFormatter& json, const recob::Track& track)
     pts.emplace_back(pt.X(), pt.Y(), pt.Z());
   }
 
-  return json << pts;
+  return json << "{ positions: " << pts << " }";
 }
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const simb::MCParticle& part)
 {
   const int apdg = abs(part.PdgCode());
-  if(apdg == 12 || apdg == 14 || apdg == 16) return json << "[]"; // decay neutrinos
+  if(apdg == 12 || apdg == 14 || apdg == 16) return json << "{ positions: [] }"; // decay neutrinos
   std::vector<TVector3> pts;
   for(unsigned int j = 0; j < part.NumberTrajectoryPoints(); ++j){
     pts.emplace_back(part.Vx(j), part.Vy(j), part.Vz(j));
   }
 
-  return json << pts;
+  return json << "{ pdg: " << apdg << ", positions: " << pts << " }";
 }
 
 // ----------------------------------------------------------------------------

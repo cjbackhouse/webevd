@@ -167,8 +167,6 @@ function FinalizeTextures(){
                                            });
         } // end for fname
     } // end for d
-
-    return mat;
 }
 
 

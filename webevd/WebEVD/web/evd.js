@@ -563,21 +563,43 @@ for(let label in spacepoints){
     AddDropdownToggle('spacepoints_dropdown', sps, label);
 }
 
+// Consistent colouring for each PDG.
+// Declared outside the function to ensure consistency across the many times
+// add_tracks is run.
+let colour_map = {};
+let colours = ['blue', 'skyblue', 'orange', 'magenta', 'green', 'purple', 'pink', 'red', 'violet', 'yellow']
+let neutral_particles = [-1, 22, 111, 2112, 311]
 
-let other_colours = ['green', 'purple', 'pink', 'red', 'violet']
-let pdg_colours = {'13': 'blue', '11': 'skyblue', '2212': 'orange', '211': 'magenta'}
+function is_neutral(pdg) {
+    if (neutral_particles.includes(pdg))
+        return true;
+    else if (pdg.length >= 10) // Nuclei
+        return true;
+
+    return false;
+}
 
 function add_tracks(trajs, group, must_be_charged){
     let i = 0;
     for(let track of trajs){
         let col = 'white';
+        let track_pdg = 'pdg' in track ? track.pdg : -1;
 
-        if (('pdg' in track) && (track.pdg in pdg_colours))
-            col = pdg_colours[track.pdg];
-        else if (must_be_charged)
+        if (is_neutral(track_pdg) && must_be_charged)
             continue;
-        else
-            col = other_colours[i % other_colours.length];
+
+        if (track_pdg in colour_map)
+            col = colour_map[track_pdg];
+        else if (track_pdg != -1){
+            if (is_neutral(track_pdg))
+                col = 'grey';
+            else
+                col = colours[i % colours.length];
+
+            colour_map[track_pdg] = col;
+        } else {
+            col = colours[i % colours.length];
+        }
 
         i += 1;
         let ptarr = [];
@@ -596,7 +618,7 @@ function add_tracks(trajs, group, must_be_charged){
 
 for(let label in tracks){
     let reco_tracks = new THREE.Group();
-    add_tracks(tracks[label], reco_tracks);
+    add_tracks(tracks[label], reco_tracks, false);
     scene.add(reco_tracks);
 
     AddDropdownToggle('tracks_dropdown', reco_tracks, label);

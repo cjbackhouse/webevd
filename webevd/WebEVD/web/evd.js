@@ -610,8 +610,8 @@ for(let label in tracks){
     AddDropdownToggle('tracks_dropdown', reco_tracks, label);
 }
 
-add_tracks(truth_trajs, truth, 0);
-add_tracks(truth_trajs, chargedTruth, 1);
+add_tracks(truth_trajs, truth, false);
+add_tracks(truth_trajs, chargedTruth, true);
 
 
 for(let label in xdigs){

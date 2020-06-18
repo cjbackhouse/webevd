@@ -609,7 +609,7 @@ function add_tracks(trajs, group, must_be_charged){
         trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
 
         let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
-        let trkline = trkline = new THREE.Line(trkgeom, mat_trk);
+        let trkline = new THREE.Line(trkgeom, mat_trk);
 
         for(let i = 0; i <= 5; ++i) trkline.layers.enable(i);
         group.add(trkline);

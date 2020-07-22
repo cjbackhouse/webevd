@@ -167,8 +167,6 @@ function FinalizeTextures(){
                                            });
         } // end for fname
     } // end for d
-
-    return mat;
 }
 
 
@@ -176,9 +174,11 @@ let outlines = new THREE.Group();
 let digs = {}; // Groups indexed by label
 let wires = {};
 let truth = new THREE.Group();
+let chargedTruth = new THREE.Group();
 
 scene.add(outlines);
 scene.add(truth);
+scene.add(chargedTruth);
 
 let com = new THREE.Vector3();
 let nplanes = 0;
@@ -563,21 +563,54 @@ for(let label in spacepoints){
     AddDropdownToggle('spacepoints_dropdown', sps, label);
 }
 
+// Consistent colouring for each PDG.
+// Declared outside the function to ensure consistency across the many times
+// add_tracks is run.
+let colour_map = {};
+let colours = ['blue', 'skyblue', 'orange', 'magenta', 'green', 'purple', 'pink', 'red', 'violet', 'yellow']
+let neutral_particles = [-1, 22, 111, 2112, 311]
 
-let colors = ['red', 'blue', 'green', 'orange', 'purple', 'skyblue'];
+function is_neutral(pdg) {
+    if (neutral_particles.includes(pdg))
+        return true;
+    else if (pdg.length >= 10) // Nuclei
+        return true;
 
-function add_tracks(trajs, group){
+    return false;
+}
+
+function add_tracks(trajs, group, must_be_charged){
     let i = 0;
     for(let track of trajs){
-        let col = colors[i%colors.length];
+        let col = 'white';
+        let track_pdg = 'pdg' in track ? track.pdg : -1;
+
+        if (is_neutral(track_pdg) && must_be_charged)
+            continue;
+
+        if (track_pdg in colour_map)
+            col = colour_map[track_pdg];
+        else if (track_pdg != -1){
+            if (is_neutral(track_pdg))
+                col = 'grey';
+            else
+                col = colours[i % colours.length];
+
+            colour_map[track_pdg] = col;
+        } else {
+            col = colours[i % colours.length];
+        }
+
         i += 1;
-        let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
-        let trkgeom = new THREE.BufferGeometry();
         let ptarr = [];
-        for(let pt of track) ptarr = ptarr.concat(pt);
+        for(let pt of track.positions) ptarr = ptarr.concat(pt);
+
+        let trkgeom = new THREE.BufferGeometry();
         trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
 
+        let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
         let trkline = new THREE.Line(trkgeom, mat_trk);
+
         for(let i = 0; i <= 5; ++i) trkline.layers.enable(i);
         group.add(trkline);
     }
@@ -585,13 +618,14 @@ function add_tracks(trajs, group){
 
 for(let label in tracks){
     let reco_tracks = new THREE.Group();
-    add_tracks(tracks[label], reco_tracks);
+    add_tracks(tracks[label], reco_tracks, false);
     scene.add(reco_tracks);
 
     AddDropdownToggle('tracks_dropdown', reco_tracks, label);
 }
 
-add_tracks(truth_trajs, truth);
+add_tracks(truth_trajs, truth, false);
+add_tracks(truth_trajs, chargedTruth, true);
 
 
 for(let label in xdigs){
@@ -812,7 +846,8 @@ function ToggleLabel(col, id, str){
 
 // TODO - would be better to have this javascript look up the buttons in the
 // HTML and attach the handlers to them.
-window.ToggleTruth = function(){Toggle(truth, 'truth', 'Truth');}
+window.ToggleAllTruth = function(){Toggle(truth, 'allTruth', 'All');}
+window.ToggleChargedTruth = function(){Toggle(chargedTruth, 'chargedTruth', 'Charged');}
 window.ToggleCryos = function(){Toggle(cryogroup, 'cryos', 'Cryostats');}
 window.ToggleAPAs = function(){Toggle(apas, 'apas', 'APAs');}
 window.ToggleOpDets = function(){Toggle(opdetgroup, 'opdets', 'OpDets');}
@@ -826,7 +861,8 @@ ThreeDControls();
 
 //SetVisibilityById(digs, false, 'rawdigits', 'RawDigits');
 //SetVisibilityById(wires, false, 'wires', 'Wires');
-SetVisibilityById(truth, true, 'truth', 'Truth');
+SetVisibilityById(truth, true, 'allTruth', 'All');
+SetVisibilityById(chargedTruth, false, 'chargedTruth', 'Charged');
 
 SetVisibilityById(cryogroup, true, 'cryos', 'Cryostats');
 SetVisibilityById(apas, true, 'apas', 'APAs');

@@ -17,6 +17,7 @@ set( evd_lib_list ${ART_FRAMEWORK_CORE}
                   art_Persistency_Provenance
                   ${MF_MESSAGELOGGER}
                   png
+                  z # zlib
                   pthread
                   gallery
                   )

@@ -1,8 +1,6 @@
 #ifndef WEBEVDSERVER_H
 #define WEBEVDSERVER_H
 
-#include "webevd/WebEVD/Temporaries.h"
-
 #include <string>
 #include <vector>
 
@@ -34,17 +32,18 @@ namespace evd
   protected:
     template<class PROD> using HandleT = typename T::template HandleT<std::vector<PROD>>;
 
-    void WriteFiles(const T& evt,
-                    const geo::GeometryCore* geom,
-                    const detinfo::DetectorProperties* detprop,
-                    Temporaries& tmp,
-                    PNGArena& arena);
+    void FillCoordsAndArena(const T& evt,
+                            const geo::GeometryCore* geom,
+                            const detinfo::DetectorProperties* detprop,
+                            PNGArena& arena);
 
-    Result do_serve(Temporaries& tmp, PNGArena& arena);
+    Result do_serve(PNGArena& arena);
 
     int EnsureListen();
 
     int fSock;
+
+    std::string fCoords;
   };
 }
 

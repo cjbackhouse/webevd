@@ -2,9 +2,11 @@
 
 #include "TString.h"
 
+#include <iostream>
+
 #include <png.h>
 #include <thread>
-#include <zlib.h>
+#include <zlib.h> // for Z_RLE
 
 namespace evd
 {
@@ -40,8 +42,8 @@ namespace evd
   // --------------------------------------------------------------------------
   void PNGArena::FillMipMaps(int d)// const
   {
-    png_byte* src = &(*data[d])[0];
-    png_byte* dest = &(*data[d])[kArenaSize*kArenaSize*4];
+    png_byte* src = data[d]->data();
+    png_byte* dest = data[d]->data() + kArenaSize*kArenaSize*4;
 
     for(int newdim = kArenaSize/2; newdim >= 1; newdim /= 2){
       const int olddim = newdim*2;
@@ -121,7 +123,7 @@ namespace evd
     std::vector<png_byte*> pdatas(dim);
     for(int i = 0; i < dim; ++i) pdatas[i] = src + i*dim*4;
 
-    png_set_rows(png_ptr, info_ptr, &pdatas.front());
+    png_set_rows(png_ptr, info_ptr, pdatas.data());
 
     png_init_io(png_ptr, fout);
 

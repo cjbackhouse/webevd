@@ -148,10 +148,11 @@ Result HandleCommand(std::string cmd, int sock)
 
   if(cmd.find("/seek/") == 0){
     code = kSEEK;
-    strtok(cmd.data(), "/"); // consumes the "seek" text
-    run    = atoi(strtok(0, "/"));
-    subrun = atoi(strtok(0, "/"));
-    evt    = atoi(strtok(0, "/"));
+    char* ctx;
+    strtok_r(cmd.data(), "/", &ctx); // consumes the "seek" text
+    run    = atoi(strtok_r(0, "/", &ctx));
+    subrun = atoi(strtok_r(0, "/", &ctx));
+    evt    = atoi(strtok_r(0, "/", &ctx));
     // if this goes wrong we get zeros, which seems a reasonable fallback
   }
 
@@ -173,43 +174,46 @@ Result HandleCommand(std::string cmd, int sock)
   }
 }
 
-void _HandleGet(std::string doc, int sock, Temporaries* tmp)
+// ----------------------------------------------------------------------------
+void _HandleGetPNG(std::string doc, int sock, PNGArena* arena)
+{
+  const std::string mime = "image/png";
+
+  write_ok200(sock, mime, false);
+
+  // Parse the filename
+  char* ctx;
+  strtok_r(&doc.front(), "_", &ctx); // consume the "arena" text
+  const int imgIdx = atoi(strtok_r(0, "_", &ctx));
+  const int dim = atoi(strtok_r(0, ".", &ctx));
+
+  FILE* f = fdopen(sock, "wb");
+  arena->WritePNGBytes(f, imgIdx, dim);
+
+  fclose(f);
+}
+
+// ----------------------------------------------------------------------------
+void _HandleGet(std::string doc, int sock, Temporaries* tmp, PNGArena* arena)
 {
   if(doc == "/") doc = "index.html";
 
-  // Serve all files except pngs compressed
-  const bool zip = doc.find(".png") == std::string::npos;
+  if(doc.find(".png") != std::string::npos){
+    _HandleGetPNG(doc, sock, arena);
+    return;
+  }
 
   // TODO - more sophisticated MIME type handling
   std::string mime = "text/html";
   if(doc.find(".js") != std::string::npos) mime = "application/javascript";
   if(doc.find(".css") != std::string::npos) mime = "text/css";
 
-  write_ok200(sock, mime, zip);
+  write_ok200(sock, mime, true);
 
-  write_file(zip ? tmp->compress(doc) : tmp->DirectoryName()+"/"+doc, sock);
+  write_file(tmp->compress(doc), sock);
 
   close(sock);
 }
-
-// ----------------------------------------------------------------------------
-std::thread HandleGet(std::string doc, int sock, Temporaries& tmp)
-{
-  std::thread t(_HandleGet, doc, sock, &tmp);
-  return t;
-}
-
-// ----------------------------------------------------------------------------
-/*
-int serve_dir(const std::string& dir, int port)
-{
-  return system(TString::Format("./busybox httpd -f -p %d -h %s", port, dir.c_str()).Data());
-
-  // Alternative ways to start an HTTP server
-  // system("cd web; python -m SimpleHTTPServer 8000");
-  // system("cd web; python3 -m http.server 8000");
-}
-*/
 
 // ----------------------------------------------------------------------------
 template<class T> int WebEVDServer<T>::EnsureListen()
@@ -258,7 +262,7 @@ template<class T> int WebEVDServer<T>::EnsureListen()
 }
 
 // ----------------------------------------------------------------------------
-template<class T> Result WebEVDServer<T>::do_serve(Temporaries& tmp)
+template<class T> Result WebEVDServer<T>::do_serve(Temporaries& tmp, PNGArena& arena)
 {
   std::cout << "Temp dir: " << tmp.DirectoryName() << std::endl;
 
@@ -274,10 +278,11 @@ template<class T> Result WebEVDServer<T>::do_serve(Temporaries& tmp)
 
     std::cout << req << std::endl;
 
-    char* verb = strtok(&req.front(), " ");
+    char* ctx;
+    char* verb = strtok_r(&req.front(), " ", &ctx);
 
     if(verb && std::string(verb) == "GET"){
-      char* freq = strtok(0, " ");
+      char* freq = strtok_r(0, " ", &ctx);
       std::string sreq(freq);
 
       if(sreq == "/NEXT" ||
@@ -288,7 +293,7 @@ template<class T> Result WebEVDServer<T>::do_serve(Temporaries& tmp)
         return HandleCommand(sreq, sock);
       }
       else{
-        threads.emplace_back(_HandleGet, sreq, sock, &tmp);
+        threads.emplace_back(_HandleGet, sreq, sock, &tmp, &arena);
       }
     }
     else{
@@ -473,15 +478,15 @@ JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
 
       int dataidx = 0;
       for(unsigned int d = 0; d < v.arena.data.size(); ++d){
-        if(b >= &v.arena.data[d].front() &&
-           b <  &v.arena.data[d].front() + 4*v.arena.extent*v.arena.extent){
+        if(b >= &v.arena.data[d]->front() &&
+           b <  &v.arena.data[d]->front() + 4*PNGArena::kArenaSize*PNGArena::kArenaSize){
           dataidx = d;
           break;
         }
       }
 
-      const int texdx = ((b-&v.arena.data[dataidx].front())/4)%v.arena.extent;
-      const int texdy = ((b-&v.arena.data[dataidx].front())/4)/v.arena.extent;
+      const int texdx = ((b-&v.arena.data[dataidx]->front())/4)%PNGArena::kArenaSize;
+      const int texdy = ((b-&v.arena.data[dataidx]->front())/4)/PNGArena::kArenaSize;
 
       os << "{"
          << "x: " << ix*PNGArena::kBlockSize << ", "
@@ -489,7 +494,7 @@ JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
          << "dx: " << PNGArena::kBlockSize << ", "
          << "dy: " << PNGArena::kBlockSize << ", "
          << "fname: \"" << v.arena.name << "_" << dataidx << "\", "
-         << "texdim: " << v.arena.extent << ", "
+         << "texdim: " << PNGArena::kArenaSize << ", "
          << "u: " << texdx << ", "
          << "v: " << texdy << ", "
          << "du: " << PNGArena::kBlockSize << ", "
@@ -750,10 +755,9 @@ template<class T> void WebEVDServer<T>::
 WriteFiles(const T& evt,
            const geo::GeometryCore* geom,
            const detinfo::DetectorProperties* detprop,
-           Temporaries& tmp)
+           Temporaries& tmp,
+           PNGArena& arena)
 {
-  PNGArena arena("arena");
-
   std::string webdir;
   // For development purposes we prefer to serve the files from the source
   // directory, which allows them to be live-edited with just a refresh of the
@@ -821,10 +825,6 @@ WriteFiles(const T& evt,
     if(i != geom->NOpDets()-1) json << ",\n"; else json << "\n";
   }
   json << "];\n";
-
-  std::cout << "Writing " << arena.name << std::endl;
-
-  WriteToPNGWithMipMaps(tmp, arena.name, arena);
 }
 
 // ----------------------------------------------------------------------------
@@ -834,8 +834,9 @@ serve(const T& evt,
       const detinfo::DetectorProperties* detprop)
 {
   Temporaries tmp;
-  WriteFiles(evt, geom, detprop, tmp);
-  return do_serve(tmp);
+  PNGArena arena("arena");
+  WriteFiles(evt, geom, detprop, tmp, arena);
+  return do_serve(tmp, arena);
 }
 
 template class WebEVDServer<art::Event>;

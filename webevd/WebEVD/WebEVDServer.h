@@ -11,6 +11,9 @@ namespace detinfo{class DetectorProperties;}
 
 namespace evd
 {
+  class PNGArena;
+  class PNGServer;
+
   enum EResult{kNEXT, kPREV, kQUIT, kERROR, kSEEK};
   struct Result{
     Result(EResult c) : code(c) {}
@@ -34,9 +37,10 @@ namespace evd
     void WriteFiles(const T& evt,
                     const geo::GeometryCore* geom,
                     const detinfo::DetectorProperties* detprop,
-                    Temporaries& tmp);
+                    Temporaries& tmp,
+                    PNGArena& arena);
 
-    Result do_serve(Temporaries& tmp);
+    Result do_serve(Temporaries& tmp, PNGArena& arena);
 
     int EnsureListen();
 

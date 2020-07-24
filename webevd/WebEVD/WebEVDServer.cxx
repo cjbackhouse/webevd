@@ -515,6 +515,27 @@ SerializeProductByLabel(const TEvt& evt,
   }
 }
 
+std::array<double, 3> ColorRamp(double frac)
+{
+  if(frac < 0) frac = 0;
+  if(frac > 1) frac = 1;
+  const int i0 = frac*8; // avoids working explicitly with stops
+
+  // Case 55 (rainbow) from https://root.cern.ch/doc/master/TColor_8cxx_source.html#l02516
+  //  const double stops[9] = { 0.0000, 0.1250, 0.2500, 0.3750, 0.5000, 0.6250, 0.7500, 0.8750, 1.0000};
+  const double red[9]   = {  0./255.,   5./255.,  15./255.,  35./255., 102./255., 196./255., 208./255., 199./255., 110./255.};
+  const double green[9] = {  0./255.,  48./255., 124./255., 192./255., 206./255., 226./255.,  97./255.,  16./255.,   0./255.};
+  const double blue[9]  = { 99./255., 142./255., 198./255., 201./255.,  90./255.,  22./255.,  13./255.,   8./255.,   2./255.};
+
+  if(i0 == 8) return {red[8], green[8], blue[8]};
+
+  const double di = frac*8-i0;
+
+  return {red[i0]*(1-di) + red[i0+1]*di,
+      green[i0]*(1-di) + green[i0+1]*di,
+      blue[i0]*(1-di) + blue[i0+1]*di};
+}
+
 // ----------------------------------------------------------------------------
 template<class T> void SerializeEventID(const T& evt, JSONFormatter& json)
 {
@@ -881,9 +902,15 @@ protected:
             if(adc != 0){
               // alpha
               bytes(wire.Wire-w0.Wire, tick, 3) = std::min(abs(adc), 255);
-              if(adc > 0){
+              if(true){//adc > 0){
+                const std::array<double, 3> rgb = ColorRamp(std::max(std::min(adc/800., 1.), 0.));
+
+                bytes(wire.Wire-w0.Wire, tick, 0) = 255*rgb[0];
+                bytes(wire.Wire-w0.Wire, tick, 1) = 255*rgb[1];
+                bytes(wire.Wire-w0.Wire, tick, 2) = 255*rgb[2];
+
                 // red
-                bytes(wire.Wire-w0.Wire, tick, 0) = 255;
+                //              bytes(wire.Wire-w0.Wire, tick, 0) = 255;
               }
               else{
                 // blue

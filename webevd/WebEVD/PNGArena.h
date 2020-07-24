@@ -3,6 +3,7 @@
 
 #include "webevd/WebEVD/Temporaries.h"
 
+#include <array>
 #include <memory>
 #include <string>
 #include <vector>

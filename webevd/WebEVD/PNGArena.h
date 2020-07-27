@@ -1,10 +1,9 @@
 #ifndef WEBEVD_PNGARENA_H
 #define WEBEVD_PNGARENA_H
 
-#include "webevd/WebEVD/Temporaries.h"
-
 #include <array>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 

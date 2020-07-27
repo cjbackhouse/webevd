@@ -31,6 +31,13 @@
 //#include <netinet/in.h>
 #include <netinet/ip.h> /* superset of previous */
 
+#include <sys/types.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+
+#include "zlib.h"
+
 #include <thread>
 
 namespace std{
@@ -77,6 +84,18 @@ void write_ok200(int sock,
   str += "\r\n";
 
   write(sock, &str.front(), str.size());
+}
+
+void write_notfound404(int sock)
+{
+  const char str[] =
+    "HTTP/1.0 404 Not Found\r\n"
+    "Server: WebEVD/1.0.0\r\n"
+    "Content-Type: text/plain\r\n"
+    "\r\n"
+    "404. Huh?\r\n";
+
+  write(sock, str, strlen(str));
 }
 
 void write_unimp501(int sock)
@@ -175,6 +194,26 @@ Result HandleCommand(std::string cmd, int sock)
 }
 
 // ----------------------------------------------------------------------------
+std::string FindWebDir()
+{
+  std::string webdir;
+
+  // For development purposes we prefer to serve the files from the source
+  // directory, which allows them to be live-edited with just a refresh of the
+  // browser window to see them.
+  if(getenv("MRB_SOURCE")) cet::search_path("MRB_SOURCE").find_file("webevd/webevd/WebEVD/web/", webdir);
+  // Otherwise, serve the files from where they get installed
+  if(webdir.empty() && getenv("PRODUCTS") && getenv("WEBEVD_VERSION")) cet::search_path("PRODUCTS").find_file("webevd/"+std::string(getenv("WEBEVD_VERSION"))+"/webevd/", webdir);
+
+  if(webdir.empty()){
+    std::cout << "Unable to find webevd files under $MRB_SOURCE or $PRODUCTS" << std::endl;
+    abort();
+  }
+
+  return webdir;
+}
+
+// ----------------------------------------------------------------------------
 void _HandleGetPNG(std::string doc, int sock, PNGArena* arena)
 {
   const std::string mime = "image/png";
@@ -189,14 +228,76 @@ void _HandleGetPNG(std::string doc, int sock, PNGArena* arena)
 
   FILE* f = fdopen(sock, "wb");
   arena->WritePNGBytes(f, imgIdx, dim);
-
   fclose(f);
 }
 
 // ----------------------------------------------------------------------------
-void _HandleGet(std::string doc, int sock, Temporaries* tmp, PNGArena* arena)
+void gzip_buffer(unsigned char* src,
+                 int length,
+                 std::vector<unsigned char>& dest,
+                 int level)
 {
-  if(doc == "/") doc = "index.html";
+  // C++20 will allow to use designated initializers here
+  z_stream strm;
+  strm.zalloc = Z_NULL;
+  strm.zfree = Z_NULL;
+  strm.opaque = Z_NULL;
+
+  strm.next_in = src;
+  strm.avail_in = length;
+
+  // The 16 here is the secret sauce to get gzip header and trailer for some
+  // reason...
+  deflateInit2(&strm, level, Z_DEFLATED, 15 | 16, 9, Z_DEFAULT_STRATEGY);
+
+  // If we allocate a big enough buffer we can deflate in one pass
+  dest.resize(deflateBound(&strm, length));
+
+  strm.next_out = dest.data();
+  strm.avail_out = dest.size();
+
+  deflate(&strm, Z_FINISH);
+
+  dest.resize(dest.size() - strm.avail_out);
+
+  deflateEnd(&strm);
+}
+
+// ----------------------------------------------------------------------------
+void write_compressed_buffer(unsigned char* src,
+                             int length,
+                             int sock,
+                             int level)
+{
+  std::vector<unsigned char> dest;
+  gzip_buffer(src, length, dest, level);
+
+  std::cout << "Writing " << length << " bytes (compressed to " << dest.size() << ")\n" << std::endl;
+
+  write(sock, dest.data(), dest.size());
+}
+
+// ----------------------------------------------------------------------------
+void write_compressed_file(const std::string& loc, int fd_out, int level)
+{
+  int fd_in = open(loc.c_str(), O_RDONLY);
+
+  // Map in the whole file
+  struct stat st;
+  fstat(fd_in, &st);
+  unsigned char* src = (unsigned char*)mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fd_in, 0);
+
+  write_compressed_buffer(src, st.st_size, fd_out, level);
+
+  munmap(src, st.st_size);
+
+  close(fd_in);
+}
+
+// ----------------------------------------------------------------------------
+void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords)
+{
+  if(doc == "/") doc = "/index.html";
 
   if(doc.find(".png") != std::string::npos){
     _HandleGetPNG(doc, sock, arena);
@@ -208,9 +309,23 @@ void _HandleGet(std::string doc, int sock, Temporaries* tmp, PNGArena* arena)
   if(doc.find(".js") != std::string::npos) mime = "application/javascript";
   if(doc.find(".css") != std::string::npos) mime = "text/css";
 
-  write_ok200(sock, mime, true);
+  if(doc == "/coords.js"){
+    // Special treatment since it's not a real file
+    write_ok200(sock, mime, true);
+    write_compressed_buffer((unsigned char*)coords->c_str(), coords->size(), sock, Z_DEFAULT_COMPRESSION);
+  }
+  else{
+    // Don't accidentally serve any file we shouldn't
+    const std::set<std::string> whitelist = {"/evd.css", "/evd.js", "/favicon.ico", "/index.html"};
 
-  write_file(tmp->compress(doc), sock);
+    if(whitelist.count(doc)){
+      write_ok200(sock, mime, true);
+      write_compressed_file(FindWebDir()+doc, sock, Z_DEFAULT_COMPRESSION);
+    }
+    else{
+      write_notfound404(sock);
+    }
+  }
 
   close(sock);
 }
@@ -262,10 +377,8 @@ template<class T> int WebEVDServer<T>::EnsureListen()
 }
 
 // ----------------------------------------------------------------------------
-template<class T> Result WebEVDServer<T>::do_serve(Temporaries& tmp, PNGArena& arena)
+template<class T> Result WebEVDServer<T>::do_serve(PNGArena& arena)
 {
-  std::cout << "Temp dir: " << tmp.DirectoryName() << std::endl;
-
   if(EnsureListen() != 0) return kERROR;
 
   std::list<std::thread> threads;
@@ -293,7 +406,7 @@ template<class T> Result WebEVDServer<T>::do_serve(Temporaries& tmp, PNGArena& a
         return HandleCommand(sreq, sock);
       }
       else{
-        threads.emplace_back(_HandleGet, sreq, sock, &tmp, &arena);
+        threads.emplace_back(_HandleGet, sreq, sock, &arena, &fCoords);
       }
     }
     else{
@@ -309,7 +422,7 @@ template<class T> Result WebEVDServer<T>::do_serve(Temporaries& tmp, PNGArena& a
 class JSONFormatter
 {
 public:
-  JSONFormatter(std::ofstream& os) : fStream(os) {}
+  JSONFormatter(std::ostream& os) : fStream(os) {}
 
   template<class T> JSONFormatter& operator<<(const T& x)
   {
@@ -387,7 +500,7 @@ public:
   }
 
 protected:
-  std::ofstream& fStream;
+  std::ostream& fStream;
 };
 
 // ----------------------------------------------------------------------------
@@ -752,34 +865,12 @@ void HandlePlanes(const TEvt& evt, const geo::GeometryCore* geom,
 
 // ----------------------------------------------------------------------------
 template<class T> void WebEVDServer<T>::
-WriteFiles(const T& evt,
-           const geo::GeometryCore* geom,
-           const detinfo::DetectorProperties* detprop,
-           Temporaries& tmp,
-           PNGArena& arena)
+FillCoordsAndArena(const T& evt,
+                   const geo::GeometryCore* geom,
+                   const detinfo::DetectorProperties* detprop,
+                   PNGArena& arena)
 {
-  std::string webdir;
-  // For development purposes we prefer to serve the files from the source
-  // directory, which allows them to be live-edited with just a refresh of the
-  // browser window to see them.
-  if(getenv("MRB_SOURCE")) cet::search_path("MRB_SOURCE").find_file("webevd/webevd/WebEVD/web/", webdir);
-  // Otherwise, serve the files from where they get installed
-  if(webdir.empty() && getenv("PRODUCTS") && getenv("WEBEVD_VERSION")) cet::search_path("PRODUCTS").find_file("webevd/"+std::string(getenv("WEBEVD_VERSION"))+"/webevd/", webdir);
-
-  if(webdir.empty()){
-    std::cout << "Unable to find webevd files under $MRB_SOURCE or $PRODUCTS" << std::endl;
-    abort();
-  }
-
-  std::cout << "Web source files from " << webdir << std::endl;
-
-  tmp.symlink(webdir, "evd.js");
-  tmp.symlink(webdir, "evd.css");
-  tmp.symlink(webdir, "index.html");
-  //  tmp.symlink(webdir, "httpd.conf");
-  tmp.symlink(webdir, "favicon.ico");
-
-  std::ofstream outf = tmp.ofstream("coords.js");
+  std::stringstream outf;
 
   JSONFormatter json(outf);
 
@@ -825,6 +916,8 @@ WriteFiles(const T& evt,
     if(i != geom->NOpDets()-1) json << ",\n"; else json << "\n";
   }
   json << "];\n";
+
+  fCoords = outf.str();
 }
 
 // ----------------------------------------------------------------------------
@@ -833,10 +926,9 @@ serve(const T& evt,
       const geo::GeometryCore* geom,
       const detinfo::DetectorProperties* detprop)
 {
-  Temporaries tmp;
   PNGArena arena("arena");
-  WriteFiles(evt, geom, detprop, tmp, arena);
-  return do_serve(tmp, arena);
+  FillCoordsAndArena(evt, geom, detprop, arena);
+  return do_serve(arena);
 }
 
 template class WebEVDServer<art::Event>;

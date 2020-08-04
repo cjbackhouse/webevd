@@ -1120,8 +1120,6 @@ window.addEventListener('resize', animate);
 
 FinalizeTextures();
 
-window.Theme('bluetheme');
-
 animate();
 
 // Amazingly these dominate render times, and we never change any objects'

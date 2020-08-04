@@ -29,18 +29,12 @@ document.OnKeyDown = function(evt)
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@v0.110.0/build/three.module.js";
 import {OrbitControls} from "https://cdn.jsdelivr.net/npm/three@v0.110.0/examples/jsm/controls/OrbitControls.js";
 
-/*
-// This is all confusing, but should be able to fetch a JSON and read with .json()
-(async () => {
-    let response = await fetch('coords.js');
-    eval(response.text());
-    console.log('done');
-})();
-*/
 
-//fetch("coords.json")
-//    .then(response => response.json())
-//    .then(json => console.log(json));
+// Kick off the fetching of all the different JSONs
+let xhits = fetch("hits.json").then(response => response.json());
+let tracks = fetch("tracks.json").then(response => response.json());
+let truth_trajs = fetch("trajs.json").then(response => response.json());
+let spacepoints = fetch("spacepoints.json").then(response => response.json());
 
 let gAnimReentrant = false;
 
@@ -252,19 +246,30 @@ let tpclabels_div = document.getElementById('tpclabels_div');
 let wireaxes = [[], [], [], [], []];
 let tickaxes = [[], [], [], [], []];
 
+class PlaneGeom{
+    constructor(plane) {
+        this.c = ArrToVec(plane.center);
+        this.a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
+        this.d = ArrToVec(plane.normal).multiplyScalar(plane.nticks*Math.abs(plane.tick_pitch)/2.); // drift direction
+
+        this.c.set(plane.tick_origin, this.c.y, this.c.z);
+        this.c.add(this.d); // center in the drift direction too
+
+        this.uvlayer = 2;
+        if(plane.view != 2){
+            if(this.a.z/this.a.y > 0) this.uvlayer = 3; else this.uvlayer = 4;
+        }
+    }
+}
+
 for(let key in planes){
     let plane = planes[key];
-    let c = ArrToVec(plane.center);
-    let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
-    let d = ArrToVec(plane.normal).multiplyScalar(plane.nticks*Math.abs(plane.tick_pitch)/2.); // drift direction
+    let pg = new PlaneGeom(plane);
 
-    c.set(plane.tick_origin, c.y, c.z);
-
-    c.add(d); // center in the drift direction too
-
-    com.add(c);
+    com.add(pg.c);
     nplanes += 1; // javascript is silly and doesn't have any good size() method
 
+    // Learn something for the camera
     if(plane.view == 0){
         uperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
     }
@@ -274,7 +279,7 @@ for(let key in planes){
     }
 
     let vtxs = [];
-    push_square_vtxs(c, a, d, vtxs);
+    push_square_vtxs(pg.c, pg.a, pg.d, vtxs);
 
     let geom = new THREE.BufferGeometry();
     geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
@@ -284,13 +289,8 @@ for(let key in planes){
 
     outlines.add(line);
 
-    let uvlayer = 2;
-    if(plane.view != 2){
-        if(a.z/a.y > 0) uvlayer = 3; else uvlayer = 4;
-    }
-
     line.layers.set(plane.view);
-    line.layers.enable(uvlayer);
+    line.layers.enable(pg.uvlayer);
 
     for(let dws of [xdigs, xwires]){
         for(let label in dws){
@@ -302,8 +302,7 @@ for(let key in planes){
                 // texture file into a single geometry.
                 let geom = new THREE.BufferGeometry();
 
-                let blockc = c.clone();
-                // TODO hardcoding in (half) block size isn't good
+                let blockc = pg.c.clone();
                 blockc.addScaledVector(ArrToVec(plane.across), (block.x+block.dx/2-plane.nwires/2)*plane.pitch);
                 blockc.addScaledVector(ArrToVec(plane.normal), (block.y+block.dy/2-plane.nticks/2)*Math.abs(plane.tick_pitch));
 
@@ -348,7 +347,7 @@ for(let key in planes){
                     wires[label].add(dmesh);
                 }
 
-                dmesh.layers.enable(uvlayer);
+                dmesh.layers.enable(pg.uvlayer);
             } // end for block
         } // end for label
     } // end for dws
@@ -358,70 +357,79 @@ for(let key in planes){
         div.className = 'label';
         // Cut off the plane number, we want the name of the whole APA/TPC
         div.appendChild(document.createTextNode(key.slice(0, key.lastIndexOf(' '))));
-        div.pos = c; // stash the 3D position on the HTML element
+        div.pos = pg.c; // stash the 3D position on the HTML element
         tpclabels_div.appendChild(div);
     }
 
-    let r0 = c.clone();
-    r0.addScaledVector(a, -1);
-    r0.addScaledVector(d, -1);
-    let r1 = c.clone();
-    r1.addScaledVector(a, +1);
-    r1.addScaledVector(d, -1);
+    let r0 = pg.c.clone();
+    r0.addScaledVector(pg.a, -1);
+    r0.addScaledVector(pg.d, -1);
+    let r1 = pg.c.clone();
+    r1.addScaledVector(pg.a, +1);
+    r1.addScaledVector(pg.d, -1);
     wireaxes[plane.view].push({r0: r0, r1: r1, w: plane.nwires});
-    if(uvlayer != plane.view) wireaxes[uvlayer].push({r0: r0, r1: r1, w: plane.nwires});
-    let r2 = c.clone();
-    r2.addScaledVector(a, -1);
-    r2.addScaledVector(d, +1);
+    if(pg.uvlayer != plane.view) wireaxes[pg.uvlayer].push({r0: r0, r1: r1, w: plane.nwires});
+    let r2 = pg.c.clone();
+    r2.addScaledVector(pg.a, -1);
+    r2.addScaledVector(pg.d, +1);
     tickaxes[plane.view].push({r0: r0, r1: r2, w: plane.nticks});
-    if(uvlayer != plane.view) tickaxes[uvlayer].push({r0: r0, r1: r2, w: plane.nticks});
-
-    for(let label in xhits){
-        if(!(label in hitvtxs)) hitvtxs[label] = {}; // indexed by pair of layers
-        if(xhits[label][key] == undefined) continue; // not necessarily hits on all planes
-        for(let hit of xhits[label][key]){
-            let hc = c.clone();
-            hc.addScaledVector(a, (2.*hit.wire+1)/plane.nwires-1);
-            hc.addScaledVector(d, (2.*hit.tick+1)/plane.nticks-1);
-
-            let du = ArrToVec(plane.across).multiplyScalar(plane.pitch*.45);
-            let dv = ArrToVec(plane.normal).multiplyScalar(hit.rms*Math.abs(plane.tick_pitch));
-
-            let views = (plane.view, uvlayer);
-            if(!(views in hitvtxs[label])) hitvtxs[label][views] = [];
-            push_square_vtxs(hc, du, dv, hitvtxs[label][views]);
-        } // end for hit
-    } // end for label
-} // end for planes
+    if(pg.uvlayer != plane.view) tickaxes[pg.uvlayer].push({r0: r0, r1: r2, w: plane.nticks});
+} // end for key (planes)
 
 com.divideScalar(nplanes);
 
+// Now place reco hits according to the plane geometries
+xhits.then(xhits => {
+    for(let key in planes){
+        let plane = planes[key];
+        let pg = new PlaneGeom(plane);
 
-for(let label in hitvtxs){
-    let hits = new THREE.Group();
-    scene.add(hits);
+        for(let label in xhits){
+            if(!(label in hitvtxs)) hitvtxs[label] = {}; // indexed by pair of layers
+            if(xhits[label][key] == undefined) continue; // not necessarily hits on all planes
 
-    for(let views in hitvtxs[label]){
-        let hitgeom = new THREE.BufferGeometry();
+            for(let hit of xhits[label][key]){
+                let hc = pg.c.clone();
+                hc.addScaledVector(pg.a, (2.*hit.wire+1)/plane.nwires-1);
+                hc.addScaledVector(pg.d, (2.*hit.tick+1)/plane.nticks-1);
 
-        hitgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs[label][views]), 3));
+                let du = ArrToVec(plane.across).multiplyScalar(plane.pitch*.45);
+                let dv = ArrToVec(plane.normal).multiplyScalar(hit.rms*Math.abs(plane.tick_pitch));
 
-        let h = new THREE.Mesh(hitgeom, mat_hit);
-        h.layers.set(views[0]);
-        h.layers.enable(views[1]); // uvlayer
-        hits.add(h);
-    }
+                let views = (plane.view, pg.uvlayer);
+                if(!(views in hitvtxs[label])) hitvtxs[label][views] = [];
+                push_square_vtxs(hc, du, dv, hitvtxs[label][views]);
+            } // end for hit
+        } // end for label
+    } // end for key (planes)
 
-    let btn = document.createElement('button');
-    SetVisibility(hits, false, btn, label);
+    for(let label in hitvtxs){
+        let hits = new THREE.Group();
+        scene.add(hits);
 
-    btn.addEventListener('click', function(){
-        SetVisibility(hits, !hits.visible, btn, label);
-        requestAnimationFrame(animate);
-    });
+        for(let views in hitvtxs[label]){
+            let hitgeom = new THREE.BufferGeometry();
 
-    document.getElementById('hits_dropdown').appendChild(btn);
-}
+            hitgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs[label][views]), 3));
+
+            let h = new THREE.Mesh(hitgeom, mat_hit);
+            h.layers.set(views[0]);
+            h.layers.enable(views[1]); // uvlayer
+            hits.add(h);
+        }
+
+        let btn = document.createElement('button');
+        SetVisibility(hits, false, btn, label);
+
+        btn.addEventListener('click', function(){
+            SetVisibility(hits, !hits.visible, btn, label);
+            requestAnimationFrame(animate);
+        });
+
+        document.getElementById('hits_dropdown').appendChild(btn);
+    } // end for label
+
+}) // end "then" (xdigs)
 
 
 for(let key in reco_vtxs){
@@ -546,6 +554,8 @@ function AddDropdownToggle(dropdown_id, what, label, init = false)
     document.getElementById(dropdown_id).appendChild(btn);
 }
 
+
+spacepoints.then(spacepoints => {
 for(let label in spacepoints){
     let spvtxs = [];
     let spidxs = [];
@@ -562,6 +572,7 @@ for(let label in spacepoints){
 
     AddDropdownToggle('spacepoints_dropdown', sps, label);
 }
+}); // end then
 
 // Consistent colouring for each PDG.
 // Declared outside the function to ensure consistency across the many times
@@ -616,6 +627,7 @@ function add_tracks(trajs, group, must_be_charged){
     }
 }
 
+tracks.then(tracks => {
 for(let label in tracks){
     let reco_tracks = new THREE.Group();
     add_tracks(tracks[label], reco_tracks, false);
@@ -623,9 +635,10 @@ for(let label in tracks){
 
     AddDropdownToggle('tracks_dropdown', reco_tracks, label);
 }
+})
 
-add_tracks(truth_trajs, truth, false);
-add_tracks(truth_trajs, chargedTruth, true);
+truth_trajs.then(truth_trajs => add_tracks(truth_trajs, truth, false));
+truth_trajs.then(truth_trajs => add_tracks(truth_trajs, chargedTruth, true));
 
 
 for(let label in xdigs){

@@ -297,7 +297,7 @@ void write_compressed_file(const std::string& loc, int fd_out, int level)
 }
 
 // ----------------------------------------------------------------------------
-void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords)
+void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords, std::string* jsonsp, std::string* jsonhits, std::string* jsontrks, std::string* jsontrajs)
 {
   if(doc == "/") doc = "/index.html";
 
@@ -315,6 +315,26 @@ void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords)
     // Special treatment since it's not a real file
     write_ok200(sock, mime, true);
     write_compressed_buffer((unsigned char*)coords->c_str(), coords->size(), sock, Z_DEFAULT_COMPRESSION);
+  }
+  else if(doc == "/spacepoints.json"){
+    // TODO unify with above
+    write_ok200(sock, mime, true);
+    write_compressed_buffer((unsigned char*)jsonsp->c_str(), jsonsp->size(), sock, Z_DEFAULT_COMPRESSION);
+  }
+  else if(doc == "/hits.json"){
+    // TODO unify with above
+    write_ok200(sock, mime, true);
+    write_compressed_buffer((unsigned char*)jsonhits->c_str(), jsonhits->size(), sock, Z_DEFAULT_COMPRESSION);
+  }
+  else if(doc == "/tracks.json"){
+    // TODO unify with above
+    write_ok200(sock, mime, true);
+    write_compressed_buffer((unsigned char*)jsontrks->c_str(), jsontrks->size(), sock, Z_DEFAULT_COMPRESSION);
+  }
+  else if(doc == "/trajs.json"){
+    // TODO unify with above
+    write_ok200(sock, mime, true);
+    write_compressed_buffer((unsigned char*)jsontrajs->c_str(), jsontrajs->size(), sock, Z_DEFAULT_COMPRESSION);
   }
   else{
     // Don't accidentally serve any file we shouldn't
@@ -408,7 +428,7 @@ template<class T> Result WebEVDServer<T>::do_serve(PNGArena& arena)
         return HandleCommand(sreq, sock);
       }
       else{
-        threads.emplace_back(_HandleGet, sreq, sock, &arena, &fCoords);
+        threads.emplace_back(_HandleGet, sreq, sock, &arena, &fCoords, &fSpacePointJSON, &fHitsJSON, &fTracksJSON, &fTrajsJSON);
       }
     }
     else{
@@ -514,9 +534,9 @@ JSONFormatter& operator<<(JSONFormatter& json, const geo::PlaneID& plane)
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const recob::Hit& hit)
 {
-  return json << "{wire: " << geo::WireID(hit.WireID()).Wire
-              << ", tick: " << hit.PeakTime()
-              << ", rms: " << hit.RMS() << "}";
+  return json << "{\"wire\": " << geo::WireID(hit.WireID()).Wire
+              << ", \"tick\": " << hit.PeakTime()
+              << ", \"rms\": " << hit.RMS() << "}";
 }
 
 // ----------------------------------------------------------------------------
@@ -545,20 +565,20 @@ JSONFormatter& operator<<(JSONFormatter& json, const recob::Track& track)
     pts.emplace_back(pt.X(), pt.Y(), pt.Z());
   }
 
-  return json << "{ positions: " << pts << " }";
+  return json << "{ \"positions\": " << pts << " }";
 }
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const simb::MCParticle& part)
 {
   const int apdg = abs(part.PdgCode());
-  if(apdg == 12 || apdg == 14 || apdg == 16) return json << "{ positions: [] }"; // decay neutrinos
+  if(apdg == 12 || apdg == 14 || apdg == 16) return json << "{ \"pdg\": " << apdg << ", \"positions\": [] }"; // decay neutrinos
   std::vector<TVector3> pts;
   for(unsigned int j = 0; j < part.NumberTrajectoryPoints(); ++j){
     pts.emplace_back(part.Vx(j), part.Vy(j), part.Vz(j));
   }
 
-  return json << "{ pdg: " << apdg << ", positions: " << pts << " }";
+  return json << "{ \"pdg\": " << apdg << ", \"positions\": " << pts << " }";
 }
 
 // ----------------------------------------------------------------------------
@@ -654,7 +674,8 @@ SerializeProduct(const TEvt& evt,
                  JSONFormatter& json,
                  const std::string& label)
 {
-  json << "var " << label << " = {\n";
+  if(!label.empty()) json << "var " << label << " = {\n"; else json << "{";
+
   const std::vector<art::InputTag> tags = getInputTags<TProd>(evt);
   for(const art::InputTag& tag: tags){
     json << "  " << tag << ": ";
@@ -669,25 +690,25 @@ SerializeProduct(const TEvt& evt,
     }
     json << "\n";
   }
-  json << "};\n\n";
+  if(!label.empty()) json << "};\n\n"; else json << "}";
 }
 
 // ----------------------------------------------------------------------------
 template<class TProd, class TEvt> void
 SerializeProductByLabel(const TEvt& evt,
                         const std::string& in_label,
-                        JSONFormatter& json,
-                        const std::string& out_label)
+                        JSONFormatter& json)
+                                                    //                        const std::string& out_label)
 {
   typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
   evt.getByLabel(in_label, prods);
 
-  json << "var " << out_label << " = ";
+  //  json << "var " << out_label << " = ";
   if(prods.isValid()){
-    json << *prods << ";\n\n";
+    json << *prods;// << ";\n\n";
   }
   else{
-    json << "[];\n\n";
+    json << "[]";//;\n\n";
   }
 }
 
@@ -822,7 +843,8 @@ void HandleHits(const TEvt& evt, const geo::GeometryCore* geom,
     }
   } // end for tag
 
-  json << "var xhits = " << plane_hits << ";\n\n";
+  //  json << "var xhits = " << plane_hits << ";\n\n";
+  json << plane_hits;
 }
 
 
@@ -873,8 +895,16 @@ FillCoordsAndArena(const T& evt,
                    PNGArena& arena)
 {
   std::stringstream outf;
+  std::stringstream outfsp;
+  std::stringstream outfhits;
+  std::stringstream outftrks;
+  std::stringstream outftrajs;
 
   JSONFormatter json(outf);
+  JSONFormatter jsonsp(outfsp);
+  JSONFormatter jsonhits(outfhits);
+  JSONFormatter jsontrk(outftrks);
+  JSONFormatter jsontraj(outftrajs);
 
   if constexpr (std::is_same_v<T, art::Event>){
     // art
@@ -894,17 +924,17 @@ FillCoordsAndArena(const T& evt,
   maxTick = std::max(maxTick, HandleDigits(evt, geom, arena, json));
   maxTick = std::max(maxTick, HandleWires (evt, geom, arena, json));
 
-  HandleHits(evt, geom, json);
+  HandleHits(evt, geom, jsonhits);
 
   HandlePlanes(evt, geom, detprop, json, maxTick);
 
-  SerializeProduct<recob::Track>(evt, json, "tracks");
+  SerializeProduct<recob::Track>(evt, jsontrk, "");//"tracks");
 
-  SerializeProduct<recob::SpacePoint>(evt, json, "spacepoints");
+  SerializeProduct<recob::SpacePoint>(evt, jsonsp, "");//, "spacepoints");
 
   SerializeProduct<recob::Vertex>(evt, json, "reco_vtxs");
 
-  SerializeProductByLabel<simb::MCParticle>(evt, "largeant", json, "truth_trajs");
+  SerializeProductByLabel<simb::MCParticle>(evt, "largeant", jsontraj);//"truth_trajs");
 
   json << "var cryos = [\n";
   for(const geo::CryostatGeo& cryo: geom->IterateCryostats()){
@@ -920,6 +950,11 @@ FillCoordsAndArena(const T& evt,
   json << "];\n";
 
   fCoords = outf.str();
+
+  fSpacePointJSON = outfsp.str();
+  fHitsJSON = outfhits.str();
+  fTracksJSON = outftrks.str();
+  fTrajsJSON = outftrajs.str();
 }
 
 // ----------------------------------------------------------------------------

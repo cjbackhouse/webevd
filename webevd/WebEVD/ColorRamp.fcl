@@ -28,14 +28,17 @@ blue_zero_red_stops: [
     [ -1, [   0, 0, 255, 255]], # blue
     [  0, [   0, 0, 255,   0]], # transparent blue
     [  0, [ 255, 0,   0,   0]], # transparent red
-    [ +1, [ 255, 0,   0, 255]] # red
+    [ +1, [ 255, 0,   0, 255]]  # red
 ]
 
 standard_colorramp:
 {
     WireStops: @local::rainbow_stops_transparent
-
     DigitStops: @local::blue_zero_red_stops
+
+    # The ADC values that will map to "1" in the color ramp
+    WireMaxADC:   50 # 25
+    DigitMaxADC: 255
 }
 
 END_PROLOG

@@ -12,10 +12,8 @@ namespace evd
 
     typedef std::array<unsigned char, 4> RGBA;
 
-    /// \a z should be from 0 to +1 (though this function will clamp)
-    RGBA GetRGBAWires(double z) const;
-    /// \a z should be from -1 to +1 (though this function will clamp)
-    RGBA GetRGBADigits(double z) const;
+    RGBA GetRGBAWires(int adc) const;
+    RGBA GetRGBADigits(int adc) const;
 
   protected:
     typedef std::vector<std::pair<double, RGBA>> Stops_t;
@@ -26,6 +24,8 @@ namespace evd
     RGBA InterpolateRGBA(const Stops_t& stops, double z) const;
 
     Stops_t fDigitStops, fWireStops;
+
+    int fDigitMaxADC, fWireMaxADC;
   };
 
 }

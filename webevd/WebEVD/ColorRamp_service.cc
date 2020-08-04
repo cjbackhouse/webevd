@@ -7,7 +7,9 @@ namespace evd
   //--------------------------------------------------------------------
   ColorRamp::ColorRamp(const fhicl::ParameterSet& pset) :
     fDigitStops(pset.get<Stops_t>("DigitStops")),
-    fWireStops(pset.get<Stops_t>("WireStops"))
+    fWireStops (pset.get<Stops_t>("WireStops")),
+    fDigitMaxADC(pset.get<int>("DigitMaxADC")),
+    fWireMaxADC (pset.get<int>("WireMaxADC"))
   {
 
   }
@@ -49,15 +51,15 @@ namespace evd
   }
 
   //--------------------------------------------------------------------
-  evd::ColorRamp::RGBA ColorRamp::GetRGBAWires(double z) const
+  evd::ColorRamp::RGBA ColorRamp::GetRGBAWires(int adc) const
   {
-    return InterpolateRGBA(fWireStops, z);
+    return InterpolateRGBA(fWireStops, double(adc)/fWireMaxADC);
   }
 
   //--------------------------------------------------------------------
-  evd::ColorRamp::RGBA ColorRamp::GetRGBADigits(double z) const
+  evd::ColorRamp::RGBA ColorRamp::GetRGBADigits(int adc) const
   {
-    return InterpolateRGBA(fDigitStops, z);
+    return InterpolateRGBA(fDigitStops, double(adc)/fDigitMaxADC);
   }
 }
 

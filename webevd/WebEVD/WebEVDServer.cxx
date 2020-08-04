@@ -779,7 +779,7 @@ unsigned long HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
         for(unsigned int tick = 0; tick < adcs.size(); ++tick){
           if(adcs[tick] <= 0) continue;
 
-          const ColorRamp::RGBA rgba = ramp->GetRGBA(adcs[tick]/25.);
+          const ColorRamp::RGBA rgba = ramp->GetRGBAWires(adcs[tick]/25.);
 
           for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick, c) = rgba[c];
         } // end for tick

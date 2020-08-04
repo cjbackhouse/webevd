@@ -9,6 +9,7 @@
 #include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
 
 #include "webevd/WebEVD/WebEVDServer.h"
+#include "webevd/WebEVD/ColorRamp.h"
 #include "webevd/WebEVD/InputSeeker.h"
 
 namespace evd
@@ -26,6 +27,7 @@ protected:
   evd::WebEVDServer<art::Event> fServer;
 
   art::ServiceHandle<geo::Geometry> fGeom;
+  art::ServiceHandle<evd::ColorRamp> fColorRamp;
 };
 
 DEFINE_ART_MODULE(WebEVD)
@@ -44,7 +46,7 @@ void WebEVD::endJob()
 void WebEVD::analyze(const art::Event& evt)
 {
   auto const detProp = art::ServiceHandle<detinfo::DetectorPropertiesService>()->DataFor(evt);
-  const Result res = fServer.serve(evt, fGeom.get(), detProp);
+  const Result res = fServer.serve(evt, fGeom.get(), detProp, fColorRamp.get());
 
   switch(res.code){
   case kNEXT:

@@ -9,8 +9,8 @@ namespace detinfo{class DetectorPropertiesData;}
 
 namespace evd
 {
+  class ColorRamp;
   class PNGArena;
-  class PNGServer;
 
   enum EResult{kNEXT, kPREV, kQUIT, kERROR, kSEEK};
   struct Result{
@@ -27,7 +27,8 @@ namespace evd
 
     Result serve(const T& evt,
                  const geo::GeometryCore* geom,
-                 const detinfo::DetectorPropertiesData& detprop);
+                 const detinfo::DetectorPropertiesData& detprop,
+                 const evd::ColorRamp* ramp);
 
   protected:
     template<class PROD> using HandleT = typename T::template HandleT<std::vector<PROD>>;
@@ -35,6 +36,7 @@ namespace evd
     void FillCoordsAndArena(const T& evt,
                             const geo::GeometryCore* geom,
                             const detinfo::DetectorPropertiesData& detprop,
+                            const evd::ColorRamp* ramp,
                             PNGArena& arena);
 
     Result do_serve(PNGArena& arena);

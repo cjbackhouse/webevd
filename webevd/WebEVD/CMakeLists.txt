@@ -24,9 +24,9 @@ set( evd_lib_list ${ART_FRAMEWORK_CORE}
                   )
 
 art_make( BASENAME_ONLY
-          LIB_LIBRARIES ${evd_lib_list}
-          MODULE_LIBRARIES ${evd_lib_list} webevd_WebEVD InputSeeker_service
-          SERVICE_LIBRARIES ${evd_lib_list} webevd_WebEVD
+          LIB_LIBRARIES ${evd_lib_list} ColorRamp_service
+          MODULE_LIBRARIES ${evd_lib_list} webevd_WebEVD InputSeeker_service ColorRamp_service
+          SERVICE_LIBRARIES ${evd_lib_list}
         )
 
 install_headers()

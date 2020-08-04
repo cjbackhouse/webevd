@@ -12,6 +12,7 @@
 #include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
 
 #include "webevd/WebEVD/WebEVDServer.h"
+#include "webevd/WebEVD/ColorRamp.h"
 
 void usage()
 {
@@ -122,7 +123,10 @@ int main(int argc, char** argv)
 
   evd::WebEVDServer<gallery::Event> server;
 
-  std::string fclConfig = "#include \"services_dune.fcl\"\n";
+  std::string fclConfig =
+    "#include \"services_dune.fcl\"\n"
+    "#include \"ColorRamp.fcl\"\n";
+
   if(isFD){
     fclConfig +=
       "@table::dunefd_services\n"
@@ -135,6 +139,7 @@ int main(int argc, char** argv)
   }
 
   fclConfig +=
+    "ColorRamp: @local::standard_colorramp \n"
     "BackTrackerService: @erase       \n"
     "PhotonBackTrackerService: @erase \n"
     "LArFFT: @erase                   \n"
@@ -144,6 +149,7 @@ int main(int argc, char** argv)
 
   const geo::GeometryCore* geom = art::ServiceHandle<geo::Geometry>()->provider();
   const detinfo::DetectorPropertiesData detprop = art::ServiceHandle<detinfo::DetectorPropertiesService>()->DataForJob();
+  const evd::ColorRamp* ramp = art::ServiceHandle<evd::ColorRamp>().get();
 
   std::cout << geom->GDMLFile() << std::endl;
 
@@ -172,7 +178,7 @@ int main(int argc, char** argv)
 
     std::cout << "\nDisplaying event " << aux.run() << ":" << aux.subRun() << ":" << aux.event() << std::endl << std::endl;
 
-    const evd::Result res = server.serve(evt, geom, detprop);
+    const evd::Result res = server.serve(evt, geom, detprop, ramp);
 
     switch(res.code){
     case evd::kNEXT:

@@ -4,6 +4,8 @@
 
 #include "webevd/WebEVD/PNGArena.h"
 
+#include "webevd/WebEVD/ColorRamp.h"
+
 #include <string>
 
 #include "fhiclcpp/ParameterSet.h"
@@ -694,6 +696,7 @@ SerializeProductByLabel(const TEvt& evt,
 // ----------------------------------------------------------------------------
 template<class TEvt>
 unsigned long HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
+                           const evd::ColorRamp* ramp,
                            PNGArena& arena, JSONFormatter& json)
 {
   unsigned long maxTick = 0;
@@ -727,16 +730,10 @@ unsigned long HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
           const int adc = adcs[tick] ? int(adcs[tick])-dig.GetPedestal() : 0;
 
           if(adc != 0){
-            // alpha
-            bytes(wire.Wire-w0.Wire, tick, 3) = std::min(abs(adc), 255);
-            if(adc > 0){
-              // red
-              bytes(wire.Wire-w0.Wire, tick, 0) = 255;
-            }
-            else{
-              // blue
-              bytes(wire.Wire-w0.Wire, tick, 2) = 255;
-            }
+
+            const ColorRamp::RGBA rgba = ramp->GetRGBADigits(adc/255.);
+
+            for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick, c) = rgba[c];
           }
         } // end for tick
       } // end for wire
@@ -751,6 +748,7 @@ unsigned long HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
 // ----------------------------------------------------------------------------
 template<class TEvt>
 unsigned long HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
+                          const evd::ColorRamp* ramp,
                           PNGArena& arena, JSONFormatter& json)
 {
   unsigned long maxTick = 0;
@@ -781,10 +779,9 @@ unsigned long HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
         for(unsigned int tick = 0; tick < adcs.size(); ++tick){
           if(adcs[tick] <= 0) continue;
 
-          // green channel
-          bytes(wire.Wire-w0.Wire, tick, 1) = 128; // dark green
-          // alpha channel
-          bytes(wire.Wire-w0.Wire, tick, 3) = std::max(0, std::min(int(10*adcs[tick]), 255));
+          const ColorRamp::RGBA rgba = ramp->GetRGBA(adcs[tick]/25.);
+
+          for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick, c) = rgba[c];
         } // end for tick
       } // end for wire
     } // end for rbwire
@@ -870,6 +867,7 @@ template<class T> void WebEVDServer<T>::
 FillCoordsAndArena(const T& evt,
                    const geo::GeometryCore* geom,
                    const detinfo::DetectorPropertiesData& detprop,
+                   const evd::ColorRamp* ramp,
                    PNGArena& arena)
 {
   std::stringstream outf;
@@ -891,8 +889,8 @@ FillCoordsAndArena(const T& evt,
   }
 
   unsigned long maxTick = 0;
-  maxTick = std::max(maxTick, HandleDigits(evt, geom, arena, json));
-  maxTick = std::max(maxTick, HandleWires (evt, geom, arena, json));
+  maxTick = std::max(maxTick, HandleDigits(evt, geom, ramp, arena, json));
+  maxTick = std::max(maxTick, HandleWires (evt, geom, ramp, arena, json));
 
   HandleHits(evt, geom, json);
 
@@ -926,14 +924,15 @@ FillCoordsAndArena(const T& evt,
 template<class T> Result WebEVDServer<T>::
 serve(const T& evt,
       const geo::GeometryCore* geom,
-      const detinfo::DetectorPropertiesData& detprop)
+      const detinfo::DetectorPropertiesData& detprop,
+      const ColorRamp* ramp)
 {
   // Don't want a sigpipe signal when the browser hangs up on us. This way we
   // will get an error return from the write() call instead.
   signal(SIGPIPE, SIG_IGN);
 
   PNGArena arena("arena");
-  FillCoordsAndArena(evt, geom, detprop, arena);
+  FillCoordsAndArena(evt, geom, detprop, ramp, arena);
   return do_serve(arena);
 }
 

@@ -1092,6 +1092,7 @@ window.Theme = function(theme)
     // renderer.setClearColor(window.getComputedStyle(document.body, null).getPropertyValue('backgroundColor'));
 
     if(theme == 'darktheme') renderer.setClearColor('black'); else renderer.setClearColor('white');
+    if(theme == 'bluetheme') renderer.setClearColor(new THREE.Color(0, 0, 99./255));
 
     requestAnimationFrame(animate);
 }
@@ -1118,6 +1119,8 @@ controls.addEventListener('change', animate);
 window.addEventListener('resize', animate);
 
 FinalizeTextures();
+
+window.Theme('bluetheme');
 
 animate();
 

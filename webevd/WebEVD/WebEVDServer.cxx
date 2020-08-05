@@ -36,6 +36,8 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
+#include "signal.h"
+
 #include "zlib.h"
 
 #include <thread>
@@ -926,6 +928,10 @@ serve(const T& evt,
       const geo::GeometryCore* geom,
       const detinfo::DetectorProperties* detprop)
 {
+  // Don't want a sigpipe signal when the browser hangs up on us. This way we
+  // will get an error return from the write() call instead.
+  signal(SIGPIPE, SIG_IGN);
+
   PNGArena arena("arena");
   FillCoordsAndArena(evt, geom, detprop, arena);
   return do_serve(arena);

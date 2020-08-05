@@ -82,6 +82,28 @@ namespace evd
     } // end for newdim
   }
 
+  // This is essentially what the libpng default version would be anyway. But
+  // by writing it ourselves we can just ignore failure (probably the browser
+  // hung up), rather than getting entangled in libpng's error handling.
+  void webevd_png_write_fn(png_struct_def* png_ptr,
+                           png_byte* buffer,
+                           long unsigned int nbytes)
+  {
+    FILE* fout = (FILE*)png_get_io_ptr(png_ptr);
+    const size_t ret = fwrite(buffer, 1, nbytes, fout);
+
+    if(ret != nbytes){
+      std::cout << "Error writing " << nbytes << " bytes of png -- returned " << ret << std::endl;
+      perror(0);
+      std::cout << std::endl;
+    }
+  }
+
+  void webevd_png_flush_fn(png_struct_def* png_ptr)
+  {
+    // Nothing to do here, but libpng requires we provide this
+  }
+
   // --------------------------------------------------------------------------
   void PNGArena::WritePNGBytes(FILE* fout, int imgIdx, int dim)
   {
@@ -125,7 +147,13 @@ namespace evd
 
     png_set_rows(png_ptr, info_ptr, pdatas.data());
 
-    png_init_io(png_ptr, fout);
+    // This works fine until libpng throws a fatal error when the browser hangs
+    // up
+    // png_init_io(png_ptr, fout);
+
+    // So set our own write function that does the same thing but ignores
+    // errors
+    png_set_write_fn(png_ptr, fout, webevd_png_write_fn, webevd_png_flush_fn);
 
     png_write_png(png_ptr, info_ptr, PNG_TRANSFORM_IDENTITY, NULL);
 

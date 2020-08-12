@@ -1,8 +1,6 @@
 #ifndef WEBEVDSERVER_H
 #define WEBEVDSERVER_H
 
-#include "webevd/WebEVD/Temporaries.h"
-
 #include <string>
 #include <vector>
 
@@ -11,6 +9,9 @@ namespace detinfo{class DetectorPropertiesData;}
 
 namespace evd
 {
+  class PNGArena;
+  class PNGServer;
+
   enum EResult{kNEXT, kPREV, kQUIT, kERROR, kSEEK};
   struct Result{
     Result(EResult c) : code(c) {}
@@ -31,16 +32,18 @@ namespace evd
   protected:
     template<class PROD> using HandleT = typename T::template HandleT<std::vector<PROD>>;
 
-    void WriteFiles(const T& evt,
-                    const geo::GeometryCore* geom,
-                    const detinfo::DetectorPropertiesData& detprop,
-                    Temporaries& tmp);
+    void FillCoordsAndArena(const T& evt,
+                            const geo::GeometryCore* geom,
+                            const detinfo::DetectorPropertiesData& detprop,
+                            PNGArena& arena);
 
-    Result do_serve(Temporaries& tmp);
+    Result do_serve(PNGArena& arena);
 
     int EnsureListen();
 
     int fSock;
+
+    std::string fCoords;
   };
 }
 

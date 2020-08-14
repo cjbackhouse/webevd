@@ -72,8 +72,8 @@ let mat_sps = new THREE.MeshBasicMaterial({color: 'blue'});
 
 let mat_vtxs = new THREE.MeshBasicMaterial({color: 'red'});
 
-function TextureLoadCallback(tex, mat, mipdim, texdim){
-    console.log('Loaded callback', mipdim, texdim);
+function TextureLoadCallback(tex, mat, fname, mipdim, texdim){
+    // console.log('Loaded callback', fname, mipdim, texdim);
 
     // This is how you would create a data texture if necessary
     // let canvas = document.createElement('canvas');
@@ -84,44 +84,46 @@ function TextureLoadCallback(tex, mat, mipdim, texdim){
     // let data = context.getImageData(0, 0, tex.image.width, tex.image.height).data;
     // let newtex = new THREE.DataTexture(data, tex.image.width, tex.image.height, THREE.RGBAFormat);
 
-    // Until all the mipmaps are ready we stash them in the material
-    if(mat.tmpmipmaps == undefined) mat.tmpmipmaps = {};
-    mat.tmpmipmaps[mipdim] = tex;
+    // This function will be called from order smallest to largest
 
-    // Longest run of mipmap levels
-    let maxdim;
-    for(maxdim = 1; maxdim <= texdim; maxdim *= 2){
-        if(!(maxdim in mat.tmpmipmaps)) break;
-    }
-    if(maxdim == 1) return;
-    maxdim /= 2;
+    // Material keeps messing with its mipmap list. Keep them stored here
+    if(mat.mipstash == undefined) mat.mipstash = [];
+    mat.mipstash.unshift(tex.image); // unshift() == push_front()
 
     // We have something to show so undo the temporary loading style
     mat.opacity = 1;
 
     // TODO - is it bad that the largest resolution image is in the
     // main map and also the first element in the mipmap list?
-    mat.map = mat.tmpmipmaps[maxdim];
-
-    mat.map.mipmaps.length = 0;
-    for(let i = maxdim; i >= 1; i /= 2){
-        mat.map.mipmaps.push(mat.tmpmipmaps[i].image);
-    }
-
     mat.generateMipMaps = false;
-    if(maxdim == texdim){
+    mat.map = tex;
+
+    if(mipdim == texdim){
         // Go pixely rather than blurry when zoomed right in
         mat.map.magFilter = THREE.NearestFilter;
     }
-    else{
-        mat.map.magFilter = THREE.LinearMipmapLinearFilter;
-    }
     mat.map.minFilter = THREE.LinearMipmapLinearFilter;
 
-    // No more need for the temporaries
-    if(maxdim == texdim) delete mat.tmpmipmaps;
+    mat.map.mipmaps = mat.mipstash;
+
+    mat.needsUpdate = true;
 
     requestAnimationFrame(animate);
+
+    // Request the next higher resolution version
+    if(mipdim < texdim){
+        new THREE.TextureLoader().load(fname+'_'+(mipdim*2)+'.png',
+                                       function(t){
+                                           TextureLoadCallback(t, mat, fname, mipdim*2, texdim);
+                                       },
+                                       undefined,
+                                       function(err){
+                                           mat.opacity = 0;
+                                           mat.needsUpdate = true;
+                                           requestAnimationFrame(animate);
+                                           console.log('error loading', fname, mipdim*2, err);
+                                       });
+    }
 }
 
 // Cache so we can request the same texture material multiple times without
@@ -142,25 +144,24 @@ function TextureMaterial(fname, texdim){
 }
 
 function FinalizeTextures(){
-    // Load all the mipmaps
-    for(let d = 1; d <= gmaxtexdim; d *= 2){
-        for(let fname in gtexmats){
-            let mat = gtexmats[fname].mat;
-            let texdim = gtexmats[fname].texdim;
-            if(texdim < d) continue;
-            new THREE.TextureLoader().load(fname+'_'+d+'.png',
-                                           function(t){
-                                               TextureLoadCallback(t, mat, d, texdim);
-                                           },
-                                           undefined,
-                                           function(err){
-                                               mat.opacity = 0;
-                                               mat.needsUpdate = true;
-                                               requestAnimationFrame(animate);
-                                               console.log('error loading', fname, d, err);
-                                           });
-        } // end for fname
-    } // end for d
+    // Load all the mipmaps at level 1, which will trigger the rest
+    for(let fname in gtexmats){
+        let mat = gtexmats[fname].mat;
+        let texdim = gtexmats[fname].texdim;
+        new THREE.TextureLoader().load(fname+'_1.png',
+                                       function(t){
+                                           TextureLoadCallback(t, mat, fname, 1, texdim);
+                                       },
+                                       undefined,
+                                       function(err){
+                                           mat.opacity = 0;
+                                           mat.needsUpdate = true;
+                                           requestAnimationFrame(animate);
+                                           console.log('error loading', fname, 1, err);
+                                       });
+    } // end for fname
+
+    gtexmats = []; // idempotent
 }
 
 
@@ -541,12 +542,14 @@ for(let opdet of opdets){
 scene.add(opdetgroup);
 
 
-function AddDropdownToggle(dropdown_id, what, label, init = false)
+function AddDropdownToggle(dropdown_id, what, label, init = false,
+                          texs = false)
 {
     let btn = document.createElement('button');
     SetVisibility(what, init, btn, label);
 
     btn.addEventListener('click', function(){
+        if(texs) FinalizeTextures();
         SetVisibility(what, !what.visible, btn, label);
         requestAnimationFrame(animate);
     });
@@ -642,11 +645,11 @@ truth_trajs.then(truth_trajs => add_tracks(truth_trajs, chargedTruth, true));
 
 
 for(let label in xdigs){
-    AddDropdownToggle('digs_dropdown', digs[label], label);
+    AddDropdownToggle('digs_dropdown', digs[label], label, false, true);
 }
 
 for(let label in xwires){
-    AddDropdownToggle('wires_dropdown', wires[label], label);
+    AddDropdownToggle('wires_dropdown', wires[label], label, false, true);
 }
 
 
@@ -1129,8 +1132,6 @@ window.addEventListener('unload', function(event){renderer.dispose();});
 
 controls.addEventListener('change', animate);
 window.addEventListener('resize', animate);
-
-FinalizeTextures();
 
 animate();
 

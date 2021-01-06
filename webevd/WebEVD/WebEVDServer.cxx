@@ -38,6 +38,8 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
+#include <dirent.h>
+
 #include "signal.h"
 
 #include "zlib.h"
@@ -97,7 +99,7 @@ void write_notfound404(int sock)
     "Server: WebEVD/1.0.0\r\n"
     "Content-Type: text/plain\r\n"
     "\r\n"
-    "404. Huh?\r\n";
+    "404 - file not found\r\n";
 
   write(sock, str, strlen(str));
 }
@@ -956,6 +958,107 @@ serve(const T& evt,
       else{
         threads.emplace_back(_HandleGet<T>, sreq, sock, &evt, &digs, &wires, geom, &detprop);
       }
+    }
+    else{
+      write_unimp501(sock);
+      close(sock);
+    }
+  }
+
+  // unreachable
+}
+
+// ----------------------------------------------------------------------------
+std::string CanonicalPath(const std::string& dir, const std::string basename)
+{
+  char* path = realpath((dir+"/"+basename).c_str(), 0);
+  if(!path) return "ERROR";
+  std::string ret(path);
+  free(path);
+  return ret;
+}
+
+// ----------------------------------------------------------------------------
+bool IsDirectory(const std::string& dir, dirent* ent)
+{
+#ifdef _DIRENT_HAVE_D_TYPE
+  const unsigned char type = ent->d_type;
+  // don't have to stat if we have d_type info, unless it's a symlink
+  if(type != DT_UNKNOWN && type != DT_LNK) return type == DT_DIR;
+#endif
+
+  struct stat st;
+  stat(CanonicalPath(dir, ent->d_name).c_str(), &st); // stat() follows symlinks
+
+  return S_ISDIR(st.st_mode);
+}
+
+// ----------------------------------------------------------------------------
+void HandleGetBrowser(const std::string& path, int sock)
+{
+  DIR* dir = opendir(path.c_str());
+
+  if(!dir){
+    write_notfound404(sock);
+    close(sock);
+    return;
+  }
+
+  std::vector<std::string> dirs, files;
+  while(dirent* ent = readdir(dir)){
+    if(IsDirectory(path, ent))
+      dirs.push_back(ent->d_name);
+    else
+      files.push_back(ent->d_name);
+  }
+  closedir(dir);
+
+  std::sort(dirs.begin(), dirs.end());
+  std::sort(files.begin(), files.end());
+
+  std::string buf;
+  buf += "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>"+path+"</title></head><body><h1>"+path+"</h1>\n";
+
+  for(const std::string& d: dirs){
+    buf += "<a href=\""+CanonicalPath(path, d)+"\">"+d+"</a><br>\n";
+  }
+  buf += "<hr>\n";
+  for(const std::string& f: files)
+    if(f.rfind(".root") == f.size()-5)
+      buf += "<a href=\""+CanonicalPath(path, f)+"\">"+f+"</a><br>\n";
+    else
+      buf += f+"<br>\n";
+
+  buf += "</body></html>\n";
+
+  write_ok200(sock, "text/html", true);
+
+  write_compressed_buffer((unsigned char*)buf.c_str(), buf.size(), sock, Z_DEFAULT_COMPRESSION);
+
+  close(sock);
+}
+
+// ----------------------------------------------------------------------------
+template<class T> Result WebEVDServer<T>::
+serve_browser()
+{
+  if(EnsureListen() != 0) return kERROR;
+
+  while(true){
+    int sock = accept(fSock, 0, 0);
+    if(sock == -1) return err("accept");
+
+    std::string req = read_all(sock);
+
+    std::cout << req << std::endl;
+
+    char* ctx;
+    char* verb = strtok_r(&req.front(), " ", &ctx);
+
+    if(verb && std::string(verb) == "GET"){
+      char* freq = strtok_r(0, " ", &ctx);
+      std::string sreq(freq);
+      HandleGetBrowser(sreq, sock);
     }
     else{
       write_unimp501(sock);

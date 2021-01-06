@@ -29,6 +29,8 @@ namespace evd
                  const geo::GeometryCore* geom,
                  const detinfo::DetectorPropertiesData& detprop);
 
+    Result serve_browser();
+
   protected:
     template<class PROD> using HandleT = typename T::template HandleT<std::vector<PROD>>;
 

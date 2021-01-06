@@ -15,5 +15,10 @@ cet_make_exec( webevd
                LIBRARIES ${evd_lib_list}
                )
 
+cet_make_exec( webevd_browser
+               SOURCE webevd_browser.cxx
+               LIBRARIES ${evd_lib_list}
+               )
+
 install_headers()
 install_source()

@@ -111,7 +111,7 @@ void write_unimp501(int sock)
     "Server: WebEVD/1.0.0\r\n"
     "Content-Type: text/plain\r\n"
     "\r\n"
-    "I don't know how to do that\r\n";
+    "501 - I don't know how to do that\r\n";
 
   write(sock, str, strlen(str));
 }
@@ -1020,12 +1020,12 @@ void HandleGetBrowser(const std::string& path, int sock)
   buf += "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>"+path+"</title></head><body><h1>"+path+"</h1>\n";
 
   for(const std::string& d: dirs){
-    buf += "<a href=\""+CanonicalPath(path, d)+"\">"+d+"</a><br>\n";
+    buf += "<a href=\"/browser"+CanonicalPath(path, d)+"\">"+d+"</a><br>\n";
   }
   buf += "<hr>\n";
   for(const std::string& f: files)
     if(f.rfind(".root") == f.size()-5)
-      buf += "<a href=\""+CanonicalPath(path, f)+"\">"+f+"</a><br>\n";
+      buf += "<a href=\"/browser"+CanonicalPath(path, f)+"\">"+f+"</a><br>\n";
     else
       buf += f+"<br>\n";
 
@@ -1058,12 +1058,16 @@ serve_browser()
     if(verb && std::string(verb) == "GET"){
       char* freq = strtok_r(0, " ", &ctx);
       std::string sreq(freq);
-      HandleGetBrowser(sreq, sock);
+      if(sreq == "/") sreq = "/browser/";
+
+      if(sreq.substr(0, 9) == "/browser/"){
+        HandleGetBrowser(sreq.substr(8), sock);
+        continue;
+      }
     }
-    else{
-      write_unimp501(sock);
-      close(sock);
-    }
+
+    write_unimp501(sock);
+    close(sock);
   }
 
   // unreachable

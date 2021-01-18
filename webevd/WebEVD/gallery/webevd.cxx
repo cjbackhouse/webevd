@@ -13,6 +13,83 @@
 
 #include "webevd/WebEVD/WebEVDServer.h"
 
+template<class T> class IEventSource
+{
+public:
+  virtual ~IEventSource() {}
+  virtual const T* FirstEvent(const std::string& fname,
+                              art::EventID* next = 0) = 0;
+  /// If there is no next or previous event, that argument will not be updated
+  virtual const T* GetEvent(const std::string& fname,
+                            art::EventID id,
+                            art::EventID* next = 0,
+                            art::EventID* prev = 0) = 0;
+};
+
+class GalleryEventSource: public IEventSource<gallery::Event>
+{
+public:
+  GalleryEventSource() : fEvt(0) {}
+
+  virtual ~GalleryEventSource() {delete fEvt;}
+
+  virtual const gallery::Event* GetEvent(const std::string& fname,
+                                         art::EventID tgt,
+                                         art::EventID* next = 0,
+                                         art::EventID* prev = 0) override
+  {
+    EnsureFile(fname);
+
+    auto it = fSeekIdx.find(tgt);
+    if(it == fSeekIdx.end()){
+      std::cout << tgt << " not found in event index!" << std::endl;
+      return 0;
+    }
+
+    fEvt->goToEntry(it->second);
+
+    if(next && std::next(it) != fSeekIdx.end()) *next = std::next(it)->first;
+    if(prev && it != fSeekIdx.begin())          *prev = std::prev(it)->first;
+
+    return fEvt;
+  }
+
+  virtual const gallery::Event* FirstEvent(const std::string& fname,
+                                           art::EventID* next = 0) override
+  {
+    EnsureFile(fname);
+    return GetEvent(fname, fSeekIdx.begin()->first, next, 0);
+  }
+
+protected:
+  void EnsureFile(const std::string& fname)
+  {
+    if(fEvt && fEvt->getTFile()->GetName() == fname) return;
+
+    delete fEvt;
+    fSeekIdx.clear();
+    std::cout << "Opening " << fname << "..." << std::endl;
+    fEvt = new gallery::Event({fname});
+    FillIndex();
+  }
+
+  void FillIndex()
+  {
+    std::cout << "Filling index of event numbers..." << std::endl;
+
+    fEvt->toBegin();
+    for(; !fEvt->atEnd(); fEvt->next()){
+      fSeekIdx[fEvt->eventAuxiliary().eventID()] = fEvt->eventEntry();
+    }
+    fEvt->toBegin();
+    std::cout << "Done" << std::endl;
+  }
+
+  gallery::Event* fEvt;
+
+  std::map<art::EventID, long long> fSeekIdx;
+};
+
 void usage()
 {
   std::cout << "Usage: webevd [-d DET] [-e [[RUN:]SUBRUN:]EVT] events.root [more_events.root...]" << std::endl;
@@ -116,6 +193,13 @@ int main(int argc, char** argv)
     std::cout << std::endl;
   }
 
+  if(filenames.size() > 1){
+    std::cout << "TODO TODO used to handle multiple input files, now don't" << std::endl;
+    return 1;
+  }
+
+  GalleryEventSource src;
+
   // Prototype for automatically configuring the geometry below. Dumps the
   // input file geometry configuration. Don't know how to do this in code yet
   // system(("config_dumper -S -f Geometry "+filenames[0]).c_str());
@@ -154,50 +238,33 @@ int main(int argc, char** argv)
   }
   std::cout << "Done" << std::endl;
 
-  for(gallery::Event evt(filenames); !evt.atEnd();){
-    const art::EventAuxiliary& aux = evt.eventAuxiliary();
+  // TODO used to be able to handle unspecified components
+  const gallery::Event* evt = 0;
+  const art::EventID kInvalidID(-1, -1, -1);
+  art::EventID prev = kInvalidID, next = kInvalidID;
+  if(tgt_run > 0)
+    evt = src.GetEvent(filenames[0], art::EventID(tgt_run, tgt_subrun, tgt_evt), &next, &prev);
+  else
+    evt = src.FirstEvent(filenames[0], &next);
 
-    if(tgt_run >= 0 || tgt_subrun >= 0 || tgt_evt >= 0){
-      if((tgt_run    >= 0 && int(aux.run())    != tgt_run   ) ||
-         (tgt_subrun >= 0 && int(aux.subRun()) != tgt_subrun) ||
-         (tgt_evt    >= 0 && int(aux.event())  != tgt_evt   )){
-        evt.next();
-        continue;
-      }
-    }
-    else{
-      // We must have arrived, stop seeking
-      tgt_run = tgt_subrun = tgt_evt = -1;
-    }
-
-    std::cout << "\nDisplaying event " << aux.run() << ":" << aux.subRun() << ":" << aux.event() << std::endl << std::endl;
-
-    const evd::Result res = server.serve(evt, geom, detprop);
+  while(evt){
+    const evd::Result res = server.serve(*evt, geom, detprop);
 
     switch(res.code){
     case evd::kNEXT:
       std::cout << "Next event" << std::endl;
-      evt.next();
+      evt = src.GetEvent(filenames[0], next, &next, &prev);
       break;
 
     case evd::kPREV:
       std::cout << "Previous event" << std::endl;
-      evt.previous();
+      evt = src.GetEvent(filenames[0], prev, &next, &prev);
       break;
 
     case evd::kSEEK:
       std::cout << "User requested seek to " << res.run << ":"<< res.subrun << ":" << res.event << std::endl;
-      {
-        const art::EventID tgt(res.run, res.subrun, res.event);
-        if(seek_index.find(tgt) == seek_index.end()){
-          std::cout << tgt << " not found in event index! Abort." << std::endl;
-          return 1;
-        }
-
-        while(std::make_pair(evt.fileEntry(), evt.eventEntry()) < seek_index[tgt]) evt.next();
-        while(std::make_pair(evt.fileEntry(), evt.eventEntry()) > seek_index[tgt]) evt.previous();
-      }
-      continue;
+      evt = src.GetEvent(filenames[0], art::EventID(res.run, res.subrun, res.event), &next, &prev);
+      break;
 
     case evd::kQUIT:
       std::cout << "Quit" << std::endl;

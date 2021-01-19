@@ -297,7 +297,7 @@ void write_compressed_file(const std::string& loc, int fd_out, int level)
 }
 
 // ----------------------------------------------------------------------------
-void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords, std::string* jsonsp, std::string* jsonhits, std::string* jsontrks, std::string* jsontrajs)
+void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords, std::string* jsonsp, std::string* jsonvtxs, std::string* jsonhits, std::string* jsontrks, std::string* jsontrajs)
 {
   if(doc == "/") doc = "/index.html";
 
@@ -316,6 +316,7 @@ void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords,
   const std::map<std::string, std::string*> toc =
     {{"/coords.js",        coords},
      {"/spacepoints.json", jsonsp},
+     {"/vtxs.json",        jsonvtxs},
      {"/hits.json",        jsonhits},
      {"/tracks.json",      jsontrks},
      {"/trajs.json",       jsontrajs}};
@@ -421,7 +422,7 @@ template<class T> Result WebEVDServer<T>::do_serve(PNGArena& arena)
         return HandleCommand(sreq, sock);
       }
       else{
-        threads.emplace_back(_HandleGet, sreq, sock, &arena, &fCoords, &fSpacePointJSON, &fHitsJSON, &fTracksJSON, &fTrajsJSON);
+        threads.emplace_back(_HandleGet, sreq, sock, &arena, &fCoords, &fSpacePointJSON, &fVerticesJSON, &fHitsJSON, &fTracksJSON, &fTrajsJSON);
       }
     }
     else{
@@ -886,12 +887,14 @@ FillCoordsAndArena(const T& evt,
 {
   std::stringstream outf;
   std::stringstream outfsp;
+  std::stringstream outfvtxs;
   std::stringstream outfhits;
   std::stringstream outftrks;
   std::stringstream outftrajs;
 
   JSONFormatter json(outf);
   JSONFormatter jsonsp(outfsp);
+  JSONFormatter jsonvtxs(outfvtxs);
   JSONFormatter jsonhits(outfhits);
   JSONFormatter jsontrk(outftrks);
   JSONFormatter jsontraj(outftrajs);
@@ -922,7 +925,7 @@ FillCoordsAndArena(const T& evt,
 
   SerializeProduct<recob::SpacePoint>(evt, jsonsp);
 
-  SerializeProduct<recob::Vertex>(evt, json, "reco_vtxs");
+  SerializeProduct<recob::Vertex>(evt, jsonvtxs);
 
   SerializeProductByLabel<simb::MCParticle>(evt, "largeant", jsontraj);
 
@@ -942,6 +945,7 @@ FillCoordsAndArena(const T& evt,
   fCoords = outf.str();
 
   fSpacePointJSON = outfsp.str();
+  fVerticesJSON = outfvtxs.str();
   fHitsJSON = outfhits.str();
   fTracksJSON = outftrks.str();
   fTrajsJSON = outftrajs.str();

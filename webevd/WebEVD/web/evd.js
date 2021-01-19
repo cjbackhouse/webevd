@@ -46,6 +46,7 @@ let xhits = fetch("hits.json").then(response => response.json());
 let tracks = fetch("tracks.json").then(response => response.json());
 let truth_trajs = fetch("trajs.json").then(response => response.json());
 let spacepoints = fetch("spacepoints.json").then(response => response.json());
+let reco_vtxs = fetch("vtxs.json").then(response => response.json());
 
 let gAnimReentrant = false;
 
@@ -463,34 +464,38 @@ xhits.then(xhits => {
     } // end for label
 
     requestAnimationFrame(animate);
-}) // end "then" (xdigs)
+}); // end "then" (xdigs)
 
 
-for(let key in reco_vtxs){
-    let vvtxs = [];
-    let vidxs = [];
-    for(let v of reco_vtxs[key]){
-        push_icosahedron_vtxs(ArrToVec(v), .5, vvtxs, vidxs);
-    }
+reco_vtxs.then(reco_vtxs => {
+    for(let key in reco_vtxs){
+        let vvtxs = [];
+        let vidxs = [];
+        for(let v of reco_vtxs[key]){
+            push_icosahedron_vtxs(ArrToVec(v), .5, vvtxs, vidxs);
+        }
 
-    let vgeom = new THREE.BufferGeometry();
-    vgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vvtxs), 3));
-    vgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(vidxs), 1));
-    let vtxs = new THREE.Mesh(vgeom, mat_vtxs);
-    for(let i = 0; i <= 5; ++i) vtxs.layers.enable(i);
-    scene.add(vtxs);
+        let vgeom = new THREE.BufferGeometry();
+        vgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vvtxs), 3));
+        vgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(vidxs), 1));
+        let vtxs = new THREE.Mesh(vgeom, mat_vtxs);
+        for(let i = 0; i <= 5; ++i) vtxs.layers.enable(i);
+        scene.add(vtxs);
 
 
-    let btn = document.createElement('button');
-    SetVisibility(vtxs, false, btn, key);
+        let btn = document.createElement('button');
+        SetVisibility(vtxs, false, btn, key);
 
-    btn.addEventListener('click', function(){
+        btn.addEventListener('click', function(){
             SetVisibility(vtxs, !vtxs.visible, btn, key);
             requestAnimationFrame(animate);
         });
 
-    document.getElementById('vertices_dropdown').appendChild(btn);
-}
+        document.getElementById('vertices_dropdown').appendChild(btn);
+    }
+
+    requestAnimationFrame(animate);
+}); // end "then" (reco_vtxs)
 
 // Physical cryostat
 let cryogroup = new THREE.Group();

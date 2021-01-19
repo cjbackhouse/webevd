@@ -45,6 +45,7 @@ namespace evd
 
     std::string fCoords;
     std::string fSpacePointJSON;
+    std::string fVerticesJSON;
     std::string fHitsJSON;
     std::string fTracksJSON;
     std::string fTrajsJSON;

@@ -49,6 +49,7 @@ namespace evd
     std::string fHitsJSON;
     std::string fTracksJSON;
     std::string fTrajsJSON;
+    std::string fGeomJSON;
   };
 }
 

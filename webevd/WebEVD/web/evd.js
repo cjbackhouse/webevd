@@ -42,6 +42,7 @@ import {OrbitControls} from "https://cdn.jsdelivr.net/npm/three@v0.110.0/example
 
 
 // Kick off the fetching of all the different JSONs
+let geom = fetch("geom.json").then(response => response.json());
 let xhits = fetch("hits.json").then(response => response.json());
 let tracks = fetch("tracks.json").then(response => response.json());
 let truth_trajs = fetch("trajs.json").then(response => response.json());
@@ -497,28 +498,59 @@ reco_vtxs.then(reco_vtxs => {
     requestAnimationFrame(animate);
 }); // end "then" (reco_vtxs)
 
-// Physical cryostat
 let cryogroup = new THREE.Group();
 
-for(let key in cryos){
-    let cryo = cryos[key];
+let opdetgroup = new THREE.Group();
+let opdetlabels_div = document.getElementById('opdetlabels_div');
 
-    let r0 = ArrToVec(cryo.min);
-    let r1 = ArrToVec(cryo.max);
+geom.then(geom => {
+    // Physical cryostat
+    for(let cryo of geom['cryos']){
+        let r0 = ArrToVec(cryo.min);
+        let r1 = ArrToVec(cryo.max);
 
-    let boxgeom = new THREE.BoxBufferGeometry(r1.x-r0.x, r1.y-r0.y, r1.z-r0.z);
+        let boxgeom = new THREE.BoxBufferGeometry(r1.x-r0.x, r1.y-r0.y, r1.z-r0.z);
 
-    let edges = new THREE.EdgesGeometry(boxgeom);
-    let line = new THREE.LineSegments(edges, mat_geo);
+        let edges = new THREE.EdgesGeometry(boxgeom);
+        let line = new THREE.LineSegments(edges, mat_geo);
 
-    line.position.set((r0.x+r1.x)/2, (r0.y+r1.y)/2, (r0.z+r1.z)/2);
+        line.position.set((r0.x+r1.x)/2, (r0.y+r1.y)/2, (r0.z+r1.z)/2);
+        line.updateMatrixWorld();
 
-    for(let i = 0; i <= 5; ++i) line.layers.enable(i);
+        for(let i = 0; i <= 5; ++i) line.layers.enable(i);
 
-    cryogroup.add(line);
-}
+        cryogroup.add(line);
+    }
 
-scene.add(cryogroup);
+    scene.add(cryogroup);
+
+    // Physical OpDets
+    for(let opdet of geom['opdets']){
+        let c = ArrToVec(opdet.center);
+
+        let boxgeom = new THREE.BoxBufferGeometry(opdet.width, opdet.height, opdet.length);
+
+        let edges = new THREE.EdgesGeometry(boxgeom);
+        let line = new THREE.LineSegments(edges, mat_geo);
+
+        line.position.set(c.x, c.y, c.z);
+        line.updateMatrixWorld();
+
+        for(let i = 0; i <= 5; ++i) line.layers.enable(i);
+
+        opdetgroup.add(line);
+
+        let d = document.createElement('div');
+        d.className = 'label';
+        d.appendChild(document.createTextNode(opdet.name));
+        d.pos = c; // stash the 3D position on the HTML element
+        opdetlabels_div.appendChild(d);
+    }
+
+    scene.add(opdetgroup);
+
+    requestAnimationFrame(animate);
+});
 
 // Physical APAs
 let apas = new THREE.Group();
@@ -546,38 +578,6 @@ for(let key in planes){
 }
 
 scene.add(apas);
-
-// Physical OpDets
-let opdetgroup = new THREE.Group();
-
-let opdetlabels_div = document.getElementById('opdetlabels_div');
-
-for(let opdet of opdets){
-    let c = ArrToVec(opdet.center);
-    let dy = new THREE.Vector3(0, opdet.height/2., 0);
-    let dz = new THREE.Vector3(0, 0, opdet.length/2.);
-
-    let vtxs = [];
-    push_square_vtxs(c, dy, dz, vtxs);
-
-    let geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
-
-    let edges = new THREE.EdgesGeometry(geom);
-    let line = new THREE.LineSegments(edges, mat_geo);
-
-    for(let i = 0; i <= 5; ++i) line.layers.enable(i);
-
-    opdetgroup.add(line);
-
-    let d = document.createElement('div');
-    d.className = 'label';
-    d.appendChild(document.createTextNode(opdet.name));
-    d.pos = c; // stash the 3D position on the HTML element
-    opdetlabels_div.appendChild(d);
-}
-
-scene.add(opdetgroup);
 
 
 function AddDropdownToggle(dropdown_id, what, label, init = false,

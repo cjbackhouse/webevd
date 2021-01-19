@@ -297,7 +297,7 @@ void write_compressed_file(const std::string& loc, int fd_out, int level)
 }
 
 // ----------------------------------------------------------------------------
-void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords, std::string* jsonsp, std::string* jsonvtxs, std::string* jsonhits, std::string* jsontrks, std::string* jsontrajs)
+void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords, std::string* jsonsp, std::string* jsonvtxs, std::string* jsonhits, std::string* jsontrks, std::string* jsontrajs, std::string* jsongeom)
 {
   if(doc == "/") doc = "/index.html";
 
@@ -319,7 +319,8 @@ void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords,
      {"/vtxs.json",        jsonvtxs},
      {"/hits.json",        jsonhits},
      {"/tracks.json",      jsontrks},
-     {"/trajs.json",       jsontrajs}};
+     {"/trajs.json",       jsontrajs},
+     {"/geom.json",        jsongeom}};
 
   auto it = toc.find(doc);
   if(it != toc.end()){
@@ -422,7 +423,7 @@ template<class T> Result WebEVDServer<T>::do_serve(PNGArena& arena)
         return HandleCommand(sreq, sock);
       }
       else{
-        threads.emplace_back(_HandleGet, sreq, sock, &arena, &fCoords, &fSpacePointJSON, &fVerticesJSON, &fHitsJSON, &fTracksJSON, &fTrajsJSON);
+        threads.emplace_back(_HandleGet, sreq, sock, &arena, &fCoords, &fSpacePointJSON, &fVerticesJSON, &fHitsJSON, &fTracksJSON, &fTrajsJSON, &fGeomJSON);
       }
     }
     else{
@@ -580,19 +581,19 @@ JSONFormatter& operator<<(JSONFormatter& json, const geo::CryostatGeo& cryo)
 {
   const TVector3 r0(cryo.MinX(), cryo.MinY(), cryo.MinZ());
   const TVector3 r1(cryo.MaxX(), cryo.MaxY(), cryo.MaxZ());
-  return json << "{ min: "  << r0 << ", max: " << r1 << " }";
+  return json << "{ \"min\": "  << r0 << ", \"max\": " << r1 << " }";
 }
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetGeo& opdet)
 {
-  return json << "{ name: " << opdet.ID() << ", "
-              << "center: " << TVector3(opdet.GetCenter().X(),
-                                        opdet.GetCenter().Y(),
-                                        opdet.GetCenter().Z()) << ", "
-              << "length: " << opdet.Length() << ", "
-              << "width: " << opdet.Width() << ", "
-              << "height: " << opdet.Height() << " }";
+  return json << "{ \"name\": " << opdet.ID() << ", "
+              << "\"center\": " << TVector3(opdet.GetCenter().X(),
+                                            opdet.GetCenter().Y(),
+                                            opdet.GetCenter().Z()) << ", "
+              << "\"length\": " << opdet.Length() << ", "
+              << "\"width\": " << opdet.Width() << ", "
+              << "\"height\": " << opdet.Height() << " }";
 }
 
 
@@ -891,6 +892,7 @@ FillCoordsAndArena(const T& evt,
   std::stringstream outfhits;
   std::stringstream outftrks;
   std::stringstream outftrajs;
+  std::stringstream outfgeom;
 
   JSONFormatter json(outf);
   JSONFormatter jsonsp(outfsp);
@@ -898,6 +900,7 @@ FillCoordsAndArena(const T& evt,
   JSONFormatter jsonhits(outfhits);
   JSONFormatter jsontrk(outftrks);
   JSONFormatter jsontraj(outftrajs);
+  JSONFormatter jsongeom(outfgeom);
 
   if constexpr (std::is_same_v<T, art::Event>){
     // art
@@ -929,18 +932,21 @@ FillCoordsAndArena(const T& evt,
 
   SerializeProductByLabel<simb::MCParticle>(evt, "largeant", jsontraj);
 
-  json << "var cryos = [\n";
-  for(const geo::CryostatGeo& cryo: geom->IterateCryostats()){
-    json << "  " << cryo << ",\n";
+  jsongeom << "{\n";
+  jsongeom << "  \"cryos\": [\n";
+  for(unsigned int i = 0; i < geom->Ncryostats(); ++i){
+    jsongeom << "    " << geom->Cryostat(i);
+    if(i != geom->Ncryostats()-1) jsongeom << ",\n"; else jsongeom << "\n";
   }
-  json << "];\n\n";
+  jsongeom << "  ],\n\n";
 
-  json << "var opdets = [\n";
+  jsongeom << "  \"opdets\": [\n";
   for(unsigned int i = 0; i < geom->NOpDets(); ++i){
-    json << "  " << geom->OpDetGeoFromOpDet(i);
-    if(i != geom->NOpDets()-1) json << ",\n"; else json << "\n";
+    jsongeom << "    " << geom->OpDetGeoFromOpDet(i);
+    if(i != geom->NOpDets()-1) jsongeom << ",\n"; else jsongeom << "\n";
   }
-  json << "];\n";
+  jsongeom << "  ]\n";
+  jsongeom << "}\n";
 
   fCoords = outf.str();
 
@@ -949,6 +955,7 @@ FillCoordsAndArena(const T& evt,
   fHitsJSON = outfhits.str();
   fTracksJSON = outftrks.str();
   fTrajsJSON = outftrajs.str();
+  fGeomJSON = outfgeom.str();
 }
 
 // ----------------------------------------------------------------------------

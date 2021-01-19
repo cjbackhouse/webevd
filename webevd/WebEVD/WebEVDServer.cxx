@@ -310,33 +310,26 @@ void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords,
   std::string mime = "text/html";
   if(doc.find(".js") != std::string::npos) mime = "application/javascript";
   if(doc.find(".css") != std::string::npos) mime = "text/css";
+  if(doc.find(".ico") != std::string::npos) mime = "image/vnd.microsoft.icon";
 
-  if(doc == "/coords.js"){
-    // Special treatment since it's not a real file
+  // Index of files that we have as strings in memory
+  const std::map<std::string, std::string*> toc =
+    {{"/coords.js",        coords},
+     {"/spacepoints.json", jsonsp},
+     {"/hits.json",        jsonhits},
+     {"/tracks.json",      jsontrks},
+     {"/trajs.json",       jsontrajs}};
+
+  auto it = toc.find(doc);
+  if(it != toc.end()){
+    const std::string* s = it->second;
+
     write_ok200(sock, mime, true);
-    write_compressed_buffer((unsigned char*)coords->c_str(), coords->size(), sock, Z_DEFAULT_COMPRESSION);
-  }
-  else if(doc == "/spacepoints.json"){
-    // TODO unify with above
-    write_ok200(sock, mime, true);
-    write_compressed_buffer((unsigned char*)jsonsp->c_str(), jsonsp->size(), sock, Z_DEFAULT_COMPRESSION);
-  }
-  else if(doc == "/hits.json"){
-    // TODO unify with above
-    write_ok200(sock, mime, true);
-    write_compressed_buffer((unsigned char*)jsonhits->c_str(), jsonhits->size(), sock, Z_DEFAULT_COMPRESSION);
-  }
-  else if(doc == "/tracks.json"){
-    // TODO unify with above
-    write_ok200(sock, mime, true);
-    write_compressed_buffer((unsigned char*)jsontrks->c_str(), jsontrks->size(), sock, Z_DEFAULT_COMPRESSION);
-  }
-  else if(doc == "/trajs.json"){
-    // TODO unify with above
-    write_ok200(sock, mime, true);
-    write_compressed_buffer((unsigned char*)jsontrajs->c_str(), jsontrajs->size(), sock, Z_DEFAULT_COMPRESSION);
+    write_compressed_buffer((unsigned char*)s->data(), s->size(), sock, Z_DEFAULT_COMPRESSION);
   }
   else{
+    // Otherwise it must be a physical file
+
     // Don't accidentally serve any file we shouldn't
     const std::set<std::string> whitelist = {"/evd.css", "/evd.js", "/favicon.ico", "/index.html"};
 

@@ -600,7 +600,7 @@ JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetGeo& opdet)
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
 {
-  os << "{blocks: [";
+  os << "{\"blocks\": [\n";
   for(unsigned int ix = 0; ix < v.blocks.size(); ++ix){
     for(unsigned int iy = 0; iy < v.blocks[ix].size(); ++iy){
       const png_byte* b = v.blocks[ix][iy];
@@ -619,17 +619,19 @@ JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
       const int texdy = ((b-&v.arena.data[dataidx]->front())/4)/PNGArena::kArenaSize;
 
       os << "{"
-         << "x: " << ix*PNGArena::kBlockSize << ", "
-         << "y: " << iy*PNGArena::kBlockSize << ", "
-         << "dx: " << PNGArena::kBlockSize << ", "
-         << "dy: " << PNGArena::kBlockSize << ", "
-         << "fname: \"" << v.arena.name << "_" << dataidx << "\", "
-         << "texdim: " << PNGArena::kArenaSize << ", "
-         << "u: " << texdx << ", "
-         << "v: " << texdy << ", "
-         << "du: " << PNGArena::kBlockSize << ", "
-         << "dv: " << PNGArena::kBlockSize
-         << "}, ";
+         << "\"x\": " << ix*PNGArena::kBlockSize << ", "
+         << "\"y\": " << iy*PNGArena::kBlockSize << ", "
+         << "\"dx\": " << PNGArena::kBlockSize << ", "
+         << "\"dy\": " << PNGArena::kBlockSize << ", "
+         << "\"fname\": \"" << v.arena.name << "_" << dataidx << "\", "
+         << "\"texdim\": " << PNGArena::kArenaSize << ", "
+         << "\"u\": " << texdx << ", "
+         << "\"v\": " << texdy << ", "
+         << "\"du\": " << PNGArena::kBlockSize << ", "
+         << "\"dv\": " << PNGArena::kBlockSize
+         << "}";
+
+      if(ix != v.blocks.size()-1 || iy != v.blocks[ix].size()-1) os << ",\n"; else os << "\n";
     }
   }
   os << "]}";
@@ -864,17 +866,17 @@ void HandlePlanes(const TEvt& evt, const geo::GeometryCore* geom,
     const double tick_pitch = detprop.ConvertTicksToX(1, plane) - tick_origin;
 
     json << "  " << plane << ": {"
-         << "view: " << view << ", "
-         << "nwires: " << nwires << ", "
-         << "pitch: " << pitch << ", "
-         << "nticks: " << maxTick << ", "
-         << "tick_origin: " << tick_origin << ", "
-         << "tick_pitch: " << tick_pitch << ", "
-         << "center: " << c << ", "
-         << "across: " << d << ", "
-         << "wiredir: " << wiredir << ", "
-         << "depth: " << depth << ", "
-         << "normal: " << n << "},\n";
+         << "\"view\": " << view << ", "
+         << "\"nwires\": " << nwires << ", "
+         << "\"pitch\": " << pitch << ", "
+         << "\"nticks\": " << maxTick << ", "
+         << "\"tick_origin\": " << tick_origin << ", "
+         << "\"tick_pitch\": " << tick_pitch << ", "
+         << "\"center\": " << c << ", "
+         << "\"across\": " << d << ", "
+         << "\"wiredir\": " << wiredir << ", "
+         << "\"depth\": " << depth << ", "
+         << "\"normal\": " << n << "},\n"; // TODO stray trailing comma
   }
   json << "};\n\n";
 }
@@ -904,16 +906,18 @@ FillCoordsAndArena(const T& evt,
 
   if constexpr (std::is_same_v<T, art::Event>){
     // art
-    json << "var run = " << evt.run() << ";\n"
-         << "var subrun = " << evt.subRun() << ";\n"
-         << "var evt  = " << evt.event() << ";\n\n";
+    json << "var evtid = {"
+         << "\"run\": " << evt.run() << ", "
+         << "\"subrun\": " << evt.subRun() << ", "
+         << "\"evt\": " << evt.event() << "};\n\n";
   }
   else{
     // gallery
     const art::EventAuxiliary& aux = evt.eventAuxiliary();
-    json << "var run = " << aux.run() << ";\n"
-         << "var subrun = " << aux.subRun() << ";\n"
-         << "var evt  = " << aux.event() << ";\n\n";
+    json << "var evtid = {"
+         << "\"run\": " << aux.run() << ", "
+         << "\"subrun\": " << aux.subRun() << ", "
+         << "\"evt\": " << aux.event() << "};\n\n";
   }
 
   unsigned long maxTick = 0;

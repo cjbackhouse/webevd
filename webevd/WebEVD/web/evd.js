@@ -7,9 +7,9 @@
 // TODO make SaveAs and Print work
 // TODO figure out z-order for objects in the plane
 
-document.getElementById('runbox').value = run;
-document.getElementById('subrunbox').value = subrun;
-document.getElementById('evtbox').value = evt;
+document.getElementById('runbox').value = evtid.run;
+document.getElementById('subrunbox').value = evtid.subrun;
+document.getElementById('evtbox').value = evtid.evt;
 
 const AXES_NONE = 0;
 const AXES_CMCM = 1;
@@ -505,7 +505,7 @@ let opdetlabels_div = document.getElementById('opdetlabels_div');
 
 geom.then(geom => {
     // Physical cryostat
-    for(let cryo of geom['cryos']){
+    for(let cryo of geom.cryos){
         let r0 = ArrToVec(cryo.min);
         let r1 = ArrToVec(cryo.max);
 
@@ -525,7 +525,7 @@ geom.then(geom => {
     scene.add(cryogroup);
 
     // Physical OpDets
-    for(let opdet of geom['opdets']){
+    for(let opdet of geom.opdets){
         let c = ArrToVec(opdet.center);
 
         let boxgeom = new THREE.BoxBufferGeometry(opdet.width, opdet.height, opdet.length);

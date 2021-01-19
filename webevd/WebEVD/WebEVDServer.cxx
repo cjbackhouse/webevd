@@ -665,7 +665,7 @@ getInputTags(const gallery::Event& evt)
 template<class TProd, class TEvt> void
 SerializeProduct(const TEvt& evt,
                  JSONFormatter& json,
-                 const std::string& label)
+                 const std::string& label = "")
 {
   if(!label.empty()) json << "var " << label << " = {\n"; else json << "{";
 
@@ -691,17 +691,15 @@ template<class TProd, class TEvt> void
 SerializeProductByLabel(const TEvt& evt,
                         const std::string& in_label,
                         JSONFormatter& json)
-                                                    //                        const std::string& out_label)
 {
   typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
   evt.getByLabel(in_label, prods);
 
-  //  json << "var " << out_label << " = ";
   if(prods.isValid()){
-    json << *prods;// << ";\n\n";
+    json << *prods;
   }
   else{
-    json << "[]";//;\n\n";
+    json << "[]";
   }
 }
 
@@ -836,7 +834,6 @@ void HandleHits(const TEvt& evt, const geo::GeometryCore* geom,
     }
   } // end for tag
 
-  //  json << "var xhits = " << plane_hits << ";\n\n";
   json << plane_hits;
 }
 
@@ -921,13 +918,13 @@ FillCoordsAndArena(const T& evt,
 
   HandlePlanes(evt, geom, detprop, json, maxTick);
 
-  SerializeProduct<recob::Track>(evt, jsontrk, "");//"tracks");
+  SerializeProduct<recob::Track>(evt, jsontrk);
 
-  SerializeProduct<recob::SpacePoint>(evt, jsonsp, "");//, "spacepoints");
+  SerializeProduct<recob::SpacePoint>(evt, jsonsp);
 
   SerializeProduct<recob::Vertex>(evt, json, "reco_vtxs");
 
-  SerializeProductByLabel<simb::MCParticle>(evt, "largeant", jsontraj);//"truth_trajs");
+  SerializeProductByLabel<simb::MCParticle>(evt, "largeant", jsontraj);
 
   json << "var cryos = [\n";
   for(const geo::CryostatGeo& cryo: geom->IterateCryostats()){

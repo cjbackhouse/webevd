@@ -462,6 +462,7 @@ xhits.then(xhits => {
         document.getElementById('hits_dropdown').appendChild(btn);
     } // end for label
 
+    requestAnimationFrame(animate);
 }) // end "then" (xdigs)
 
 
@@ -606,6 +607,8 @@ for(let label in spacepoints){
     scene.add(sps);
 
     AddDropdownToggle('spacepoints_dropdown', sps, label);
+
+    requestAnimationFrame(animate);
 }
 }); // end then
 
@@ -660,6 +663,8 @@ function add_tracks(trajs, group, must_be_charged){
         for(let i = 0; i <= 5; ++i) trkline.layers.enable(i);
         group.add(trkline);
     }
+
+    requestAnimationFrame(animate);
 }
 
 tracks.then(tracks => {
@@ -669,6 +674,8 @@ for(let label in tracks){
     scene.add(reco_tracks);
 
     AddDropdownToggle('tracks_dropdown', reco_tracks, label);
+
+    requestAnimationFrame(animate);
 }
 })
 

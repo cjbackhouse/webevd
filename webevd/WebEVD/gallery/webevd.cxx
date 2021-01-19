@@ -13,20 +13,9 @@
 
 #include "webevd/WebEVD/WebEVDServer.h"
 
-template<class T> class IEventSource
-{
-public:
-  virtual ~IEventSource() {}
-  virtual const T* FirstEvent(const std::string& fname,
-                              art::EventID* next = 0) = 0;
-  /// If there is no next or previous event, that argument will not be updated
-  virtual const T* GetEvent(const std::string& fname,
-                            art::EventID id,
-                            art::EventID* next = 0,
-                            art::EventID* prev = 0) = 0;
-};
+#include "webevd/WebEVD/IEventSource.h"
 
-class GalleryEventSource: public IEventSource<gallery::Event>
+class GalleryEventSource: public evd::IEventSource<gallery::Event>
 {
 public:
   GalleryEventSource() : fEvt(0) {}

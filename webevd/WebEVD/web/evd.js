@@ -18,6 +18,17 @@ const AXES_WIRETICK = 3;
 
 let gAxesType = AXES_NONE;
 
+// View_t enum
+const kU = 0;
+const kV = 1;
+const kZ = 2;
+const kY = 3;
+// const kX = 4; // don't exist in any detector we're interested in?
+
+// Layers used to implement mixed U/V views
+const kUV = 4;
+const kVU = 5;
+
 document.OnKeyDown = function(evt)
 {
     if(evt.keyCode == 13) { // enter
@@ -180,6 +191,7 @@ let nplanes = 0;
 
 let uperp = null;
 let vperp = null;
+let anyy = false;
 
 function push_square_vtxs(c, du, dv, vtxs){
     let p1 = c.clone();
@@ -271,13 +283,14 @@ for(let key in planes){
     nplanes += 1; // javascript is silly and doesn't have any good size() method
 
     // Learn something for the camera
-    if(plane.view == 0){
+    if(plane.view == kU){
         uperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
     }
-    if(plane.view == 1){
+    if(plane.view == kV){
         // This ordering happens to give us beam left-to-right
         vperp = ArrToVec(plane.normal).cross(ArrToVec(plane.across));
     }
+    if(plane.view == kY) anyy = true;
 
     let vtxs = [];
     push_square_vtxs(pg.c, pg.a, pg.d, vtxs);
@@ -289,6 +302,11 @@ for(let key in planes){
     let line = new THREE.LineSegments( edges, mat_lin );
 
     outlines.add(line);
+
+    let uvlayer = plane.view;
+    if(plane.view == kU || plane.view == kV){
+        if(pg.a.z/pg.a.y > 0) uvlayer = kUV; else uvlayer = kVU;
+    }
 
     line.layers.set(plane.view);
     line.layers.enable(pg.uvlayer);
@@ -353,7 +371,7 @@ for(let key in planes){
         } // end for label
     } // end for dws
 
-    if(plane.view == 2){ // collection
+    if(plane.view == kZ){ // collection
         let div = document.createElement('div');
         div.className = 'label';
         // Cut off the plane number, we want the name of the whole APA/TPC
@@ -378,6 +396,20 @@ for(let key in planes){
 } // end for key (planes)
 
 com.divideScalar(nplanes);
+
+if(uperp == undefined && vperp == undefined){
+    document.getElementById('uview_button').style.display = 'none';
+    document.getElementById('vview_button').style.display = 'none';
+    document.getElementById('uvview_button').style.display = 'none';
+    document.getElementById('vuview_button').style.display = 'none';
+    document.getElementById('uvview2d_button').style.display = 'none';
+    document.getElementById('vuview2d_button').style.display = 'none';
+}
+
+if(!anyy){
+    document.getElementById('yview_button').style.display = 'none';
+    document.getElementById('yview2d_button').style.display = 'none';
+}
 
 // Now place reco hits according to the plane geometries
 xhits.then(xhits => {
@@ -487,7 +519,7 @@ let apas = new THREE.Group();
 
 for(let key in planes){
     let plane = planes[key];
-    if(plane.view != 2) continue; // collection only
+    if(plane.view != kZ) continue; // collection only
 
     let c = ArrToVec(plane.center);
     let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
@@ -891,15 +923,19 @@ window.NoView = function(){camera.layers.set(5); requestAnimationFrame(animate);
 
 // TODO these only really do what you expect when already in 3D mode. May want
 // to "re-diagonalize" this functionality.
-window.ZView  = function(){camera.layers.set(2); requestAnimationFrame(animate);}
-window.UView  = function(){camera.layers.set(0); requestAnimationFrame(animate);}
-window.VView  = function(){camera.layers.set(1); requestAnimationFrame(animate);}
-window.UVView = function(){camera.layers.set(3); requestAnimationFrame(animate);}
-window.VUView = function(){camera.layers.set(4); requestAnimationFrame(animate);}
+window.ZView  = function(){camera.layers.set(kZ); requestAnimationFrame(animate);}
+window.YView  = function(){camera.layers.set(kY); requestAnimationFrame(animate);}
+window.UView  = function(){camera.layers.set(kU); requestAnimationFrame(animate);}
+window.VView  = function(){camera.layers.set(kV); requestAnimationFrame(animate);}
+window.UVView = function(){camera.layers.set(kUV); requestAnimationFrame(animate);}
+window.VUView = function(){camera.layers.set(kVU); requestAnimationFrame(animate);}
 
 // Remains as a free function so others can call it
 function AllViews(){
-    camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2);
+    camera.layers.enable(kU);
+    camera.layers.enable(kV);
+    camera.layers.enable(kZ);
+    camera.layers.enable(kY);
 }
 window.AllViews = AllViews;
 
@@ -1029,21 +1065,29 @@ function ThreeDControls(){
 }
 
 window.ZView2D = function(){
-    camera.layers.enable(2);
+    camera.layers.enable(kZ);
     AnimateTo(new THREE.Vector3(0, 1, 0),
               new THREE.Vector3(1, 0, 0),
               1e-6, ZView);
     TwoDControls();
 }
 
+window.YView2D = function(){
+    camera.layers.enable(kY);
+    AnimateTo(new THREE.Vector3(0, 0, -1),
+              new THREE.Vector3(1, 0, 0),
+              1e-6, YView);
+    TwoDControls();
+}
+
 window.UVView2D = function(){
-    camera.layers.enable(3);
+    camera.layers.enable(kUV);
     AnimateTo(vperp, new THREE.Vector3(1, 0, 0), 1e-6, UVView);
     TwoDControls();
 }
 
 window.VUView2D = function(){
-    camera.layers.enable(4);
+    camera.layers.enable(kVU);
     AnimateTo(uperp, new THREE.Vector3(1, 0, 0), 1e-6, VUView);
     TwoDControls();
 }

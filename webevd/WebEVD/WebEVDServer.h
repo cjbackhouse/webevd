@@ -41,8 +41,6 @@ namespace evd
 
     int fSock;
 
-    std::string fHitsJSON;
-    std::string fGeomJSON;
     std::string fDigsJSON;
     std::string fWiresJSON;
   };

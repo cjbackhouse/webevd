@@ -265,8 +265,8 @@ let hitvtxs = {}; // map indexed by reco algo
 
 let tpclabels_div = document.getElementById('tpclabels_div');
 
-let wireaxes = [[], [], [], [], []];
-let tickaxes = [[], [], [], [], []];
+let wireaxes = [[], [], [], [], [], []];
+let tickaxes = [[], [], [], [], [], []];
 
 class PlaneGeom{
     constructor(plane) {
@@ -277,9 +277,9 @@ class PlaneGeom{
         this.c.set(plane.tick_origin, this.c.y, this.c.z);
         this.c.add(this.d); // center in the drift direction too
 
-        this.uvlayer = 2;
-        if(plane.view != 2){
-            if(this.a.z/this.a.y > 0) this.uvlayer = 3; else this.uvlayer = 4;
+        this.uvlayer = kZ;
+        if(plane.view != kZ){
+            if(this.a.z/this.a.y > 0) this.uvlayer = kUV; else this.uvlayer = kVU;
         }
     }
 }
@@ -844,7 +844,7 @@ function PaintAxes()
     }
 
     let layer = new THREE.Layers();
-    for(let i = 0; i <= 4; ++i){
+    for(let i = 0; i < kNLayers; ++i){
         layer.set(i);
         if(camera.layers.test(layer)){
             if(gAxesType == AXES_WIRECM){

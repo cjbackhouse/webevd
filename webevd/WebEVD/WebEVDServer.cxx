@@ -297,7 +297,7 @@ void write_compressed_file(const std::string& loc, int fd_out, int level)
 }
 
 // ----------------------------------------------------------------------------
-void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords, std::string* jsonsp, std::string* jsonvtxs, std::string* jsonhits, std::string* jsontrks, std::string* jsontrajs, std::string* jsongeom)
+void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* jsonsp, std::string* jsonvtxs, std::string* jsonhits, std::string* jsontrks, std::string* jsontrajs, std::string* jsongeom, std::string* jsondigs, std::string* jsonwires, std::string* jsonevtid)
 {
   if(doc == "/") doc = "/index.html";
 
@@ -311,16 +311,19 @@ void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords,
   if(doc.find(".js") != std::string::npos) mime = "application/javascript";
   if(doc.find(".css") != std::string::npos) mime = "text/css";
   if(doc.find(".ico") != std::string::npos) mime = "image/vnd.microsoft.icon";
+  if(doc.find(".json") != std::string::npos) mime = "application/json";
 
   // Index of files that we have as strings in memory
   const std::map<std::string, std::string*> toc =
-    {{"/coords.js",        coords},
-     {"/spacepoints.json", jsonsp},
+    {{"/spacepoints.json", jsonsp},
      {"/vtxs.json",        jsonvtxs},
      {"/hits.json",        jsonhits},
      {"/tracks.json",      jsontrks},
      {"/trajs.json",       jsontrajs},
-     {"/geom.json",        jsongeom}};
+     {"/geom.json",        jsongeom},
+     {"/digs.json",        jsondigs},
+     {"/wires.json",       jsonwires},
+     {"/evtid.json",       jsonevtid}};
 
   auto it = toc.find(doc);
   if(it != toc.end()){
@@ -423,7 +426,7 @@ template<class T> Result WebEVDServer<T>::do_serve(PNGArena& arena)
         return HandleCommand(sreq, sock);
       }
       else{
-        threads.emplace_back(_HandleGet, sreq, sock, &arena, &fCoords, &fSpacePointJSON, &fVerticesJSON, &fHitsJSON, &fTracksJSON, &fTrajsJSON, &fGeomJSON);
+        threads.emplace_back(_HandleGet, sreq, sock, &arena, &fSpacePointJSON, &fVerticesJSON, &fHitsJSON, &fTracksJSON, &fTrajsJSON, &fGeomJSON, &fDigsJSON, &fWiresJSON, &fEventIDJSON);
       }
     }
     else{
@@ -461,6 +464,12 @@ public:
 
   JSONFormatter& operator<<(float x){return *this << double(x);}
 
+  JSONFormatter& operator<<(int x)
+  {
+    fStream << x;
+    return *this;
+  }
+
   JSONFormatter& operator<<(const char* x)
   {
     fStream << x;
@@ -485,6 +494,20 @@ public:
     unsigned int n = 0;
     for(auto& it: m){
       (*this) << "  " << it.first << ": " << it.second;
+      ++n;
+      if(n != m.size()) (*this) << ",\n";
+    }
+    fStream << "\n}";
+    return *this;
+  }
+
+  template<class T>
+  JSONFormatter& operator<<(const std::map<std::string, T>& m)
+  {
+    fStream << "{\n";
+    unsigned int n = 0;
+    for(auto& it: m){
+      (*this) << "  \"" << it.first << "\": " << it.second;
       ++n;
       if(n != m.size()) (*this) << ",\n";
     }
@@ -600,11 +623,15 @@ JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetGeo& opdet)
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
 {
+  bool first = true;
   os << "{\"blocks\": [\n";
   for(unsigned int ix = 0; ix < v.blocks.size(); ++ix){
     for(unsigned int iy = 0; iy < v.blocks[ix].size(); ++iy){
       const png_byte* b = v.blocks[ix][iy];
       if(!b) continue;
+
+      if(!first) os << ",\n";
+      first = false;
 
       int dataidx = 0;
       for(unsigned int d = 0; d < v.arena.data.size(); ++d){
@@ -630,11 +657,9 @@ JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
          << "\"du\": " << PNGArena::kBlockSize << ", "
          << "\"dv\": " << PNGArena::kBlockSize
          << "}";
-
-      if(ix != v.blocks.size()-1 || iy != v.blocks[ix].size()-1) os << ",\n"; else os << "\n";
     }
   }
-  os << "]}";
+  os << "\n]}";
   return os;
 }
 
@@ -759,7 +784,7 @@ unsigned long HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
     } // end for dig
   } // end for tag
 
-  json << "var xdigs = " << imgs << ";\n\n";
+  json << imgs;
 
   return maxTick;
 }
@@ -806,7 +831,7 @@ unsigned long HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
     } // end for rbwire
   } // end for tag
 
-  json << "var xwires = " << imgs << ";\n\n";
+  json << imgs;
 
   return maxTick;
 }
@@ -893,41 +918,40 @@ FillCoordsAndArena(const T& evt,
                    const detinfo::DetectorPropertiesData& detprop,
                    PNGArena& arena)
 {
-  std::stringstream outf;
   std::stringstream outfsp;
   std::stringstream outfvtxs;
   std::stringstream outfhits;
   std::stringstream outftrks;
   std::stringstream outftrajs;
   std::stringstream outfgeom;
+  std::stringstream outfdigs;
+  std::stringstream outfwires;
+  std::stringstream outfevtid;
 
-  JSONFormatter json(outf);
   JSONFormatter jsonsp(outfsp);
   JSONFormatter jsonvtxs(outfvtxs);
   JSONFormatter jsonhits(outfhits);
   JSONFormatter jsontrk(outftrks);
   JSONFormatter jsontraj(outftrajs);
   JSONFormatter jsongeom(outfgeom);
+  JSONFormatter jsondigs(outfdigs);
+  JSONFormatter jsonwires(outfwires);
+  JSONFormatter jsonevtid(outfevtid);
 
+  typedef std::map<std::string, int> EIdMap;
   if constexpr (std::is_same_v<T, art::Event>){
     // art
-    json << "var evtid = {"
-         << "\"run\": " << evt.run() << ", "
-         << "\"subrun\": " << evt.subRun() << ", "
-         << "\"evt\": " << evt.event() << "};\n\n";
+    jsonevtid << EIdMap({{"run", evt.run()}, {"subrun", evt.subRun()}, {"evt", evt.event()}});
   }
   else{
     // gallery
     const art::EventAuxiliary& aux = evt.eventAuxiliary();
-    json << "var evtid = {"
-         << "\"run\": " << aux.run() << ", "
-         << "\"subrun\": " << aux.subRun() << ", "
-         << "\"evt\": " << aux.event() << "};\n\n";
+    jsonevtid << EIdMap({{"run", aux.run()}, {"subrun", aux.subRun()}, {"evt", aux.event()}});
   }
 
   unsigned long maxTick = 0;
-  maxTick = std::max(maxTick, HandleDigits(evt, geom, arena, json));
-  maxTick = std::max(maxTick, HandleWires (evt, geom, arena, json));
+  maxTick = std::max(maxTick, HandleDigits(evt, geom, arena, jsondigs));
+  maxTick = std::max(maxTick, HandleWires (evt, geom, arena, jsonwires));
 
   HandleHits(evt, geom, jsonhits);
 
@@ -958,14 +982,15 @@ FillCoordsAndArena(const T& evt,
   jsongeom << "  ]\n";
   jsongeom << "}\n";
 
-  fCoords = outf.str();
-
   fSpacePointJSON = outfsp.str();
   fVerticesJSON = outfvtxs.str();
   fHitsJSON = outfhits.str();
   fTracksJSON = outftrks.str();
   fTrajsJSON = outftrajs.str();
   fGeomJSON = outfgeom.str();
+  fDigsJSON = outfdigs.str();
+  fWiresJSON = outfwires.str();
+  fEventIDJSON = outfevtid.str();
 }
 
 // ----------------------------------------------------------------------------

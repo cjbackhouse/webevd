@@ -7,10 +7,6 @@
 // TODO make SaveAs and Print work
 // TODO figure out z-order for objects in the plane
 
-document.getElementById('runbox').value = evtid.run;
-document.getElementById('subrunbox').value = evtid.subrun;
-document.getElementById('evtbox').value = evtid.evt;
-
 const AXES_NONE = 0;
 const AXES_CMCM = 1;
 const AXES_WIRECM = 2;
@@ -29,6 +25,14 @@ const kY = 3;
 const kUV = 4;
 const kVU = 5;
 const kNLayers = 6; // for writing loops over all layers
+
+fetch("evtid.json").then(resp => resp.json()).then(evtid => {
+    document.getElementById('runbox').value = evtid.run;
+    document.getElementById('subrunbox').value = evtid.subrun;
+    document.getElementById('evtbox').value = evtid.evt;
+    console.log('HERE ', evtid);
+});
+
 
 document.OnKeyDown = function(evt)
 {
@@ -49,6 +53,8 @@ let tracks = fetch("tracks.json").then(response => response.json());
 let truth_trajs = fetch("trajs.json").then(response => response.json());
 let spacepoints = fetch("spacepoints.json").then(response => response.json());
 let reco_vtxs = fetch("vtxs.json").then(response => response.json());
+let xdigs = fetch("digs.json").then(response => response.json());
+let xwires = fetch("wires.json").then(response => response.json());
 
 // Extract the individual geometry pieces
 let planes = geom.then(geom => geom.planes);
@@ -309,7 +315,11 @@ planes.then(planes => {
     requestAnimationFrame(animate);
 }); // end then (planes -> apas)
 
-planes.then(planes => {
+Promise.all([planes, xdigs, xwires]).then(data => {
+    let planes = data[0];
+    let xdigs = data[1];
+    let xwires = data[2];
+
     for(let key in planes){
         let plane = planes[key];
         let pg = new PlaneGeom(plane);

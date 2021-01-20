@@ -43,13 +43,15 @@ namespace evd
 
     int fSock;
 
-    std::string fCoords;
     std::string fSpacePointJSON;
     std::string fVerticesJSON;
     std::string fHitsJSON;
     std::string fTracksJSON;
     std::string fTrajsJSON;
     std::string fGeomJSON;
+    std::string fDigsJSON;
+    std::string fWiresJSON;
+    std::string fEventIDJSON;
   };
 }
 

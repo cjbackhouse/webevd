@@ -848,7 +848,9 @@ void HandlePlanes(const TEvt& evt, const geo::GeometryCore* geom,
                   const detinfo::DetectorPropertiesData& detprop,
                   JSONFormatter& json, unsigned long maxTick)
 {
-  json << "var planes = {\n";
+  bool first = true;
+
+  json << "  \"planes\": {\n";
   for(geo::PlaneID plane: geom->IteratePlaneIDs()){
     const geo::PlaneGeo& planegeo = geom->Plane(plane);
     const int view = planegeo.View();
@@ -865,7 +867,10 @@ void HandlePlanes(const TEvt& evt, const geo::GeometryCore* geom,
     const double tick_origin = detprop.ConvertTicksToX(0, plane);
     const double tick_pitch = detprop.ConvertTicksToX(1, plane) - tick_origin;
 
-    json << "  " << plane << ": {"
+    if(!first) json << ",\n";
+    first = false;
+
+    json << "    " << plane << ": {"
          << "\"view\": " << view << ", "
          << "\"nwires\": " << nwires << ", "
          << "\"pitch\": " << pitch << ", "
@@ -876,9 +881,9 @@ void HandlePlanes(const TEvt& evt, const geo::GeometryCore* geom,
          << "\"across\": " << d << ", "
          << "\"wiredir\": " << wiredir << ", "
          << "\"depth\": " << depth << ", "
-         << "\"normal\": " << n << "},\n"; // TODO stray trailing comma
+         << "\"normal\": " << n << "}";
   }
-  json << "};\n\n";
+  json << "\n  }";
 }
 
 // ----------------------------------------------------------------------------
@@ -926,7 +931,9 @@ FillCoordsAndArena(const T& evt,
 
   HandleHits(evt, geom, jsonhits);
 
-  HandlePlanes(evt, geom, detprop, json, maxTick);
+  jsongeom << "{\n";
+  HandlePlanes(evt, geom, detprop, jsongeom, maxTick);
+  jsongeom << ",\n\n";
 
   SerializeProduct<recob::Track>(evt, jsontrk);
 
@@ -936,7 +943,6 @@ FillCoordsAndArena(const T& evt,
 
   SerializeProductByLabel<simb::MCParticle>(evt, "largeant", jsontraj);
 
-  jsongeom << "{\n";
   jsongeom << "  \"cryos\": [\n";
   for(unsigned int i = 0; i < geom->Ncryostats(); ++i){
     jsongeom << "    " << geom->Cryostat(i);

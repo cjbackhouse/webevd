@@ -28,6 +28,7 @@ const kY = 3;
 // Layers used to implement mixed U/V views
 const kUV = 4;
 const kVU = 5;
+const kNLayers = 6; // for writing loops over all layers
 
 document.OnKeyDown = function(evt)
 {
@@ -48,6 +49,11 @@ let tracks = fetch("tracks.json").then(response => response.json());
 let truth_trajs = fetch("trajs.json").then(response => response.json());
 let spacepoints = fetch("spacepoints.json").then(response => response.json());
 let reco_vtxs = fetch("vtxs.json").then(response => response.json());
+
+// Extract the individual geometry pieces
+let planes = geom.then(geom => geom.planes);
+let cryos = geom.then(geom => geom.cryos);
+let opdets = geom.then(geom => geom.opdets);
 
 let gAnimReentrant = false;
 
@@ -183,13 +189,9 @@ let digs = {}; // Groups indexed by label
 let wires = {};
 let truth = new THREE.Group();
 let chargedTruth = new THREE.Group();
-
 scene.add(outlines);
 scene.add(truth);
 scene.add(chargedTruth);
-
-let com = new THREE.Vector3();
-let nplanes = 0;
 
 let uperp = null;
 let vperp = null;
@@ -277,144 +279,198 @@ class PlaneGeom{
     }
 }
 
-for(let key in planes){
-    let plane = planes[key];
-    let pg = new PlaneGeom(plane);
+// Physical APAs
+let apas = new THREE.Group();
 
-    com.add(pg.c);
-    nplanes += 1; // javascript is silly and doesn't have any good size() method
+planes.then(planes => {
+    for(let key in planes){
+        let plane = planes[key];
+        if(plane.view != kZ) continue; // collection only
 
-    // Learn something for the camera
-    if(plane.view == kU){
-        uperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
-    }
-    if(plane.view == kV){
-        // This ordering happens to give us beam left-to-right
-        vperp = ArrToVec(plane.normal).cross(ArrToVec(plane.across));
-    }
-    if(plane.view == kY) anyy = true;
+        let c = ArrToVec(plane.center);
+        let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
+        let d = ArrToVec(plane.wiredir).multiplyScalar(plane.depth/2.);
 
-    let vtxs = [];
-    push_square_vtxs(pg.c, pg.a, pg.d, vtxs);
+        let vtxs = [];
+        push_square_vtxs(c, a, d, vtxs);
 
-    let geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+        let geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
-    let edges = new THREE.EdgesGeometry( geom );
-    let line = new THREE.LineSegments( edges, mat_lin );
+        let edges = new THREE.EdgesGeometry(geom);
+        let line = new THREE.LineSegments(edges, mat_geo);
 
-    outlines.add(line);
+        for(let i = 0; i < kNLayers; ++i) line.layers.enable(i);
 
-    let uvlayer = plane.view;
-    if(plane.view == kU || plane.view == kV){
-        if(pg.a.z/pg.a.y > 0) uvlayer = kUV; else uvlayer = kVU;
+        apas.add(line);
     }
 
-    line.layers.set(plane.view);
-    line.layers.enable(pg.uvlayer);
+    scene.add(apas);
+    requestAnimationFrame(animate);
+}); // end then (planes -> apas)
 
-    for(let dws of [xdigs, xwires]){
-        for(let label in dws){
-            let dw = dws[label][key];
-            if(dw == undefined) continue; // sometimes wires are missing
+planes.then(planes => {
+    for(let key in planes){
+        let plane = planes[key];
+        let pg = new PlaneGeom(plane);
 
-            for(let block of dw.blocks){
-                // TODO - would want to combine all the ones with the same
-                // texture file into a single geometry.
-                let geom = new THREE.BufferGeometry();
+        // Learn something for the camera
+        if(plane.view == kU){
+            uperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
+        }
+        if(plane.view == kV){
+            // This ordering happens to give us beam left-to-right
+            vperp = ArrToVec(plane.normal).cross(ArrToVec(plane.across));
+        }
+        if(plane.view == kY) anyy = true;
 
-                let blockc = pg.c.clone();
-                blockc.addScaledVector(ArrToVec(plane.across), (block.x+block.dx/2-plane.nwires/2)*plane.pitch);
-                blockc.addScaledVector(ArrToVec(plane.normal), (block.y+block.dy/2-plane.nticks/2)*Math.abs(plane.tick_pitch));
+        let vtxs = [];
+        push_square_vtxs(pg.c, pg.a, pg.d, vtxs);
 
-                let blocka = ArrToVec(plane.across).multiplyScalar(block.dx/2*plane.pitch);
-                let blockd = ArrToVec(plane.normal).multiplyScalar(block.dy/2*Math.abs(plane.tick_pitch));
+        let geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
-                vtxs = [];
-                push_square_vtxs(blockc, blocka, blockd, vtxs);
-                geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+        let edges = new THREE.EdgesGeometry( geom );
+        let line = new THREE.LineSegments( edges, mat_lin );
 
-                // TODO ditto here
-                let u0 =   (block.u         )/block.texdim;
-                let v0 = 1-(block.v         )/block.texdim;
-                let u1 =   (block.u+block.du)/block.texdim;
-                let v1 = 1-(block.v+block.dv)/block.texdim;
+        outlines.add(line);
 
-                let uvs = new Float32Array( [u1, v0,
-                                             u1, v1,
-                                             u0, v1,
+        let uvlayer = plane.view;
+        if(plane.view == kU || plane.view == kV){
+            if(pg.a.z/pg.a.y > 0) uvlayer = kUV; else uvlayer = kVU;
+        }
 
-                                             u1, v0,
-                                             u0, v1,
-                                             u0, v0] );
+        line.layers.set(plane.view);
+        line.layers.enable(pg.uvlayer);
 
-                geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+        for(let dws of [xdigs, xwires]){
+            for(let label in dws){
+                let dw = dws[label][key];
+                if(dw == undefined) continue; // sometimes wires are missing
 
-                let mat = TextureMaterial(block.fname, block.texdim);
-                let dmesh = new THREE.Mesh(geom, mat);
-                dmesh.layers.set(plane.view);
-                if(dws === xdigs){
-                    if(!(label in digs)){
-                        digs[label] = new THREE.Group();
-                        scene.add(digs[label]);
+                for(let block of dw.blocks){
+                    // TODO - would want to combine all the ones with the same
+                    // texture file into a single geometry.
+                    let geom = new THREE.BufferGeometry();
+
+                    let blockc = pg.c.clone();
+                    blockc.addScaledVector(ArrToVec(plane.across), (block.x+block.dx/2-plane.nwires/2)*plane.pitch);
+                    blockc.addScaledVector(ArrToVec(plane.normal), (block.y+block.dy/2-plane.nticks/2)*Math.abs(plane.tick_pitch));
+
+                    let blocka = ArrToVec(plane.across).multiplyScalar(block.dx/2*plane.pitch);
+                    let blockd = ArrToVec(plane.normal).multiplyScalar(block.dy/2*Math.abs(plane.tick_pitch));
+
+                    vtxs = [];
+                    push_square_vtxs(blockc, blocka, blockd, vtxs);
+                    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+
+                    // TODO ditto here
+                    let u0 =   (block.u         )/block.texdim;
+                    let v0 = 1-(block.v         )/block.texdim;
+                    let u1 =   (block.u+block.du)/block.texdim;
+                    let v1 = 1-(block.v+block.dv)/block.texdim;
+
+                    let uvs = new Float32Array( [u1, v0,
+                                                 u1, v1,
+                                                 u0, v1,
+
+                                                 u1, v0,
+                                                 u0, v1,
+                                                 u0, v0] );
+
+                    geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+
+                    let mat = TextureMaterial(block.fname, block.texdim);
+                    let dmesh = new THREE.Mesh(geom, mat);
+                    dmesh.layers.set(plane.view);
+                    if(dws === xdigs){
+                        if(!(label in digs)){
+                            digs[label] = new THREE.Group();
+                            scene.add(digs[label]);
+                        }
+                        digs[label].add(dmesh);
                     }
-                    digs[label].add(dmesh);
-                }
-                else{
-                    if(!(label in wires)){
-                        wires[label] = new THREE.Group();
-                        scene.add(wires[label]);
+                    else{
+                        if(!(label in wires)){
+                            wires[label] = new THREE.Group();
+                            scene.add(wires[label]);
+                        }
+                        wires[label].add(dmesh);
                     }
-                    wires[label].add(dmesh);
-                }
 
-                dmesh.layers.enable(pg.uvlayer);
-            } // end for block
-        } // end for label
-    } // end for dws
+                    dmesh.layers.enable(pg.uvlayer);
+                } // end for block
+            } // end for label
+        } // end for dws
 
-    if(plane.view == kZ){ // collection
-        let div = document.createElement('div');
-        div.className = 'label';
-        // Cut off the plane number, we want the name of the whole APA/TPC
-        div.appendChild(document.createTextNode(key.slice(0, key.lastIndexOf(' '))));
-        div.pos = pg.c; // stash the 3D position on the HTML element
-        tpclabels_div.appendChild(div);
+        if(plane.view == kZ){ // collection
+            let div = document.createElement('div');
+            div.className = 'label';
+            // Cut off the plane number, we want the name of the whole APA/TPC
+            div.appendChild(document.createTextNode(key.slice(0, key.lastIndexOf(' '))));
+            div.pos = pg.c; // stash the 3D position on the HTML element
+            tpclabels_div.appendChild(div);
+        }
+
+        let r0 = pg.c.clone();
+        r0.addScaledVector(pg.a, -1);
+        r0.addScaledVector(pg.d, -1);
+        let r1 = pg.c.clone();
+        r1.addScaledVector(pg.a, +1);
+        r1.addScaledVector(pg.d, -1);
+        wireaxes[plane.view].push({r0: r0, r1: r1, w: plane.nwires});
+        if(pg.uvlayer != plane.view) wireaxes[pg.uvlayer].push({r0: r0, r1: r1, w: plane.nwires});
+        let r2 = pg.c.clone();
+        r2.addScaledVector(pg.a, -1);
+        r2.addScaledVector(pg.d, +1);
+        tickaxes[plane.view].push({r0: r0, r1: r2, w: plane.nticks});
+        if(pg.uvlayer != plane.view) tickaxes[pg.uvlayer].push({r0: r0, r1: r2, w: plane.nticks});
+    } // end for planes
+
+    requestAnimationFrame(animate);
+
+    for(let label in xdigs){
+        AddDropdownToggle('digs_dropdown', digs[label], label, false, true);
     }
 
-    let r0 = pg.c.clone();
-    r0.addScaledVector(pg.a, -1);
-    r0.addScaledVector(pg.d, -1);
-    let r1 = pg.c.clone();
-    r1.addScaledVector(pg.a, +1);
-    r1.addScaledVector(pg.d, -1);
-    wireaxes[plane.view].push({r0: r0, r1: r1, w: plane.nwires});
-    if(pg.uvlayer != plane.view) wireaxes[pg.uvlayer].push({r0: r0, r1: r1, w: plane.nwires});
-    let r2 = pg.c.clone();
-    r2.addScaledVector(pg.a, -1);
-    r2.addScaledVector(pg.d, +1);
-    tickaxes[plane.view].push({r0: r0, r1: r2, w: plane.nticks});
-    if(pg.uvlayer != plane.view) tickaxes[pg.uvlayer].push({r0: r0, r1: r2, w: plane.nticks});
-} // end for key (planes)
+    for(let label in xwires){
+        AddDropdownToggle('wires_dropdown', wires[label], label, false, true);
+    }
 
-com.divideScalar(nplanes);
+    // Disable any buttons that are irrelevant for the current geometry
+    if(uperp == undefined && vperp == undefined){
+        document.getElementById('uview_button').style.display = 'none';
+        document.getElementById('vview_button').style.display = 'none';
+        document.getElementById('uvview_button').style.display = 'none';
+        document.getElementById('vuview_button').style.display = 'none';
+        document.getElementById('uvview2d_button').style.display = 'none';
+        document.getElementById('vuview2d_button').style.display = 'none';
+    }
 
-if(uperp == undefined && vperp == undefined){
-    document.getElementById('uview_button').style.display = 'none';
-    document.getElementById('vview_button').style.display = 'none';
-    document.getElementById('uvview_button').style.display = 'none';
-    document.getElementById('vuview_button').style.display = 'none';
-    document.getElementById('uvview2d_button').style.display = 'none';
-    document.getElementById('vuview2d_button').style.display = 'none';
-}
+    if(!anyy){
+        document.getElementById('yview_button').style.display = 'none';
+        document.getElementById('yview2d_button').style.display = 'none';
+    }
 
-if(!anyy){
-    document.getElementById('yview_button').style.display = 'none';
-    document.getElementById('yview2d_button').style.display = 'none';
-}
+}); // end then (planes)
+
+// Compute center-of-mass (where the camera looks)
+let com = planes.then(planes => {
+    let com = new THREE.Vector3();
+    let nplanes = 0;
+    for(let key in planes){
+        com.add(ArrToVec(planes[key].center));
+        nplanes += 1; // javascript is silly and doesn't have any good size() method
+    }
+    com.divideScalar(nplanes);
+    return com;
+});
 
 // Now place reco hits according to the plane geometries
-xhits.then(xhits => {
+Promise.all([xhits, planes]).then(data => { // wait for both
+    let xhits = data[0];
+    let planes = data[1];
+
     for(let key in planes){
         let plane = planes[key];
         let pg = new PlaneGeom(plane);
@@ -465,7 +521,7 @@ xhits.then(xhits => {
     } // end for label
 
     requestAnimationFrame(animate);
-}); // end "then" (xdigs)
+}); // end "then" (xhits)
 
 
 reco_vtxs.then(reco_vtxs => {
@@ -480,9 +536,8 @@ reco_vtxs.then(reco_vtxs => {
         vgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vvtxs), 3));
         vgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(vidxs), 1));
         let vtxs = new THREE.Mesh(vgeom, mat_vtxs);
-        for(let i = 0; i <= 5; ++i) vtxs.layers.enable(i);
+        for(let i = 0; i < kNLayers; ++i) vtxs.layers.enable(i);
         scene.add(vtxs);
-
 
         let btn = document.createElement('button');
         SetVisibility(vtxs, false, btn, key);
@@ -500,12 +555,9 @@ reco_vtxs.then(reco_vtxs => {
 
 let cryogroup = new THREE.Group();
 
-let opdetgroup = new THREE.Group();
-let opdetlabels_div = document.getElementById('opdetlabels_div');
-
-geom.then(geom => {
+cryos.then(cryos => {
     // Physical cryostat
-    for(let cryo of geom.cryos){
+    for(let cryo of cryos){
         let r0 = ArrToVec(cryo.min);
         let r1 = ArrToVec(cryo.max);
 
@@ -517,26 +569,31 @@ geom.then(geom => {
         line.position.set((r0.x+r1.x)/2, (r0.y+r1.y)/2, (r0.z+r1.z)/2);
         line.updateMatrixWorld();
 
-        for(let i = 0; i <= 5; ++i) line.layers.enable(i);
+        for(let i = 0; i < kNLayers; ++i) line.layers.enable(i);
 
         cryogroup.add(line);
     }
 
     scene.add(cryogroup);
+    requestAnimationFrame(animate);
+});
 
+let opdetgroup = new THREE.Group();
+let opdetlabels_div = document.getElementById('opdetlabels_div');
+
+opdets.then(opdets => {
     // Physical OpDets
-    for(let opdet of geom.opdets){
-        let c = ArrToVec(opdet.center);
-
+    for(let opdet of opdets){
         let boxgeom = new THREE.BoxBufferGeometry(opdet.width, opdet.height, opdet.length);
 
         let edges = new THREE.EdgesGeometry(boxgeom);
         let line = new THREE.LineSegments(edges, mat_geo);
 
+        let c = ArrToVec(opdet.center);
         line.position.set(c.x, c.y, c.z);
         line.updateMatrixWorld();
 
-        for(let i = 0; i <= 5; ++i) line.layers.enable(i);
+        for(let i = 0; i < kNLayers; ++i) line.layers.enable(i);
 
         opdetgroup.add(line);
 
@@ -548,36 +605,8 @@ geom.then(geom => {
     }
 
     scene.add(opdetgroup);
-
     requestAnimationFrame(animate);
 });
-
-// Physical APAs
-let apas = new THREE.Group();
-
-for(let key in planes){
-    let plane = planes[key];
-    if(plane.view != kZ) continue; // collection only
-
-    let c = ArrToVec(plane.center);
-    let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
-    let d = ArrToVec(plane.wiredir).multiplyScalar(plane.depth/2.);
-
-    let vtxs = [];
-    push_square_vtxs(c, a, d, vtxs);
-
-    let geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
-
-    let edges = new THREE.EdgesGeometry(geom);
-    let line = new THREE.LineSegments(edges, mat_geo);
-
-    for(let i = 0; i <= 5; ++i) line.layers.enable(i);
-
-    apas.add(line);
-}
-
-scene.add(apas);
 
 
 function AddDropdownToggle(dropdown_id, what, label, init = false,
@@ -597,25 +626,25 @@ function AddDropdownToggle(dropdown_id, what, label, init = false,
 
 
 spacepoints.then(spacepoints => {
-for(let label in spacepoints){
-    let spvtxs = [];
-    let spidxs = [];
-    for(let sp of spacepoints[label]){
-        push_icosahedron_vtxs(ArrToVec(sp), .4, spvtxs, spidxs);
+    for(let label in spacepoints){
+        let spvtxs = [];
+        let spidxs = [];
+        for(let sp of spacepoints[label]){
+            push_icosahedron_vtxs(ArrToVec(sp), .4, spvtxs, spidxs);
+        }
+
+        let spgeom = new THREE.BufferGeometry();
+        spgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
+        spgeom.setIndex(new THREE.BufferAttribute(new Uint32Array(spidxs), 1));
+        let sps = new THREE.Mesh(spgeom, mat_sps);
+        for(let i = 0; i < kNLayers; ++i) sps.layers.enable(i);
+        scene.add(sps);
+
+        AddDropdownToggle('spacepoints_dropdown', sps, label);
+
+        requestAnimationFrame(animate);
     }
-
-    let spgeom = new THREE.BufferGeometry();
-    spgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
-    spgeom.setIndex(new THREE.BufferAttribute(new Uint32Array(spidxs), 1));
-    let sps = new THREE.Mesh(spgeom, mat_sps);
-    for(let i = 0; i <= 5; ++i) sps.layers.enable(i);
-    scene.add(sps);
-
-    AddDropdownToggle('spacepoints_dropdown', sps, label);
-
-    requestAnimationFrame(animate);
-}
-}); // end then
+}); // end then (spacepoints)
 
 // Consistent colouring for each PDG.
 // Declared outside the function to ensure consistency across the many times
@@ -665,7 +694,7 @@ function add_tracks(trajs, group, must_be_charged){
         let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
         let trkline = new THREE.Line(trkgeom, mat_trk);
 
-        for(let i = 0; i <= 5; ++i) trkline.layers.enable(i);
+        for(let i = 0; i < kNLayers; ++i) trkline.layers.enable(i);
         group.add(trkline);
     }
 
@@ -673,38 +702,34 @@ function add_tracks(trajs, group, must_be_charged){
 }
 
 tracks.then(tracks => {
-for(let label in tracks){
-    let reco_tracks = new THREE.Group();
-    add_tracks(tracks[label], reco_tracks, false);
-    scene.add(reco_tracks);
+    for(let label in tracks){
+        let reco_tracks = new THREE.Group();
+        add_tracks(tracks[label], reco_tracks, false);
+        scene.add(reco_tracks);
 
-    AddDropdownToggle('tracks_dropdown', reco_tracks, label);
+        AddDropdownToggle('tracks_dropdown', reco_tracks, label);
 
-    requestAnimationFrame(animate);
-}
-})
+        requestAnimationFrame(animate);
+    }
+}); // end then (tracks)
 
 truth_trajs.then(truth_trajs => add_tracks(truth_trajs, truth, false));
 truth_trajs.then(truth_trajs => add_tracks(truth_trajs, chargedTruth, true));
 
 
-for(let label in xdigs){
-    AddDropdownToggle('digs_dropdown', digs[label], label, false, true);
-}
-
-for(let label in xwires){
-    AddDropdownToggle('wires_dropdown', wires[label], label, false, true);
-}
-
-
 let controls = new OrbitControls(camera, renderer.domElement);
 
-controls.target = com;
+// Look at the center of the scene once we know where it is
+com.then(com => {
+    controls.target = com;
 
-camera.translateX(1000);
-camera.lookAt(com);
+    camera.translateX(1000);
+    camera.lookAt(com);
 
-controls.update();
+    controls.update();
+
+    requestAnimationFrame(animate);
+});
 
 function ProjectToScreenPixels(r)
 {

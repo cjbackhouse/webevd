@@ -4,6 +4,8 @@
 
 #include "webevd/WebEVD/PNGArena.h"
 
+#include "webevd/WebEVD/JSONFormatter.h"
+
 #include <string>
 
 #include "fhiclcpp/ParameterSet.h"
@@ -296,252 +298,24 @@ void write_compressed_file(const std::string& loc, int fd_out, int level)
   close(fd_in);
 }
 
+
 // ----------------------------------------------------------------------------
-void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* jsonsp, std::string* jsonvtxs, std::string* jsonhits, std::string* jsontrks, std::string* jsontrajs, std::string* jsongeom, std::string* jsondigs, std::string* jsonwires, std::string* jsonevtid)
+JSONFormatter& operator<<(JSONFormatter& json, const art::InputTag& t)
 {
-  if(doc == "/") doc = "/index.html";
-
-  if(doc.find(".png") != std::string::npos){
-    _HandleGetPNG(doc, sock, arena);
-    return;
-  }
-
-  // TODO - more sophisticated MIME type handling
-  std::string mime = "text/html";
-  if(doc.find(".js") != std::string::npos) mime = "application/javascript";
-  if(doc.find(".css") != std::string::npos) mime = "text/css";
-  if(doc.find(".ico") != std::string::npos) mime = "image/vnd.microsoft.icon";
-  if(doc.find(".json") != std::string::npos) mime = "application/json";
-
-  // Index of files that we have as strings in memory
-  const std::map<std::string, std::string*> toc =
-    {{"/spacepoints.json", jsonsp},
-     {"/vtxs.json",        jsonvtxs},
-     {"/hits.json",        jsonhits},
-     {"/tracks.json",      jsontrks},
-     {"/trajs.json",       jsontrajs},
-     {"/geom.json",        jsongeom},
-     {"/digs.json",        jsondigs},
-     {"/wires.json",       jsonwires},
-     {"/evtid.json",       jsonevtid}};
-
-  auto it = toc.find(doc);
-  if(it != toc.end()){
-    const std::string* s = it->second;
-
-    write_ok200(sock, mime, true);
-    write_compressed_buffer((unsigned char*)s->data(), s->size(), sock, Z_DEFAULT_COMPRESSION);
-  }
-  else{
-    // Otherwise it must be a physical file
-
-    // Don't accidentally serve any file we shouldn't
-    const std::set<std::string> whitelist = {"/evd.css", "/evd.js", "/favicon.ico", "/index.html"};
-
-    if(whitelist.count(doc)){
-      write_ok200(sock, mime, true);
-      write_compressed_file(FindWebDir()+doc, sock, Z_DEFAULT_COMPRESSION);
-    }
-    else{
-      write_notfound404(sock);
-    }
-  }
-
-  close(sock);
+  json << "\"" << t.label();
+  if(!t.instance().empty()) json << ":" << t.instance();
+  if(!t.process().empty()) json << ":" << t.process();
+  json << "\"";
+  return json;
 }
 
 // ----------------------------------------------------------------------------
-template<class T> int WebEVDServer<T>::EnsureListen()
+JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetID& id)
 {
-  if(fSock != 0) return 0;
-
-  char host[1024];
-  gethostname(host, 1024);
-  char* user = getlogin();
-
-  std::cout << "\n------------------------------------------------------------\n" << std::endl;
-
-  // E1071 is DUNE :)
-  int port = 1071;
-
-  // Search for an open port up-front
-  while(system(TString::Format("ss -an | grep -q %d", port).Data()) == 0) ++port;
-
-
-  fSock = socket(AF_INET, SOCK_STREAM, 0);
-  if(fSock == -1) return err("socket");
-
-  // Reuse port immediately even if a previous instance just aborted.
-  const int one = 1;
-  if(setsockopt(fSock, SOL_SOCKET, SO_REUSEADDR,
-                &one, sizeof(one)) != 0) return err("setsockopt");
-
-  sockaddr_in addr;
-  addr.sin_family = AF_INET;
-  addr.sin_port = swap_byte_order(port);
-  addr.sin_addr.s_addr = INADDR_ANY;
-
-  if(bind(fSock, (sockaddr*)&addr, sizeof(addr)) != 0) return err("bind");
-
-  if(listen(fSock, 128/*backlog*/) != 0) return err("listen");
-
-
-  std::cout << "First run" << std::endl;
-  std::cout << "ssh -L "
-            << port << ":localhost:" << port << " "
-            << user << "@" << host << std::endl << std::endl;
-  std::cout << "and then navigate to localhost:" << port << " in your favorite browser." << std::endl << std::endl;
-  //  std::cout << "Press Ctrl-C here when done." << std::endl;
-
-  return 0;
+  json << "\"" << std::string(id) << "\"";
+  return json;
 }
 
-// ----------------------------------------------------------------------------
-template<class T> Result WebEVDServer<T>::do_serve(PNGArena& arena)
-{
-  if(EnsureListen() != 0) return kERROR;
-
-  std::list<std::thread> threads;
-
-  while(true){
-    int sock = accept(fSock, 0, 0);
-    if(sock == -1) return err("accept");
-
-    std::string req = read_all(sock);
-
-    std::cout << req << std::endl;
-
-    char* ctx;
-    char* verb = strtok_r(&req.front(), " ", &ctx);
-
-    if(verb && std::string(verb) == "GET"){
-      char* freq = strtok_r(0, " ", &ctx);
-      std::string sreq(freq);
-
-      if(sreq == "/NEXT" ||
-         sreq == "/PREV" ||
-         sreq == "/QUIT" ||
-         sreq.find("/seek/") == 0){
-        for(std::thread& t: threads) t.join();
-        return HandleCommand(sreq, sock);
-      }
-      else{
-        threads.emplace_back(_HandleGet, sreq, sock, &arena, &fSpacePointJSON, &fVerticesJSON, &fHitsJSON, &fTracksJSON, &fTrajsJSON, &fGeomJSON, &fDigsJSON, &fWiresJSON, &fEventIDJSON);
-      }
-    }
-    else{
-      write_unimp501(sock);
-      close(sock);
-    }
-  }
-
-  // unreachable
-}
-
-// ----------------------------------------------------------------------------
-class JSONFormatter
-{
-public:
-  JSONFormatter(std::ostream& os) : fStream(os) {}
-
-  template<class T> JSONFormatter& operator<<(const T& x)
-  {
-    static_assert(std::is_arithmetic_v<T> ||
-                  std::is_enum_v<T> ||
-                  std::is_same_v<T, std::string> ||
-                  std::is_same_v<T, geo::OpDetID>);
-    fStream << x;
-    return *this;
-  }
-
-  JSONFormatter& operator<<(double x)
-  {
-    if(isnan(x)) fStream << "NaN";
-    else if(isinf(x)) fStream << "Infinity";
-    else fStream << x;
-    return *this;
-  }
-
-  JSONFormatter& operator<<(float x){return *this << double(x);}
-
-  JSONFormatter& operator<<(int x)
-  {
-    fStream << x;
-    return *this;
-  }
-
-  JSONFormatter& operator<<(const char* x)
-  {
-    fStream << x;
-    return *this;
-  }
-
-  template<class T> JSONFormatter& operator<<(const std::vector<T>& v)
-  {
-    fStream << "[";
-    for(const T& x: v){
-      (*this) << x;
-      if(&x != &v.back()) (*this) << ", ";
-    }
-    fStream << "]";
-    return *this;
-  }
-
-  template<class T, class U>
-  JSONFormatter& operator<<(const std::map<T, U>& m)
-  {
-    fStream << "{\n";
-    unsigned int n = 0;
-    for(auto& it: m){
-      (*this) << "  " << it.first << ": " << it.second;
-      ++n;
-      if(n != m.size()) (*this) << ",\n";
-    }
-    fStream << "\n}";
-    return *this;
-  }
-
-  template<class T>
-  JSONFormatter& operator<<(const std::map<std::string, T>& m)
-  {
-    fStream << "{\n";
-    unsigned int n = 0;
-    for(auto& it: m){
-      (*this) << "  \"" << it.first << "\": " << it.second;
-      ++n;
-      if(n != m.size()) (*this) << ",\n";
-    }
-    fStream << "\n}";
-    return *this;
-  }
-
-  JSONFormatter& operator<<(const TVector3& v)
-  {
-    *this << "["
-          << v.X() << ", "
-          << v.Y() << ", "
-          << v.Z() << "]";
-    return *this;
-  }
-
-  JSONFormatter& operator<<(const art::InputTag& t)
-  {
-    fStream << "\"" << t.label();
-    if(!t.instance().empty()) fStream << ":" << t.instance();
-    if(!t.process().empty()) fStream << ":" << t.process();
-    fStream << "\"";
-    return *this;
-  }
-
-  JSONFormatter& operator<<(const geo::OpDetID& id)
-  {
-    fStream << "\"" << id << "\"";
-    return *this;
-  }
-
-protected:
-  std::ostream& fStream;
-};
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const geo::PlaneID& plane)
@@ -619,7 +393,6 @@ JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetGeo& opdet)
               << "\"height\": " << opdet.Height() << " }";
 }
 
-
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
 {
@@ -661,6 +434,50 @@ JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
   }
   os << "\n]}";
   return os;
+}
+
+// ----------------------------------------------------------------------------
+void SerializePlanes(const geo::GeometryCore* geom,
+                     const detinfo::DetectorPropertiesData& detprop,
+                     unsigned long maxTick,
+                     JSONFormatter& json)
+{
+  bool first = true;
+
+  json << "  \"planes\": {\n";
+  for(geo::PlaneID plane: geom->IteratePlaneIDs()){
+    const geo::PlaneGeo& planegeo = geom->Plane(plane);
+    const int view = planegeo.View();
+    const unsigned int nwires = planegeo.Nwires();
+    const double pitch = planegeo.WirePitch();
+    const TVector3 c = planegeo.GetCenter();
+
+    const TVector3 d = planegeo.GetIncreasingWireDirection();
+    const TVector3 n = planegeo.GetNormalDirection();
+
+    const TVector3 wiredir = planegeo.GetWireDirection();
+    const double depth = planegeo.Depth(); // really height
+
+    const double tick_origin = detprop.ConvertTicksToX(0, plane);
+    const double tick_pitch = detprop.ConvertTicksToX(1, plane) - tick_origin;
+
+    if(!first) json << ",\n";
+    first = false;
+
+    json << "    " << plane << ": {"
+         << "\"view\": " << view << ", "
+         << "\"nwires\": " << nwires << ", "
+         << "\"pitch\": " << pitch << ", "
+         << "\"nticks\": " << maxTick << ", "
+         << "\"tick_origin\": " << tick_origin << ", "
+         << "\"tick_pitch\": " << tick_pitch << ", "
+         << "\"center\": " << c << ", "
+         << "\"across\": " << d << ", "
+         << "\"wiredir\": " << wiredir << ", "
+         << "\"depth\": " << depth << ", "
+         << "\"normal\": " << n << "}";
+  }
+  json << "\n  }";
 }
 
 // ----------------------------------------------------------------------------
@@ -730,6 +547,173 @@ SerializeProductByLabel(const TEvt& evt,
   else{
     json << "[]";
   }
+}
+
+// ----------------------------------------------------------------------------
+template<class T> void SerializeEventID(const T& evt, JSONFormatter& json)
+{
+  typedef std::map<std::string, int> EIdMap;
+  json << EIdMap({{"run", evt.run()}, {"subrun", evt.subRun()}, {"evt", evt.event()}});
+}
+
+// ----------------------------------------------------------------------------
+void SerializeEventID(const gallery::Event& evt, JSONFormatter& json)
+{
+  SerializeEventID(evt.eventAuxiliary(), json);
+}
+
+// ----------------------------------------------------------------------------
+void SerializeGeometry(const geo::GeometryCore* geom,
+                       const detinfo::DetectorPropertiesData& detprop,
+                       unsigned long maxTick,
+                       JSONFormatter& json)
+{
+  json << "{\n";
+  SerializePlanes(geom, detprop, maxTick, json);
+  json << ",\n\n";
+
+  json << "  \"cryos\": [\n";
+  for(unsigned int i = 0; i < geom->Ncryostats(); ++i){
+    json << "    " << geom->Cryostat(i);
+    if(i != geom->Ncryostats()-1) json << ",\n"; else json << "\n";
+  }
+  json << "  ],\n\n";
+
+  json << "  \"opdets\": [\n";
+  for(unsigned int i = 0; i < geom->NOpDets(); ++i){
+    json << "    " << geom->OpDetGeoFromOpDet(i);
+    if(i != geom->NOpDets()-1) json << ",\n"; else json << "\n";
+  }
+  json << "  ]\n";
+  json << "}\n";
+}
+
+bool endswith(const std::string& s, const std::string& suffix)
+{
+  return s.rfind(suffix)+suffix.size() == s.size();
+}
+
+// ----------------------------------------------------------------------------
+template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, std::string* jsonhits, std::string* jsondigs, std::string* jsonwires, unsigned long maxTick)
+{
+  const std::string mime = "application/json";
+
+  // Index of files that we have as strings in memory
+  const std::map<std::string, std::string*> toc =
+    {{"/hits.json",   jsonhits},
+     {"/digs.json",   jsondigs},
+     {"/wires.json",  jsonwires}};
+
+  auto it = toc.find(doc);
+  if(it != toc.end()){
+    write_ok200(sock, mime, true);
+    write_compressed_buffer((unsigned char*)it->second->data(), it->second->size(), sock, Z_DEFAULT_COMPRESSION);
+    close(sock);
+    return;
+  }
+
+  // Otherwise should be one we can generate on the fly
+  std::stringstream ss;
+  JSONFormatter json(ss);
+
+  /***/if(doc == "/evtid.json")       SerializeEventID(*evt, json);
+  else if(doc == "/tracks.json")      SerializeProduct<recob::Track>(*evt, json);
+  else if(doc == "/spacepoints.json") SerializeProduct<recob::SpacePoint>(*evt, json);
+  else if(doc == "/vtxs.json")        SerializeProduct<recob::Vertex>(*evt, json);
+  else if(doc == "/trajs.json")       SerializeProductByLabel<simb::MCParticle>(*evt, "largeant", json);
+  else if(doc == "/geom.json")        SerializeGeometry(geom, *detprop, maxTick, json);
+  else{
+    write_notfound404(sock);
+    return;
+  }
+
+  std::string response = ss.str();
+  write_ok200(sock, mime, true);
+  write_compressed_buffer((unsigned char*)response.data(), response.size(), sock, Z_DEFAULT_COMPRESSION);
+  close(sock);
+}
+
+// ----------------------------------------------------------------------------
+template<class T> void _HandleGet(std::string doc, int sock, const T* evt, PNGArena* arena, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, std::string* jsonhits, std::string* jsondigs, std::string* jsonwires, unsigned long maxTick)
+{
+  if(doc == "/") doc = "/index.html";
+
+  if(endswith(doc, ".png")){
+    _HandleGetPNG(doc, sock, arena);
+    return;
+  }
+
+  if(endswith(doc, ".json")){
+    _HandleGetJSON(doc, sock, evt, geom, detprop, jsonhits, jsondigs, jsonwires, maxTick);
+    return;
+  }
+
+  // TODO - more sophisticated MIME type handling
+  std::string mime = "text/html";
+  if(endswith(doc, ".js" )) mime = "application/javascript";
+  if(endswith(doc, ".css")) mime = "text/css";
+  if(endswith(doc, ".ico")) mime = "image/vnd.microsoft.icon";
+
+  // Otherwise it must be a physical file
+
+  // Don't accidentally serve any file we shouldn't
+  const std::set<std::string> whitelist = {"/evd.css", "/evd.js", "/favicon.ico", "/index.html"};
+
+  if(whitelist.count(doc)){
+    write_ok200(sock, mime, true);
+    write_compressed_file(FindWebDir()+doc, sock, Z_DEFAULT_COMPRESSION);
+  }
+  else{
+    write_notfound404(sock);
+  }
+
+  close(sock);
+}
+
+// ----------------------------------------------------------------------------
+template<class T> int WebEVDServer<T>::EnsureListen()
+{
+  if(fSock != 0) return 0;
+
+  char host[1024];
+  gethostname(host, 1024);
+  char* user = getlogin();
+
+  std::cout << "\n------------------------------------------------------------\n" << std::endl;
+
+  // E1071 is DUNE :)
+  int port = 1071;
+
+  // Search for an open port up-front
+  while(system(TString::Format("ss -an | grep -q %d", port).Data()) == 0) ++port;
+
+
+  fSock = socket(AF_INET, SOCK_STREAM, 0);
+  if(fSock == -1) return err("socket");
+
+  // Reuse port immediately even if a previous instance just aborted.
+  const int one = 1;
+  if(setsockopt(fSock, SOL_SOCKET, SO_REUSEADDR,
+                &one, sizeof(one)) != 0) return err("setsockopt");
+
+  sockaddr_in addr;
+  addr.sin_family = AF_INET;
+  addr.sin_port = swap_byte_order(port);
+  addr.sin_addr.s_addr = INADDR_ANY;
+
+  if(bind(fSock, (sockaddr*)&addr, sizeof(addr)) != 0) return err("bind");
+
+  if(listen(fSock, 128/*backlog*/) != 0) return err("listen");
+
+
+  std::cout << "First run" << std::endl;
+  std::cout << "ssh -L "
+            << port << ":localhost:" << port << " "
+            << user << "@" << host << std::endl << std::endl;
+  std::cout << "and then navigate to localhost:" << port << " in your favorite browser." << std::endl << std::endl;
+  //  std::cout << "Press Ctrl-C here when done." << std::endl;
+
+  return 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -866,88 +850,20 @@ void HandleHits(const TEvt& evt, const geo::GeometryCore* geom,
   json << plane_hits;
 }
 
-
 // ----------------------------------------------------------------------------
-template<class TEvt>
-void HandlePlanes(const TEvt& evt, const geo::GeometryCore* geom,
+template<class T> unsigned long WebEVDServer<T>::
+FillJSONsAndArena(const T& evt,
+                  const geo::GeometryCore* geom,
                   const detinfo::DetectorPropertiesData& detprop,
-                  JSONFormatter& json, unsigned long maxTick)
+                  PNGArena& arena)
 {
-  bool first = true;
-
-  json << "  \"planes\": {\n";
-  for(geo::PlaneID plane: geom->IteratePlaneIDs()){
-    const geo::PlaneGeo& planegeo = geom->Plane(plane);
-    const int view = planegeo.View();
-    const unsigned int nwires = planegeo.Nwires();
-    const double pitch = planegeo.WirePitch();
-    const TVector3 c = planegeo.GetCenter();
-
-    const TVector3 d = planegeo.GetIncreasingWireDirection();
-    const TVector3 n = planegeo.GetNormalDirection();
-
-    const TVector3 wiredir = planegeo.GetWireDirection();
-    const double depth = planegeo.Depth(); // really height
-
-    const double tick_origin = detprop.ConvertTicksToX(0, plane);
-    const double tick_pitch = detprop.ConvertTicksToX(1, plane) - tick_origin;
-
-    if(!first) json << ",\n";
-    first = false;
-
-    json << "    " << plane << ": {"
-         << "\"view\": " << view << ", "
-         << "\"nwires\": " << nwires << ", "
-         << "\"pitch\": " << pitch << ", "
-         << "\"nticks\": " << maxTick << ", "
-         << "\"tick_origin\": " << tick_origin << ", "
-         << "\"tick_pitch\": " << tick_pitch << ", "
-         << "\"center\": " << c << ", "
-         << "\"across\": " << d << ", "
-         << "\"wiredir\": " << wiredir << ", "
-         << "\"depth\": " << depth << ", "
-         << "\"normal\": " << n << "}";
-  }
-  json << "\n  }";
-}
-
-// ----------------------------------------------------------------------------
-template<class T> void WebEVDServer<T>::
-FillCoordsAndArena(const T& evt,
-                   const geo::GeometryCore* geom,
-                   const detinfo::DetectorPropertiesData& detprop,
-                   PNGArena& arena)
-{
-  std::stringstream outfsp;
-  std::stringstream outfvtxs;
   std::stringstream outfhits;
-  std::stringstream outftrks;
-  std::stringstream outftrajs;
-  std::stringstream outfgeom;
   std::stringstream outfdigs;
   std::stringstream outfwires;
-  std::stringstream outfevtid;
 
-  JSONFormatter jsonsp(outfsp);
-  JSONFormatter jsonvtxs(outfvtxs);
   JSONFormatter jsonhits(outfhits);
-  JSONFormatter jsontrk(outftrks);
-  JSONFormatter jsontraj(outftrajs);
-  JSONFormatter jsongeom(outfgeom);
   JSONFormatter jsondigs(outfdigs);
   JSONFormatter jsonwires(outfwires);
-  JSONFormatter jsonevtid(outfevtid);
-
-  typedef std::map<std::string, int> EIdMap;
-  if constexpr (std::is_same_v<T, art::Event>){
-    // art
-    jsonevtid << EIdMap({{"run", evt.run()}, {"subrun", evt.subRun()}, {"evt", evt.event()}});
-  }
-  else{
-    // gallery
-    const art::EventAuxiliary& aux = evt.eventAuxiliary();
-    jsonevtid << EIdMap({{"run", aux.run()}, {"subrun", aux.subRun()}, {"evt", aux.event()}});
-  }
 
   unsigned long maxTick = 0;
   maxTick = std::max(maxTick, HandleDigits(evt, geom, arena, jsondigs));
@@ -955,42 +871,11 @@ FillCoordsAndArena(const T& evt,
 
   HandleHits(evt, geom, jsonhits);
 
-  jsongeom << "{\n";
-  HandlePlanes(evt, geom, detprop, jsongeom, maxTick);
-  jsongeom << ",\n\n";
-
-  SerializeProduct<recob::Track>(evt, jsontrk);
-
-  SerializeProduct<recob::SpacePoint>(evt, jsonsp);
-
-  SerializeProduct<recob::Vertex>(evt, jsonvtxs);
-
-  SerializeProductByLabel<simb::MCParticle>(evt, "largeant", jsontraj);
-
-  jsongeom << "  \"cryos\": [\n";
-  for(unsigned int i = 0; i < geom->Ncryostats(); ++i){
-    jsongeom << "    " << geom->Cryostat(i);
-    if(i != geom->Ncryostats()-1) jsongeom << ",\n"; else jsongeom << "\n";
-  }
-  jsongeom << "  ],\n\n";
-
-  jsongeom << "  \"opdets\": [\n";
-  for(unsigned int i = 0; i < geom->NOpDets(); ++i){
-    jsongeom << "    " << geom->OpDetGeoFromOpDet(i);
-    if(i != geom->NOpDets()-1) jsongeom << ",\n"; else jsongeom << "\n";
-  }
-  jsongeom << "  ]\n";
-  jsongeom << "}\n";
-
-  fSpacePointJSON = outfsp.str();
-  fVerticesJSON = outfvtxs.str();
   fHitsJSON = outfhits.str();
-  fTracksJSON = outftrks.str();
-  fTrajsJSON = outftrajs.str();
-  fGeomJSON = outfgeom.str();
   fDigsJSON = outfdigs.str();
   fWiresJSON = outfwires.str();
-  fEventIDJSON = outfevtid.str();
+
+  return maxTick;
 }
 
 // ----------------------------------------------------------------------------
@@ -1003,9 +888,46 @@ serve(const T& evt,
   // will get an error return from the write() call instead.
   signal(SIGPIPE, SIG_IGN);
 
+  if(EnsureListen() != 0) return kERROR;
+
   PNGArena arena("arena");
-  FillCoordsAndArena(evt, geom, detprop, arena);
-  return do_serve(arena);
+  const unsigned long maxTick = FillJSONsAndArena(evt, geom, detprop, arena);
+
+  std::list<std::thread> threads;
+
+  while(true){
+    int sock = accept(fSock, 0, 0);
+    if(sock == -1) return err("accept");
+
+    std::string req = read_all(sock);
+
+    std::cout << req << std::endl;
+
+    char* ctx;
+    char* verb = strtok_r(&req.front(), " ", &ctx);
+
+    if(verb && std::string(verb) == "GET"){
+      char* freq = strtok_r(0, " ", &ctx);
+      std::string sreq(freq);
+
+      if(sreq == "/NEXT" ||
+         sreq == "/PREV" ||
+         sreq == "/QUIT" ||
+         sreq.find("/seek/") == 0){
+        for(std::thread& t: threads) t.join();
+        return HandleCommand(sreq, sock);
+      }
+      else{
+        threads.emplace_back(_HandleGet<T>, sreq, sock, &evt, &arena, geom, &detprop, &fHitsJSON, &fDigsJSON, &fWiresJSON, maxTick);
+      }
+    }
+    else{
+      write_unimp501(sock);
+      close(sock);
+    }
+  }
+
+  // unreachable
 }
 
 template class WebEVDServer<art::Event>;

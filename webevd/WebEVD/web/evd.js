@@ -30,7 +30,6 @@ fetch("evtid.json").then(resp => resp.json()).then(evtid => {
     document.getElementById('runbox').value = evtid.run;
     document.getElementById('subrunbox').value = evtid.subrun;
     document.getElementById('evtbox').value = evtid.evt;
-    console.log('HERE ', evtid);
 });
 
 

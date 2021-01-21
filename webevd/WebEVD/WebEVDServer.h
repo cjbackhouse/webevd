@@ -32,17 +32,9 @@ namespace evd
   protected:
     template<class PROD> using HandleT = typename T::template HandleT<std::vector<PROD>>;
 
-    void FillJSONsAndArena(const T& evt,
-                           const geo::GeometryCore* geom,
-                           PNGArena& digArena,
-                           PNGArena& wireArena);
-
     int EnsureListen();
 
     int fSock;
-
-    std::string fDigsJSON;
-    std::string fWiresJSON;
   };
 }
 

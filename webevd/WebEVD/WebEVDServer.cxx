@@ -217,8 +217,15 @@ std::string FindWebDir()
   return webdir;
 }
 
+class ILazy
+{
+public:
+  virtual void Serialize(JSONFormatter& json) = 0;
+  virtual PNGArena& GetArena() = 0;
+};
+
 // ----------------------------------------------------------------------------
-void _HandleGetPNG(std::string doc, int sock, PNGArena* digArena, PNGArena* wireArena)
+void _HandleGetPNG(std::string doc, int sock, ILazy* digs, ILazy* wires)
 {
   const std::string mime = "image/png";
 
@@ -240,8 +247,8 @@ void _HandleGetPNG(std::string doc, int sock, PNGArena* digArena, PNGArena* wire
   const int dim = atoi(pDim);
 
   PNGArena* arena = 0;
-  if(name == "/dig") arena = digArena;
-  if(name == "/wire") arena = wireArena;
+  if(name == "/dig") arena = &digs->GetArena();
+  if(name == "/wire") arena = &wires->GetArena();
 
   if(!arena || idx >= int(arena->data.size()) || dim > PNGArena::kArenaSize){
     write_notfound404(sock);
@@ -643,24 +650,10 @@ SerializeHits(const T& evt, const geo::GeometryCore* geom, JSONFormatter& json)
 }
 
 // ----------------------------------------------------------------------------
-template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, std::string* jsondigs, std::string* jsonwires)
+template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, ILazy* digs, ILazy* wires)
 {
   const std::string mime = "application/json";
 
-  // Index of files that we have as strings in memory
-  const std::map<std::string, std::string*> toc =
-    {{"/digs.json",   jsondigs},
-     {"/wires.json",  jsonwires}};
-
-  auto it = toc.find(doc);
-  if(it != toc.end()){
-    write_ok200(sock, mime, true);
-    write_compressed_buffer((unsigned char*)it->second->data(), it->second->size(), sock, Z_DEFAULT_COMPRESSION);
-    close(sock);
-    return;
-  }
-
-  // Otherwise should be one we can generate on the fly
   std::stringstream ss;
   JSONFormatter json(ss);
 
@@ -671,6 +664,8 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
   else if(doc == "/trajs.json")       SerializeProductByLabel<simb::MCParticle>(*evt, "largeant", json);
   else if(doc == "/hits.json")        SerializeHits(*evt, geom, json);
   else if(doc == "/geom.json")        SerializeGeometry(geom, *detprop, json);
+  else if(doc == "/digs.json")        digs->Serialize(json);
+  else if(doc == "/wires.json")       wires->Serialize(json);
   else{
     write_notfound404(sock);
     close(sock);
@@ -684,17 +679,17 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
 }
 
 // ----------------------------------------------------------------------------
-template<class T> void _HandleGet(std::string doc, int sock, const T* evt, PNGArena* digArena, PNGArena* wireArena, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, std::string* jsondigs, std::string* jsonwires)
+template<class T> void _HandleGet(std::string doc, int sock, const T* evt, ILazy* digs, ILazy* wires, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop)
 {
   if(doc == "/") doc = "/index.html";
 
   if(endswith(doc, ".png")){
-    _HandleGetPNG(doc, sock, digArena, wireArena);
+    _HandleGetPNG(doc, sock, digs, wires);
     return;
   }
 
   if(endswith(doc, ".json")){
-    _HandleGetJSON(doc, sock, evt, geom, detprop, jsondigs, jsonwires);
+    _HandleGetJSON(doc, sock, evt, geom, detprop, digs, wires);
     return;
   }
 
@@ -766,117 +761,158 @@ template<class T> int WebEVDServer<T>::EnsureListen()
   return 0;
 }
 
-// ----------------------------------------------------------------------------
-template<class TEvt>
-void HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
-                  PNGArena& arena, JSONFormatter& json)
+template<class T> class LazyDigits: public ILazy
 {
-  std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> imgs;
+public:
+  LazyDigits(const T& evt, const geo::GeometryCore* geom)
+    : fEvt(&evt), fGeom(geom), fArena("dig")
+  {
+  }
 
-  for(art::InputTag tag: getInputTags<raw::RawDigit>(evt)){
-    typename TEvt::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
-    evt.getByLabel(tag, digs);
+  virtual void Serialize(JSONFormatter& json) override
+  {
+    Init();
+    json << fImgs;
+  }
 
-    for(const raw::RawDigit& dig: *digs){
-      for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
-        //        const geo::TPCID tpc(wire);
-        const geo::PlaneID plane(wire);
+  virtual PNGArena& GetArena() override
+  {
+    Init();
+    return fArena;
+  }
 
-        const geo::WireID w0 = geom->GetBeginWireID(plane);
-        const unsigned int Nw = geom->Nwires(plane);
+protected:
+  void Init()
+  {
+    std::lock_guard guard(fLock);
 
-        if(imgs[tag].count(plane) == 0){
-          imgs[tag].emplace(plane, PNGView(arena, Nw, dig.Samples()));
-        }
+    if(!fEvt || !fGeom) return; // already init'd
 
-        PNGView& bytes = imgs[tag].find(plane)->second;
+    for(art::InputTag tag: getInputTags<raw::RawDigit>(*fEvt)){
+      typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
+      fEvt->getByLabel(tag, digs);
 
-        raw::RawDigit::ADCvector_t adcs(dig.Samples());
-        raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
+      for(const raw::RawDigit& dig: *digs){
+        for(geo::WireID wire: fGeom->ChannelToWire(dig.Channel())){
+          //        const geo::TPCID tpc(wire);
+          const geo::PlaneID plane(wire);
 
-        for(unsigned int tick = 0; tick < adcs.size(); ++tick){
-          const int adc = adcs[tick] ? int(adcs[tick])-dig.GetPedestal() : 0;
+          const geo::WireID w0 = fGeom->GetBeginWireID(plane);
+          const unsigned int Nw = fGeom->Nwires(plane);
 
-          if(adc != 0){
-            // alpha
-            bytes(wire.Wire-w0.Wire, tick, 3) = std::min(abs(adc), 255);
-            if(adc > 0){
-              // red
-              bytes(wire.Wire-w0.Wire, tick, 0) = 255;
-            }
-            else{
-              // blue
-              bytes(wire.Wire-w0.Wire, tick, 2) = 255;
-            }
+          if(fImgs[tag].count(plane) == 0){
+            fImgs[tag].emplace(plane, PNGView(fArena, Nw, dig.Samples()));
           }
-        } // end for tick
-      } // end for wire
-    } // end for dig
-  } // end for tag
 
-  json << imgs;
-}
+          PNGView& bytes = fImgs[tag].find(plane)->second;
 
-// ----------------------------------------------------------------------------
-template<class TEvt>
-void HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
-                 PNGArena& arena, JSONFormatter& json)
+          raw::RawDigit::ADCvector_t adcs(dig.Samples());
+          raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
+
+          for(unsigned int tick = 0; tick < adcs.size(); ++tick){
+            const int adc = adcs[tick] ? int(adcs[tick])-dig.GetPedestal() : 0;
+
+            if(adc != 0){
+              // alpha
+              bytes(wire.Wire-w0.Wire, tick, 3) = std::min(abs(adc), 255);
+              if(adc > 0){
+                // red
+                bytes(wire.Wire-w0.Wire, tick, 0) = 255;
+              }
+              else{
+                // blue
+                bytes(wire.Wire-w0.Wire, tick, 2) = 255;
+              }
+            }
+          } // end for tick
+        } // end for wire
+      } // end for dig
+    } // end for tag
+
+    fEvt = 0;
+    fGeom = 0;
+  }
+
+  const T* fEvt;
+  const geo::GeometryCore* fGeom;
+
+  std::mutex fLock;
+  PNGArena fArena;
+
+  std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> fImgs;
+};
+
+template<class T> class LazyWires: public ILazy
 {
-  std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> imgs;
+public:
+  LazyWires(const T& evt, const geo::GeometryCore* geom)
+    : fEvt(&evt), fGeom(geom), fArena("wire")
+  {
+  }
 
-  for(art::InputTag tag: getInputTags<recob::Wire>(evt)){
-    typename TEvt::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
-    evt.getByLabel(tag, wires);
+  virtual void Serialize(JSONFormatter& json) override
+  {
+    Init();
+    json << fImgs;
+  }
 
-    for(const recob::Wire& rbwire: *wires){
-      for(geo::WireID wire: geom->ChannelToWire(rbwire.Channel())){
-        //        const geo::TPCID tpc(wire);
-        const geo::PlaneID plane(wire);
+  virtual PNGArena& GetArena() override
+  {
+    Init();
+    return fArena;
+  }
 
-        const geo::WireID w0 = geom->GetBeginWireID(plane);
-        const unsigned int Nw = geom->Nwires(plane);
+protected:
+  void Init()
+  {
+    std::lock_guard guard(fLock);
 
-        if(imgs[tag].count(plane) == 0){
-          imgs[tag].emplace(plane, PNGView(arena, Nw, rbwire.NSignal()));
-        }
+    if(!fEvt || !fGeom) return; // already init'd
 
-        PNGView& bytes = imgs[tag].find(plane)->second;
+    for(art::InputTag tag: getInputTags<recob::Wire>(*fEvt)){
+      typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
+      fEvt->getByLabel(tag, wires);
 
-        const auto adcs = rbwire.Signal();
-        for(unsigned int tick = 0; tick < adcs.size(); ++tick){
-          if(adcs[tick] <= 0) continue;
+      for(const recob::Wire& rbwire: *wires){
+        for(geo::WireID wire: fGeom->ChannelToWire(rbwire.Channel())){
+          //        const geo::TPCID tpc(wire);
+          const geo::PlaneID plane(wire);
 
-          // green channel
-          bytes(wire.Wire-w0.Wire, tick, 1) = 128; // dark green
-          // alpha channel
-          bytes(wire.Wire-w0.Wire, tick, 3) = std::max(0, std::min(int(10*adcs[tick]), 255));
-        } // end for tick
-      } // end for wire
-    } // end for rbwire
-  } // end for tag
+          const geo::WireID w0 = fGeom->GetBeginWireID(plane);
+          const unsigned int Nw = fGeom->Nwires(plane);
 
-  json << imgs;
-}
+          if(fImgs[tag].count(plane) == 0){
+            fImgs[tag].emplace(plane, PNGView(fArena, Nw, rbwire.NSignal()));
+          }
 
-// ----------------------------------------------------------------------------
-template<class T> void WebEVDServer<T>::
-FillJSONsAndArena(const T& evt,
-                  const geo::GeometryCore* geom,
-                  PNGArena& digArena,
-                  PNGArena& wireArena)
-{
-  std::stringstream outfdigs;
-  std::stringstream outfwires;
+          PNGView& bytes = fImgs[tag].find(plane)->second;
 
-  JSONFormatter jsondigs(outfdigs);
-  JSONFormatter jsonwires(outfwires);
+          const auto adcs = rbwire.Signal();
+          for(unsigned int tick = 0; tick < adcs.size(); ++tick){
+            if(adcs[tick] <= 0) continue;
 
-  HandleDigits(evt, geom, digArena, jsondigs);
-  HandleWires (evt, geom, wireArena, jsonwires);
+            // green channel
+            bytes(wire.Wire-w0.Wire, tick, 1) = 128; // dark green
+            // alpha channel
+            bytes(wire.Wire-w0.Wire, tick, 3) = std::max(0, std::min(int(10*adcs[tick]), 255));
+          } // end for tick
+        } // end for wire
+      } // end for rbwire
+    } // end for tag
 
-  fDigsJSON = outfdigs.str();
-  fWiresJSON = outfwires.str();
-}
+    fEvt = 0;
+    fGeom = 0;
+  }
+
+protected:
+  const T* fEvt;
+  const geo::GeometryCore* fGeom;
+
+  std::mutex fLock;
+  PNGArena fArena;
+
+  std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> fImgs;
+};
 
 // ----------------------------------------------------------------------------
 template<class T> Result WebEVDServer<T>::
@@ -890,8 +926,8 @@ serve(const T& evt,
 
   if(EnsureListen() != 0) return kERROR;
 
-  PNGArena digArena("dig"), wireArena("wire");
-  FillJSONsAndArena(evt, geom, digArena, wireArena);
+  LazyDigits<T> digs(evt, geom);
+  LazyWires<T> wires(evt, geom);
 
   std::list<std::thread> threads;
 
@@ -918,7 +954,7 @@ serve(const T& evt,
         return HandleCommand(sreq, sock);
       }
       else{
-        threads.emplace_back(_HandleGet<T>, sreq, sock, &evt, &digArena, &wireArena, geom, &detprop, &fDigsJSON, &fWiresJSON);
+        threads.emplace_back(_HandleGet<T>, sreq, sock, &evt, &digs, &wires, geom, &detprop);
       }
     }
     else{

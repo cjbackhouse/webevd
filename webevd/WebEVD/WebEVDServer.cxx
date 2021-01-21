@@ -218,20 +218,40 @@ std::string FindWebDir()
 }
 
 // ----------------------------------------------------------------------------
-void _HandleGetPNG(std::string doc, int sock, PNGArena* arena)
+void _HandleGetPNG(std::string doc, int sock, PNGArena* digArena, PNGArena* wireArena)
 {
   const std::string mime = "image/png";
 
-  write_ok200(sock, mime, false);
-
   // Parse the filename
   char* ctx;
-  strtok_r(&doc.front(), "_", &ctx); // consume the "arena" text
-  const int imgIdx = atoi(strtok_r(0, "_", &ctx));
-  const int dim = atoi(strtok_r(0, ".", &ctx));
 
+  const char* pName = strtok_r(&doc.front(), "_", &ctx);
+  const char* pIdx = strtok_r(0, "_", &ctx);
+  const char* pDim = strtok_r(0, ".", &ctx);
+
+  if(!pName || !pIdx || !pDim){
+    write_notfound404(sock);
+    close(sock);
+    return;
+  }
+
+  const std::string name(pName);
+  const int idx = atoi(pIdx);
+  const int dim = atoi(pDim);
+
+  PNGArena* arena = 0;
+  if(name == "/dig") arena = digArena;
+  if(name == "/wire") arena = wireArena;
+
+  if(!arena || idx >= int(arena->data.size()) || dim > PNGArena::kArenaSize){
+    write_notfound404(sock);
+    close(sock);
+    return;
+  }
+
+  write_ok200(sock, mime, false);
   FILE* f = fdopen(sock, "wb");
-  arena->WritePNGBytes(f, imgIdx, dim);
+  arena->WritePNGBytes(f, idx, dim);
   fclose(f);
 }
 
@@ -653,6 +673,7 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
   else if(doc == "/geom.json")        SerializeGeometry(geom, *detprop, json);
   else{
     write_notfound404(sock);
+    close(sock);
     return;
   }
 
@@ -663,12 +684,12 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
 }
 
 // ----------------------------------------------------------------------------
-template<class T> void _HandleGet(std::string doc, int sock, const T* evt, PNGArena* arena, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, std::string* jsondigs, std::string* jsonwires)
+template<class T> void _HandleGet(std::string doc, int sock, const T* evt, PNGArena* digArena, PNGArena* wireArena, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, std::string* jsondigs, std::string* jsonwires)
 {
   if(doc == "/") doc = "/index.html";
 
   if(endswith(doc, ".png")){
-    _HandleGetPNG(doc, sock, arena);
+    _HandleGetPNG(doc, sock, digArena, wireArena);
     return;
   }
 
@@ -841,7 +862,8 @@ void HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
 template<class T> void WebEVDServer<T>::
 FillJSONsAndArena(const T& evt,
                   const geo::GeometryCore* geom,
-                  PNGArena& arena)
+                  PNGArena& digArena,
+                  PNGArena& wireArena)
 {
   std::stringstream outfdigs;
   std::stringstream outfwires;
@@ -849,8 +871,8 @@ FillJSONsAndArena(const T& evt,
   JSONFormatter jsondigs(outfdigs);
   JSONFormatter jsonwires(outfwires);
 
-  HandleDigits(evt, geom, arena, jsondigs);
-  HandleWires (evt, geom, arena, jsonwires);
+  HandleDigits(evt, geom, digArena, jsondigs);
+  HandleWires (evt, geom, wireArena, jsonwires);
 
   fDigsJSON = outfdigs.str();
   fWiresJSON = outfwires.str();
@@ -868,8 +890,8 @@ serve(const T& evt,
 
   if(EnsureListen() != 0) return kERROR;
 
-  PNGArena arena("arena");
-  FillJSONsAndArena(evt, geom, arena);
+  PNGArena digArena("dig"), wireArena("wire");
+  FillJSONsAndArena(evt, geom, digArena, wireArena);
 
   std::list<std::thread> threads;
 
@@ -896,7 +918,7 @@ serve(const T& evt,
         return HandleCommand(sreq, sock);
       }
       else{
-        threads.emplace_back(_HandleGet<T>, sreq, sock, &evt, &arena, geom, &detprop, &fDigsJSON, &fWiresJSON);
+        threads.emplace_back(_HandleGet<T>, sreq, sock, &evt, &digArena, &wireArena, geom, &detprop, &fDigsJSON, &fWiresJSON);
       }
     }
     else{

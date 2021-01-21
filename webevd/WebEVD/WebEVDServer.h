@@ -34,7 +34,8 @@ namespace evd
 
     void FillJSONsAndArena(const T& evt,
                            const geo::GeometryCore* geom,
-                           PNGArena& arena);
+                           PNGArena& digArena,
+                           PNGArena& wireArena);
 
     int EnsureListen();
 

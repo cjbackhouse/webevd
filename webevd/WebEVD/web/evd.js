@@ -28,6 +28,7 @@ const kY = 3;
 // Layers used to implement mixed U/V views
 const kUV = 4;
 const kVU = 5;
+const kNLayers = 6; // for writing loops over all layers
 
 document.OnKeyDown = function(evt)
 {
@@ -261,8 +262,8 @@ let hitvtxs = {}; // map indexed by reco algo
 
 let tpclabels_div = document.getElementById('tpclabels_div');
 
-let wireaxes = [[], [], [], [], []];
-let tickaxes = [[], [], [], [], []];
+let wireaxes = [[], [], [], [], [], []];
+let tickaxes = [[], [], [], [], [], []];
 
 for(let key in planes){
     let plane = planes[key];
@@ -462,7 +463,7 @@ for(let key in reco_vtxs){
     vgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vvtxs), 3));
     vgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(vidxs), 1));
     let vtxs = new THREE.Mesh(vgeom, mat_vtxs);
-    for(let i = 0; i <= 5; ++i) vtxs.layers.enable(i);
+    for(let i = 0; i < kNLayers; ++i) vtxs.layers.enable(i);
     scene.add(vtxs);
 
 
@@ -493,7 +494,7 @@ for(let key in cryos){
 
     line.position.set((r0.x+r1.x)/2, (r0.y+r1.y)/2, (r0.z+r1.z)/2);
 
-    for(let i = 0; i <= 5; ++i) line.layers.enable(i);
+    for(let i = 0; i < kNLayers; ++i) line.layers.enable(i);
 
     cryogroup.add(line);
 }
@@ -520,7 +521,7 @@ for(let key in planes){
     let edges = new THREE.EdgesGeometry(geom);
     let line = new THREE.LineSegments(edges, mat_geo);
 
-    for(let i = 0; i <= 5; ++i) line.layers.enable(i);
+    for(let i = 0; i < kNLayers; ++i) line.layers.enable(i);
 
     apas.add(line);
 }
@@ -546,7 +547,7 @@ for(let opdet of opdets){
     let edges = new THREE.EdgesGeometry(geom);
     let line = new THREE.LineSegments(edges, mat_geo);
 
-    for(let i = 0; i <= 5; ++i) line.layers.enable(i);
+    for(let i = 0; i < kNLayers; ++i) line.layers.enable(i);
 
     opdetgroup.add(line);
 
@@ -584,7 +585,7 @@ for(let label in spacepoints){
     spgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
     spgeom.setIndex(new THREE.BufferAttribute(new Uint32Array(spidxs), 1));
     let sps = new THREE.Mesh(spgeom, mat_sps);
-    for(let i = 0; i <= 5; ++i) sps.layers.enable(i);
+    for(let i = 0; i < kNLayers; ++i) sps.layers.enable(i);
     scene.add(sps);
 
     AddDropdownToggle('spacepoints_dropdown', sps, label);
@@ -638,7 +639,7 @@ function add_tracks(trajs, group, must_be_charged){
         let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
         let trkline = new THREE.Line(trkgeom, mat_trk);
 
-        for(let i = 0; i <= 5; ++i) trkline.layers.enable(i);
+        for(let i = 0; i < kNLayers; ++i) trkline.layers.enable(i);
         group.add(trkline);
     }
 }
@@ -777,7 +778,7 @@ function PaintAxes()
     }
 
     let layer = new THREE.Layers();
-    for(let i = 0; i <= 4; ++i){
+    for(let i = 0; i < kNLayers; ++i){
         layer.set(i);
         if(camera.layers.test(layer)){
             if(gAxesType == AXES_WIRECM){

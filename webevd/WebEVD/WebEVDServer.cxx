@@ -526,7 +526,6 @@ void SerializeEventID(const gallery::Event& evt, JSONFormatter& json)
 // ----------------------------------------------------------------------------
 void SerializePlanes(const geo::GeometryCore* geom,
                      const detinfo::DetectorPropertiesData& detprop,
-                     unsigned long maxTick,
                      JSONFormatter& json)
 {
   bool first = true;
@@ -547,6 +546,8 @@ void SerializePlanes(const geo::GeometryCore* geom,
 
     const double tick_origin = detprop.ConvertTicksToX(0, plane);
     const double tick_pitch = detprop.ConvertTicksToX(1, plane) - tick_origin;
+
+    const int maxTick = detprop.NumberTimeSamples();
 
     if(!first) json << ",\n";
     first = false;
@@ -570,11 +571,10 @@ void SerializePlanes(const geo::GeometryCore* geom,
 // ----------------------------------------------------------------------------
 void SerializeGeometry(const geo::GeometryCore* geom,
                        const detinfo::DetectorPropertiesData& detprop,
-                       unsigned long maxTick,
                        JSONFormatter& json)
 {
   json << "{\n";
-  SerializePlanes(geom, detprop, maxTick, json);
+  SerializePlanes(geom, detprop, json);
   json << ",\n\n";
 
   json << "  \"cryos\": [\n";
@@ -623,7 +623,7 @@ SerializeHits(const T& evt, const geo::GeometryCore* geom, JSONFormatter& json)
 }
 
 // ----------------------------------------------------------------------------
-template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, std::string* jsondigs, std::string* jsonwires, unsigned long maxTick)
+template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, std::string* jsondigs, std::string* jsonwires)
 {
   const std::string mime = "application/json";
 
@@ -650,7 +650,7 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
   else if(doc == "/vtxs.json")        SerializeProduct<recob::Vertex>(*evt, json);
   else if(doc == "/trajs.json")       SerializeProductByLabel<simb::MCParticle>(*evt, "largeant", json);
   else if(doc == "/hits.json")        SerializeHits(*evt, geom, json);
-  else if(doc == "/geom.json")        SerializeGeometry(geom, *detprop, maxTick, json);
+  else if(doc == "/geom.json")        SerializeGeometry(geom, *detprop, json);
   else{
     write_notfound404(sock);
     return;
@@ -663,7 +663,7 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
 }
 
 // ----------------------------------------------------------------------------
-template<class T> void _HandleGet(std::string doc, int sock, const T* evt, PNGArena* arena, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, std::string* jsondigs, std::string* jsonwires, unsigned long maxTick)
+template<class T> void _HandleGet(std::string doc, int sock, const T* evt, PNGArena* arena, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, std::string* jsondigs, std::string* jsonwires)
 {
   if(doc == "/") doc = "/index.html";
 
@@ -673,7 +673,7 @@ template<class T> void _HandleGet(std::string doc, int sock, const T* evt, PNGAr
   }
 
   if(endswith(doc, ".json")){
-    _HandleGetJSON(doc, sock, evt, geom, detprop, jsondigs, jsonwires, maxTick);
+    _HandleGetJSON(doc, sock, evt, geom, detprop, jsondigs, jsonwires);
     return;
   }
 
@@ -747,18 +747,14 @@ template<class T> int WebEVDServer<T>::EnsureListen()
 
 // ----------------------------------------------------------------------------
 template<class TEvt>
-unsigned long HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
-                           PNGArena& arena, JSONFormatter& json)
+void HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
+                  PNGArena& arena, JSONFormatter& json)
 {
-  unsigned long maxTick = 0;
-
   std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> imgs;
 
   for(art::InputTag tag: getInputTags<raw::RawDigit>(evt)){
     typename TEvt::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
     evt.getByLabel(tag, digs);
-
-    for(const raw::RawDigit& dig: *digs) maxTick = std::max(maxTick, (unsigned long)dig.Samples());
 
     for(const raw::RawDigit& dig: *digs){
       for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
@@ -769,7 +765,7 @@ unsigned long HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
         const unsigned int Nw = geom->Nwires(plane);
 
         if(imgs[tag].count(plane) == 0){
-          imgs[tag].emplace(plane, PNGView(arena, Nw, maxTick));
+          imgs[tag].emplace(plane, PNGView(arena, Nw, dig.Samples()));
         }
 
         PNGView& bytes = imgs[tag].find(plane)->second;
@@ -798,24 +794,18 @@ unsigned long HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
   } // end for tag
 
   json << imgs;
-
-  return maxTick;
 }
 
 // ----------------------------------------------------------------------------
 template<class TEvt>
-unsigned long HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
-                          PNGArena& arena, JSONFormatter& json)
+void HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
+                 PNGArena& arena, JSONFormatter& json)
 {
-  unsigned long maxTick = 0;
-
   std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> imgs;
 
   for(art::InputTag tag: getInputTags<recob::Wire>(evt)){
     typename TEvt::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
     evt.getByLabel(tag, wires);
-
-    for(const recob::Wire& wire: *wires) maxTick = std::max(maxTick, wire.NSignal());
 
     for(const recob::Wire& rbwire: *wires){
       for(geo::WireID wire: geom->ChannelToWire(rbwire.Channel())){
@@ -826,7 +816,7 @@ unsigned long HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
         const unsigned int Nw = geom->Nwires(plane);
 
         if(imgs[tag].count(plane) == 0){
-          imgs[tag].emplace(plane, PNGView(arena, Nw, maxTick));
+          imgs[tag].emplace(plane, PNGView(arena, Nw, rbwire.NSignal()));
         }
 
         PNGView& bytes = imgs[tag].find(plane)->second;
@@ -845,15 +835,12 @@ unsigned long HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
   } // end for tag
 
   json << imgs;
-
-  return maxTick;
 }
 
 // ----------------------------------------------------------------------------
-template<class T> unsigned long WebEVDServer<T>::
+template<class T> void WebEVDServer<T>::
 FillJSONsAndArena(const T& evt,
                   const geo::GeometryCore* geom,
-                  const detinfo::DetectorPropertiesData& detprop,
                   PNGArena& arena)
 {
   std::stringstream outfdigs;
@@ -862,14 +849,11 @@ FillJSONsAndArena(const T& evt,
   JSONFormatter jsondigs(outfdigs);
   JSONFormatter jsonwires(outfwires);
 
-  unsigned long maxTick = 0;
-  maxTick = std::max(maxTick, HandleDigits(evt, geom, arena, jsondigs));
-  maxTick = std::max(maxTick, HandleWires (evt, geom, arena, jsonwires));
+  HandleDigits(evt, geom, arena, jsondigs);
+  HandleWires (evt, geom, arena, jsonwires);
 
   fDigsJSON = outfdigs.str();
   fWiresJSON = outfwires.str();
-
-  return maxTick;
 }
 
 // ----------------------------------------------------------------------------
@@ -885,7 +869,7 @@ serve(const T& evt,
   if(EnsureListen() != 0) return kERROR;
 
   PNGArena arena("arena");
-  const unsigned long maxTick = FillJSONsAndArena(evt, geom, detprop, arena);
+  FillJSONsAndArena(evt, geom, arena);
 
   std::list<std::thread> threads;
 
@@ -912,7 +896,7 @@ serve(const T& evt,
         return HandleCommand(sreq, sock);
       }
       else{
-        threads.emplace_back(_HandleGet<T>, sreq, sock, &evt, &arena, geom, &detprop, &fDigsJSON, &fWiresJSON, maxTick);
+        threads.emplace_back(_HandleGet<T>, sreq, sock, &evt, &arena, geom, &detprop, &fDigsJSON, &fWiresJSON);
       }
     }
     else{

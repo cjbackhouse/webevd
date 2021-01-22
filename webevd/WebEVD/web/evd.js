@@ -290,38 +290,22 @@ let apas = new THREE.Group();
 planes.then(planes => {
     for(let key in planes){
         let plane = planes[key];
-        if(plane.view != kZ) continue; // collection only
-
-        let c = ArrToVec(plane.center);
-        let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
-        let d = ArrToVec(plane.wiredir).multiplyScalar(plane.depth/2.);
-
-        let vtxs = [];
-        push_square_vtxs(c, a, d, vtxs);
-
-        let geom = new THREE.BufferGeometry();
-        geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
-
-        let edges = new THREE.EdgesGeometry(geom);
-        let line = new THREE.LineSegments(edges, mat_geo);
-
-        for(let i = 0; i < kNLayers; ++i) line.layers.enable(i);
-
-        apas.add(line);
-    }
-
-    scene.add(apas);
-    requestAnimationFrame(animate);
-}); // end then (planes -> apas)
-
-Promise.all([planes, xdigs, xwires]).then(data => {
-    let planes = data[0];
-    let xdigs = data[1];
-    let xwires = data[2];
-
-    for(let key in planes){
-        let plane = planes[key];
         let pg = new PlaneGeom(plane);
+
+        if(plane.view == kZ){ // collection only for physical APAs
+            let vtxs = [];
+            push_square_vtxs(pg.c, pg.a, pg.d, vtxs);
+
+            let geom = new THREE.BufferGeometry();
+            geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+
+            let edges = new THREE.EdgesGeometry(geom);
+            let line = new THREE.LineSegments(edges, mat_geo);
+
+            for(let i = 0; i < kNLayers; ++i) line.layers.enable(i);
+
+            apas.add(line);
+        }
 
         // Learn something for the camera
         if(plane.view == kU){
@@ -352,6 +336,61 @@ Promise.all([planes, xdigs, xwires]).then(data => {
         line.layers.set(plane.view);
         line.layers.enable(pg.uvlayer);
 
+
+
+        if(plane.view == kZ){ // collection
+            let div = document.createElement('div');
+            div.className = 'label';
+            // Cut off the plane number, we want the name of the whole APA/TPC
+            div.appendChild(document.createTextNode(key.slice(0, key.lastIndexOf(' '))));
+            div.pos = pg.c; // stash the 3D position on the HTML element
+            tpclabels_div.appendChild(div);
+        }
+
+        let r0 = pg.c.clone();
+        r0.addScaledVector(pg.a, -1);
+        r0.addScaledVector(pg.d, -1);
+        let r1 = pg.c.clone();
+        r1.addScaledVector(pg.a, +1);
+        r1.addScaledVector(pg.d, -1);
+        wireaxes[plane.view].push({r0: r0, r1: r1, w: plane.nwires});
+        if(pg.uvlayer != plane.view) wireaxes[pg.uvlayer].push({r0: r0, r1: r1, w: plane.nwires});
+        let r2 = pg.c.clone();
+        r2.addScaledVector(pg.a, -1);
+        r2.addScaledVector(pg.d, +1);
+        tickaxes[plane.view].push({r0: r0, r1: r2, w: plane.nticks});
+        if(pg.uvlayer != plane.view) tickaxes[pg.uvlayer].push({r0: r0, r1: r2, w: plane.nticks});
+    } // end for plane
+
+    scene.add(apas);
+    requestAnimationFrame(animate);
+
+
+    // Disable any buttons that are irrelevant for the current geometry
+    if(uperp == undefined && vperp == undefined){
+        document.getElementById('uview_button').style.display = 'none';
+        document.getElementById('vview_button').style.display = 'none';
+        document.getElementById('uvview_button').style.display = 'none';
+        document.getElementById('vuview_button').style.display = 'none';
+        document.getElementById('uvview2d_button').style.display = 'none';
+        document.getElementById('vuview2d_button').style.display = 'none';
+    }
+
+    if(!anyy){
+        document.getElementById('yview_button').style.display = 'none';
+        document.getElementById('yview2d_button').style.display = 'none';
+    }
+}); // end then (planes)
+
+Promise.all([planes, xdigs, xwires]).then(data => {
+    let planes = data[0];
+    let xdigs = data[1];
+    let xwires = data[2];
+
+    for(let key in planes){
+        let plane = planes[key];
+        let pg = new PlaneGeom(plane);
+
         for(let dws of [xdigs, xwires]){
             for(let label in dws){
                 let dw = dws[label][key];
@@ -369,7 +408,7 @@ Promise.all([planes, xdigs, xwires]).then(data => {
                     let blocka = ArrToVec(plane.across).multiplyScalar(block.dx/2*plane.pitch);
                     let blockd = ArrToVec(plane.normal).multiplyScalar(block.dy/2*Math.abs(plane.tick_pitch));
 
-                    vtxs = [];
+                    let vtxs = [];
                     push_square_vtxs(blockc, blocka, blockd, vtxs);
                     geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
@@ -411,29 +450,6 @@ Promise.all([planes, xdigs, xwires]).then(data => {
                 } // end for block
             } // end for label
         } // end for dws
-
-        if(plane.view == kZ){ // collection
-            let div = document.createElement('div');
-            div.className = 'label';
-            // Cut off the plane number, we want the name of the whole APA/TPC
-            div.appendChild(document.createTextNode(key.slice(0, key.lastIndexOf(' '))));
-            div.pos = pg.c; // stash the 3D position on the HTML element
-            tpclabels_div.appendChild(div);
-        }
-
-        let r0 = pg.c.clone();
-        r0.addScaledVector(pg.a, -1);
-        r0.addScaledVector(pg.d, -1);
-        let r1 = pg.c.clone();
-        r1.addScaledVector(pg.a, +1);
-        r1.addScaledVector(pg.d, -1);
-        wireaxes[plane.view].push({r0: r0, r1: r1, w: plane.nwires});
-        if(pg.uvlayer != plane.view) wireaxes[pg.uvlayer].push({r0: r0, r1: r1, w: plane.nwires});
-        let r2 = pg.c.clone();
-        r2.addScaledVector(pg.a, -1);
-        r2.addScaledVector(pg.d, +1);
-        tickaxes[plane.view].push({r0: r0, r1: r2, w: plane.nticks});
-        if(pg.uvlayer != plane.view) tickaxes[pg.uvlayer].push({r0: r0, r1: r2, w: plane.nticks});
     } // end for planes
 
     requestAnimationFrame(animate);
@@ -444,21 +460,6 @@ Promise.all([planes, xdigs, xwires]).then(data => {
 
     for(let label in xwires){
         AddDropdownToggle('wires_dropdown', wires[label], label, false, true);
-    }
-
-    // Disable any buttons that are irrelevant for the current geometry
-    if(uperp == undefined && vperp == undefined){
-        document.getElementById('uview_button').style.display = 'none';
-        document.getElementById('vview_button').style.display = 'none';
-        document.getElementById('uvview_button').style.display = 'none';
-        document.getElementById('vuview_button').style.display = 'none';
-        document.getElementById('uvview2d_button').style.display = 'none';
-        document.getElementById('vuview2d_button').style.display = 'none';
-    }
-
-    if(!anyy){
-        document.getElementById('yview_button').style.display = 'none';
-        document.getElementById('yview2d_button').style.display = 'none';
     }
 
 }); // end then (planes)

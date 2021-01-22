@@ -47,9 +47,9 @@ import {OrbitControls} from "https://cdn.jsdelivr.net/npm/three@v0.110.0/example
 
 // Kick off the fetching of all the different JSONs
 let geom = fetch("geom.json").then(response => response.json());
+let truth_trajs = fetch("trajs.json").then(response => response.json());
 let xhits = fetch("hits.json").then(response => response.json());
 let tracks = fetch("tracks.json").then(response => response.json());
-let truth_trajs = fetch("trajs.json").then(response => response.json());
 let spacepoints = fetch("spacepoints.json").then(response => response.json());
 let reco_vtxs = fetch("vtxs.json").then(response => response.json());
 let xdigs = fetch("digs.json").then(response => response.json());
@@ -172,7 +172,6 @@ function FinalizeTextures(prefix){
 
     // Load all the mipmaps at level 1, which will trigger the rest
     for(let fname in gtexmats){
-        console.log(fname, prefix, fname.startsWith(prefix));
         if(!fname.startsWith(prefix)){
             survivors[fname] = gtexmats[fname];
             continue;
@@ -390,7 +389,10 @@ planes.then(planes => {
     }
 }); // end then (planes)
 
-function handle_digs_or_wires(planes, dws, tgt, dropdown, texprefix){
+async function handle_digs_or_wires(planes_promise, dws_promise, tgt, dropdown, texprefix){
+    let planes = await planes_promise;
+    let dws = await dws_promise;
+
     for(let key in planes){
         let plane = planes[key];
         let pg = new PlaneGeom(plane);
@@ -453,8 +455,8 @@ function handle_digs_or_wires(planes, dws, tgt, dropdown, texprefix){
     }
 }
 
-Promise.all([planes, xdigs]).then(data => handle_digs_or_wires(data[0], data[1], digs, 'digs_dropdown', 'dig_'));
-Promise.all([planes, xwires]).then(data => handle_digs_or_wires(data[0], data[1], wires, 'wires_dropdown', 'wire_'));
+handle_digs_or_wires(planes, xdigs, digs, 'digs_dropdown', 'dig_');
+handle_digs_or_wires(planes, xwires, wires, 'wires_dropdown', 'wire_');
 
 // Compute center-of-mass (where the camera looks)
 let com = planes.then(planes => {
@@ -469,9 +471,9 @@ let com = planes.then(planes => {
 });
 
 // Now place reco hits according to the plane geometries
-Promise.all([xhits, planes]).then(data => { // wait for both
-    let xhits = data[0];
-    let planes = data[1];
+async function handle_hits(xhits_promise, planes_promise){
+    let xhits = await xhits_promise;
+    let planes = await planes_promise;
 
     for(let key in planes){
         let plane = planes[key];
@@ -523,7 +525,9 @@ Promise.all([xhits, planes]).then(data => { // wait for both
     } // end for label
 
     requestAnimationFrame(animate);
-}); // end "then" (xhits)
+}
+
+handle_hits(xhits, planes);
 
 
 reco_vtxs.then(reco_vtxs => {

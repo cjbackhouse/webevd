@@ -24,7 +24,9 @@ const kY = 3;
 // Layers used to implement mixed U/V views
 const kUV = 4;
 const kVU = 5;
-const kNLayers = 6; // for writing loops over all layers
+const kNViews = 6;
+const kNoView = 6; // To hide planes/views but retain geometry
+const kNLayers = 7; // for writing loops over all layers
 
 fetch("evtid.json").then(resp => resp.json()).then(evtid => {
     document.getElementById('runbox').value = evtid.run;
@@ -965,7 +967,7 @@ SetVisibilityById(opdetgroup, false, 'opdets', 'OpDets');
 let animStart = null;
 let animFunc = null;
 
-window.NoView = function(){camera.layers.set(5); requestAnimationFrame(animate);}
+window.NoView = function(){camera.layers.set(kNoView); requestAnimationFrame(animate);}
 
 // TODO these only really do what you expect when already in 3D mode. May want
 // to "re-diagonalize" this functionality.

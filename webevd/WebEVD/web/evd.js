@@ -382,87 +382,71 @@ planes.then(planes => {
     }
 }); // end then (planes)
 
-Promise.all([planes, xdigs, xwires]).then(data => {
-    let planes = data[0];
-    let xdigs = data[1];
-    let xwires = data[2];
-
+function handle_digs_or_wires(planes, dws, tgt, dropdown){
     for(let key in planes){
         let plane = planes[key];
         let pg = new PlaneGeom(plane);
 
-        for(let dws of [xdigs, xwires]){
-            for(let label in dws){
-                let dw = dws[label][key];
-                if(dw == undefined) continue; // sometimes wires are missing
+        for(let label in dws){
+            let dw = dws[label][key];
+            if(dw == undefined) continue; // sometimes wires are missing
 
-                for(let block of dw.blocks){
-                    // TODO - would want to combine all the ones with the same
-                    // texture file into a single geometry.
-                    let geom = new THREE.BufferGeometry();
+            for(let block of dw.blocks){
+                // TODO - would want to combine all the ones with the same
+                // texture file into a single geometry.
+                let geom = new THREE.BufferGeometry();
 
-                    let blockc = pg.c.clone();
-                    blockc.addScaledVector(ArrToVec(plane.across), (block.x+block.dx/2-plane.nwires/2)*plane.pitch);
-                    blockc.addScaledVector(ArrToVec(plane.normal), (block.y+block.dy/2-plane.nticks/2)*Math.abs(plane.tick_pitch));
+                let blockc = pg.c.clone();
+                blockc.addScaledVector(ArrToVec(plane.across), (block.x+block.dx/2-plane.nwires/2)*plane.pitch);
+                blockc.addScaledVector(ArrToVec(plane.normal), (block.y+block.dy/2-plane.nticks/2)*Math.abs(plane.tick_pitch));
 
-                    let blocka = ArrToVec(plane.across).multiplyScalar(block.dx/2*plane.pitch);
-                    let blockd = ArrToVec(plane.normal).multiplyScalar(block.dy/2*Math.abs(plane.tick_pitch));
+                let blocka = ArrToVec(plane.across).multiplyScalar(block.dx/2*plane.pitch);
+                let blockd = ArrToVec(plane.normal).multiplyScalar(block.dy/2*Math.abs(plane.tick_pitch));
 
-                    let vtxs = [];
-                    push_square_vtxs(blockc, blocka, blockd, vtxs);
-                    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+                let vtxs = [];
+                push_square_vtxs(blockc, blocka, blockd, vtxs);
+                geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
-                    // TODO ditto here
-                    let u0 =   (block.u         )/block.texdim;
-                    let v0 = 1-(block.v         )/block.texdim;
-                    let u1 =   (block.u+block.du)/block.texdim;
-                    let v1 = 1-(block.v+block.dv)/block.texdim;
+                // TODO ditto here
+                let u0 =   (block.u         )/block.texdim;
+                let v0 = 1-(block.v         )/block.texdim;
+                let u1 =   (block.u+block.du)/block.texdim;
+                let v1 = 1-(block.v+block.dv)/block.texdim;
 
-                    let uvs = new Float32Array( [u1, v0,
-                                                 u1, v1,
-                                                 u0, v1,
+                let uvs = new Float32Array( [u1, v0,
+                                             u1, v1,
+                                             u0, v1,
 
-                                                 u1, v0,
-                                                 u0, v1,
-                                                 u0, v0] );
+                                             u1, v0,
+                                             u0, v1,
+                                             u0, v0] );
 
-                    geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+                geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 
-                    let mat = TextureMaterial(block.fname, block.texdim);
-                    let dmesh = new THREE.Mesh(geom, mat);
-                    dmesh.layers.set(plane.view);
-                    if(dws === xdigs){
-                        if(!(label in digs)){
-                            digs[label] = new THREE.Group();
-                            scene.add(digs[label]);
-                        }
-                        digs[label].add(dmesh);
-                    }
-                    else{
-                        if(!(label in wires)){
-                            wires[label] = new THREE.Group();
-                            scene.add(wires[label]);
-                        }
-                        wires[label].add(dmesh);
-                    }
+                let mat = TextureMaterial(block.fname, block.texdim);
+                let dmesh = new THREE.Mesh(geom, mat);
+                dmesh.layers.set(plane.view);
 
-                    dmesh.layers.enable(pg.uvlayer);
-                } // end for block
-            } // end for label
-        } // end for dws
+                if(!(label in tgt)){
+                    tgt[label] = new THREE.Group();
+                    scene.add(tgt[label]);
+                }
+                tgt[label].add(dmesh);
+
+                dmesh.layers.enable(pg.uvlayer);
+            } // end for block
+        } // end for label
     } // end for planes
 
     requestAnimationFrame(animate);
 
-    for(let label in xdigs){
-        AddDropdownToggle('digs_dropdown', digs[label], label, false, true);
+    for(let label in tgt){
+        AddDropdownToggle(dropdown, tgt[label], label, false, true);
     }
+}
 
-    for(let label in xwires){
-        AddDropdownToggle('wires_dropdown', wires[label], label, false, true);
-    }
-
-}); // end then (planes)
+Promise.all([planes, xdigs]).then(data => handle_digs_or_wires(data[0], data[1], digs, 'digs_dropdown'));
+Promise.all([planes, xwires]).then(data => handle_digs_or_wires(data[0], data[1], wires, 'wires_dropdown'));
 
 // Compute center-of-mass (where the camera looks)
 let com = planes.then(planes => {

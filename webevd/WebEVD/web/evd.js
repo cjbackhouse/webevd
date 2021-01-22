@@ -32,7 +32,6 @@ fetch("evtid.json").then(resp => resp.json()).then(evtid => {
     document.getElementById('evtbox').value = evtid.evt;
 });
 
-
 document.OnKeyDown = function(evt)
 {
     if(evt.keyCode == 13) { // enter

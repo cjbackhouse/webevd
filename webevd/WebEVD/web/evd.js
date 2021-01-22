@@ -167,9 +167,17 @@ function TextureMaterial(fname, texdim){
     return mat;
 }
 
-function FinalizeTextures(){
+function FinalizeTextures(prefix){
+    let survivors = {};
+
     // Load all the mipmaps at level 1, which will trigger the rest
     for(let fname in gtexmats){
+        console.log(fname, prefix, fname.startsWith(prefix));
+        if(!fname.startsWith(prefix)){
+            survivors[fname] = gtexmats[fname];
+            continue;
+        }
+
         let mat = gtexmats[fname].mat;
         let texdim = gtexmats[fname].texdim;
         new THREE.TextureLoader().load(fname+'_1.png',
@@ -185,7 +193,7 @@ function FinalizeTextures(){
                                        });
     } // end for fname
 
-    gtexmats = []; // idempotent
+    gtexmats = survivors;
 }
 
 
@@ -382,7 +390,7 @@ planes.then(planes => {
     }
 }); // end then (planes)
 
-function handle_digs_or_wires(planes, dws, tgt, dropdown){
+function handle_digs_or_wires(planes, dws, tgt, dropdown, texprefix){
     for(let key in planes){
         let plane = planes[key];
         let pg = new PlaneGeom(plane);
@@ -441,12 +449,12 @@ function handle_digs_or_wires(planes, dws, tgt, dropdown){
     requestAnimationFrame(animate);
 
     for(let label in tgt){
-        AddDropdownToggle(dropdown, tgt[label], label, false, true);
+        AddDropdownToggle(dropdown, tgt[label], label, false, texprefix);
     }
 }
 
-Promise.all([planes, xdigs]).then(data => handle_digs_or_wires(data[0], data[1], digs, 'digs_dropdown'));
-Promise.all([planes, xwires]).then(data => handle_digs_or_wires(data[0], data[1], wires, 'wires_dropdown'));
+Promise.all([planes, xdigs]).then(data => handle_digs_or_wires(data[0], data[1], digs, 'digs_dropdown', 'dig_'));
+Promise.all([planes, xwires]).then(data => handle_digs_or_wires(data[0], data[1], wires, 'wires_dropdown', 'wire_'));
 
 // Compute center-of-mass (where the camera looks)
 let com = planes.then(planes => {
@@ -604,13 +612,13 @@ opdets.then(opdets => {
 
 
 function AddDropdownToggle(dropdown_id, what, label, init = false,
-                          texs = false)
+                          texs = undefined)
 {
     let btn = document.createElement('button');
     SetVisibility(what, init, btn, label);
 
     btn.addEventListener('click', function(){
-        if(texs) FinalizeTextures();
+        if(texs != undefined) FinalizeTextures(texs);
         SetVisibility(what, !what.visible, btn, label);
         requestAnimationFrame(animate);
     });

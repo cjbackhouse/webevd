@@ -296,11 +296,13 @@ let apas = new THREE.Group();
 planes.then(planes => {
     for(let key in planes){
         let plane = planes[key];
-        let pg = new PlaneGeom(plane);
 
         if(plane.view == kZ){ // collection only for physical APAs
             let vtxs = [];
-            push_square_vtxs(pg.c, pg.a, pg.d, vtxs);
+            let c = ArrToVec(plane.center);
+            let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
+            let d = ArrToVec(plane.wiredir).multiplyScalar(plane.depth/2.);
+            push_square_vtxs(c, a, d, vtxs);
 
             let geom = new THREE.BufferGeometry();
             geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
@@ -322,6 +324,8 @@ planes.then(planes => {
             vperp = ArrToVec(plane.normal).cross(ArrToVec(plane.across));
         }
         if(plane.view == kY) anyy = true;
+
+        let pg = new PlaneGeom(plane);
 
         let vtxs = [];
         push_square_vtxs(pg.c, pg.a, pg.d, vtxs);

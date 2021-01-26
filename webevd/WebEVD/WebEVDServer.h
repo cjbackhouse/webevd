@@ -32,18 +32,9 @@ namespace evd
   protected:
     template<class PROD> using HandleT = typename T::template HandleT<std::vector<PROD>>;
 
-    void FillCoordsAndArena(const T& evt,
-                            const geo::GeometryCore* geom,
-                            const detinfo::DetectorPropertiesData& detprop,
-                            PNGArena& arena);
-
-    Result do_serve(PNGArena& arena);
-
     int EnsureListen();
 
     int fSock;
-
-    std::string fCoords;
   };
 }
 

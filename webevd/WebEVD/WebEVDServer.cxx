@@ -650,6 +650,35 @@ SerializeHits(const T& evt, const geo::GeometryCore* geom, JSONFormatter& json)
 }
 
 // ----------------------------------------------------------------------------
+template<class T> void SerializeDigitTraces(const T& evt,
+                                            const geo::GeometryCore* geom,
+                                            JSONFormatter& json)
+{
+  std::map<art::InputTag, std::map<geo::PlaneID, std::vector<raw::RawDigit::ADCvector_t>>> traces;
+
+  for(art::InputTag tag: getInputTags<raw::RawDigit>(evt)){
+    typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
+    evt.getByLabel(tag, digs);
+
+    for(const raw::RawDigit& dig: *digs){
+      for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
+        const geo::PlaneID plane(wire);
+
+        raw::RawDigit::ADCvector_t& adc = traces[tag][plane].emplace_back(dig.Samples());
+        raw::Uncompress(dig.ADCs(), adc, dig.Compression());
+
+        for(unsigned int tick = 0; tick < adc.size(); ++tick){
+          if(adc[tick] != 0) adc[tick] -= dig.GetPedestal();
+        }
+
+      } // end for wire
+    } // end for dig
+  } // end for tag
+
+  json << traces;
+}
+
+// ----------------------------------------------------------------------------
 template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, ILazy* digs, ILazy* wires)
 {
   const std::string mime = "application/json";
@@ -666,6 +695,7 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
   else if(doc == "/geom.json")        SerializeGeometry(geom, *detprop, json);
   else if(doc == "/digs.json")        digs->Serialize(json);
   else if(doc == "/wires.json")       wires->Serialize(json);
+  else if(doc == "/dig_traces.json")  SerializeDigitTraces(*evt, geom, json);
   else{
     write_notfound404(sock);
     close(sock);
@@ -702,7 +732,7 @@ template<class T> void _HandleGet(std::string doc, int sock, const T* evt, ILazy
   // Otherwise it must be a physical file
 
   // Don't accidentally serve any file we shouldn't
-  const std::set<std::string> whitelist = {"/evd.css", "/evd.js", "/favicon.ico", "/index.html"};
+  const std::set<std::string> whitelist = {"/evd.css", "/evd.js", "/traces.js", "/favicon.ico", "/index.html", "/traces.html"};
 
   if(whitelist.count(doc)){
     write_ok200(sock, mime, true);

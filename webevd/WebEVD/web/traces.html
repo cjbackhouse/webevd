@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>WebEVD</title>
+    <link rel="shortcut icon" href="favicon.ico">
+    <link rel="stylesheet" type="text/css" href="evd.css">
+  </head>
+
+  <body class="darktheme">
+    <!-- "Float" buttons over the display -->
+    <div style="position:absolute">
+      <button onclick="location.href='PREV'" title="Previous">&#x2b05&#xfe0f</button>
+      <button onclick="location.reload(true)" title="Reload">&#x1f504&#xfe0f</button>
+      <button onclick="location.href='NEXT'" title="Next">&#x27a1&#xfe0f</button>
+
+      <!-- <button onclick="document.documentElement.requestFullscreen();">Fullscreen</button> -->
+
+      <button onclick="location.href='QUIT'">&#x1f6d1 Quit</button>
+
+    </div>
+
+    <br><br> <!-- clumsy -->
+    <div id="content">Please wait. This can take a while...</div>
+
+    <div style="position:fixed; bottom: 0; left: 0;">
+      Run:    <input id="runbox"    onkeydown="OnKeyDown(event);"></input><br>
+      Subrun: <input id="subrunbox" onkeydown="OnKeyDown(event);"></input><br>
+      Event:  <input id="evtbox"    onkeydown="OnKeyDown(event);"></input>
+    </div>
+
+    <!-- <div style="overflow:hidden;" id="axislabels_div"></div> -->
+    <!-- <div style="overflow:hidden;display:none" id="tpclabels_div"></div> -->
+    <!-- <div style="overflow:hidden;display:none" id="opdetlabels_div"></div> -->
+
+    <script type="module" src="traces.js"></script>
+  </body>
+</html>

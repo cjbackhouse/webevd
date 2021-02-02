@@ -2,7 +2,7 @@
 
 # The *parent* line must the first non-commented line and defines this product and version
 # The version should be of the form vxx_yy_zz (e.g. v01_02_03)
-parent webevd v09_01_01
+parent webevd v09_20_00_rc0
 defaultqual e19
 
 # These optional lines define the installed directories where headers,
@@ -34,8 +34,8 @@ flcdir  product_dir     fcl
 # These versions are based on the versions set up by larsoft v08_48_01
 
 product         version
-lardata         v09_01_07
-gallery         v1_15_02
+lardata         v09_20_00_rc0
+gallery         v1_16_02
 cetbuildtools   v7_17_01  -  only_for_build
 end_product_list
 

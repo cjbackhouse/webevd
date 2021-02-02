@@ -114,30 +114,6 @@ void write_unimp501(int sock)
   write(sock, str, strlen(str));
 }
 
-void write_file(const std::string& fname, int sock)
-{
-  std::cout << "Serving " << fname << std::endl;
-
-  std::vector<char> buf(1024*1024);
-  FILE* f = fopen(fname.c_str(), "r");
-
-  if(!f){
-    std::cout << fname << " not found!" << std::endl;
-    return;
-  }
-
-  while(true){
-    int nread = fread(&buf.front(), 1, buf.size(), f);
-    if(nread <= 0){
-      std::cout << "Done\n" << std::endl;
-      fclose(f);
-      return;
-    }
-    std::cout << "Writing " << nread << " bytes" << std::endl;
-    write(sock, &buf.front(), nread);
-  }
-}
-
 std::string read_all(int sock)
 {
   std::string ret;
@@ -298,12 +274,13 @@ void gzip_buffer(unsigned char* src,
 void write_compressed_buffer(unsigned char* src,
                              int length,
                              int sock,
-                             int level)
+                             int level,
+                             const std::string& name)
 {
   std::vector<unsigned char> dest;
   gzip_buffer(src, length, dest, level);
 
-  std::cout << "Writing " << length << " bytes (compressed to " << dest.size() << ")\n" << std::endl;
+  std::cout << "Writing " << length << " bytes (compressed to " << dest.size() << ") for " << name << "\n" << std::endl;
 
   write(sock, dest.data(), dest.size());
 }
@@ -318,7 +295,7 @@ void write_compressed_file(const std::string& loc, int fd_out, int level)
   fstat(fd_in, &st);
   unsigned char* src = (unsigned char*)mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fd_in, 0);
 
-  write_compressed_buffer(src, st.st_size, fd_out, level);
+  write_compressed_buffer(src, st.st_size, fd_out, level, loc);
 
   munmap(src, st.st_size);
 
@@ -727,7 +704,7 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
 
   std::string response = ss.str();
   write_ok200(sock, mime, true);
-  write_compressed_buffer((unsigned char*)response.data(), response.size(), sock, Z_DEFAULT_COMPRESSION);
+  write_compressed_buffer((unsigned char*)response.data(), response.size(), sock, Z_DEFAULT_COMPRESSION, doc);
   close(sock);
 }
 

@@ -654,7 +654,8 @@ template<class T> void SerializeDigitTraces(const T& evt,
                                             const geo::GeometryCore* geom,
                                             JSONFormatter& json)
 {
-  std::map<art::InputTag, std::map<geo::PlaneID, std::vector<raw::RawDigit::ADCvector_t>>> traces;
+  // [tag][plane][wire index][t0]
+  std::map<art::InputTag, std::map<geo::PlaneID, std::vector<std::map<int, std::vector<short>>>>> traces;
 
   for(art::InputTag tag: getInputTags<raw::RawDigit>(evt)){
     typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
@@ -664,13 +665,35 @@ template<class T> void SerializeDigitTraces(const T& evt,
       for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
         const geo::PlaneID plane(wire);
 
-        raw::RawDigit::ADCvector_t& adc = traces[tag][plane].emplace_back(dig.Samples());
-        raw::Uncompress(dig.ADCs(), adc, dig.Compression());
+        raw::RawDigit::ADCvector_t adcs(dig.Samples());
+        raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
 
-        for(unsigned int tick = 0; tick < adc.size(); ++tick){
-          if(adc[tick] != 0) adc[tick] -= dig.GetPedestal();
-        }
+        std::vector<short> snip;
+        snip.reserve(dig.Samples());
 
+        std::map<int, std::vector<short>>& snips = traces[tag][plane].emplace_back();
+
+        int t = 0;
+        for(short adc: adcs){
+          if(adc == 0){
+            if(!snip.empty()){
+              snips[t-snip.size()] = snip;
+              snip.clear();
+            }
+          }
+          else{
+            snip.push_back(adc - dig.GetPedestal());
+          }
+
+          ++t;
+        } // end for adc
+
+        // Save last in-progress snippet if necessary
+        if(!snip.empty()) snips[t-snip.size()] = snip;
+
+        // this is a bit of a hack to teach the viewer how long the full trace
+        // is
+        snips[dig.Samples()] = {};
       } // end for wire
     } // end for dig
   } // end for tag

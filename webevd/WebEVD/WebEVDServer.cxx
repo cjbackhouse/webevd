@@ -627,6 +627,39 @@ SerializeHits(const T& evt, const geo::GeometryCore* geom, JSONFormatter& json)
 }
 
 // ----------------------------------------------------------------------------
+template<class T> std::map<int, std::vector<T>> ToSnippets(const std::vector<T>& adcs, T pedestal = 0)
+{
+  std::vector<T> snip;
+  snip.reserve(adcs.size());
+
+  std::map<int, std::vector<T>> snips;
+
+  int t = 0;
+  for(T adc: adcs){
+    if(adc == 0){
+      if(!snip.empty()){
+        snips[t-snip.size()] = snip;
+        snip.clear();
+      }
+    }
+    else{
+      snip.push_back(adc - pedestal);
+    }
+
+    ++t;
+  } // end for adc
+
+  // Save last in-progress snippet if necessary
+  if(!snip.empty()) snips[t-snip.size()] = snip;
+
+  // this is a bit of a hack to teach the viewer how long the full trace
+  // is
+  snips[adcs.size()] = {};
+
+  return snips;
+}
+
+// ----------------------------------------------------------------------------
 template<class T> void SerializeDigitTraces(const T& evt,
                                             const geo::GeometryCore* geom,
                                             JSONFormatter& json)
@@ -645,13 +678,42 @@ template<class T> void SerializeDigitTraces(const T& evt,
         raw::RawDigit::ADCvector_t adcs(dig.Samples());
         raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
 
-        std::vector<short> snip;
-        snip.reserve(dig.Samples());
+        traces[tag][plane].push_back(ToSnippets(adcs, short(dig.GetPedestal())));
+      } // end for wire
+    } // end for dig
+  } // end for tag
 
-        std::map<int, std::vector<short>>& snips = traces[tag][plane].emplace_back();
+  json << traces;
+}
 
-        int t = 0;
-        for(short adc: adcs){
+// ----------------------------------------------------------------------------
+template<class T> void SerializeWireTraces(const T& evt,
+                                           const geo::GeometryCore* geom,
+                                           JSONFormatter& json)
+{
+  // [tag][plane][wire index][t0]
+  std::map<art::InputTag, std::map<std::string, std::vector<std::map<int, std::vector<float>>>>> traces;
+  const std::string plane = "TODO planes";
+
+  for(art::InputTag tag: getInputTags<recob::Wire>(evt)){
+    typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
+    evt.getByLabel(tag, wires);
+
+    for(const recob::Wire& rbwire: *wires){
+      // TODO assign to planes/wire numbers somehow
+
+      const std::vector<float>& adcs = rbwire.Signal();
+
+      traces[tag][plane].push_back(ToSnippets(rbwire.Signal()));
+
+      std::vector<float> snip;
+      snip.reserve(rbwire.NSignal());
+
+      std::map<int, std::vector<float>>& snips = traces[tag][plane].emplace_back();
+
+      // TODO factor out the snip logic
+      int t = 0;
+      for(float adc: adcs){
           if(adc == 0){
             if(!snip.empty()){
               snips[t-snip.size()] = snip;
@@ -659,7 +721,7 @@ template<class T> void SerializeDigitTraces(const T& evt,
             }
           }
           else{
-            snip.push_back(adc - dig.GetPedestal());
+            snip.push_back(adc);
           }
 
           ++t;
@@ -670,13 +732,13 @@ template<class T> void SerializeDigitTraces(const T& evt,
 
         // this is a bit of a hack to teach the viewer how long the full trace
         // is
-        snips[dig.Samples()] = {};
-      } // end for wire
-    } // end for dig
+        snips[rbwire.NSignal()] = {};
+    } // end for rbwire
   } // end for tag
 
   json << traces;
 }
+
 
 // ----------------------------------------------------------------------------
 template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, ILazy* digs, ILazy* wires)
@@ -696,6 +758,7 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
   else if(doc == "/digs.json")        digs->Serialize(json);
   else if(doc == "/wires.json")       wires->Serialize(json);
   else if(doc == "/dig_traces.json")  SerializeDigitTraces(*evt, geom, json);
+  else if(doc == "/wire_traces.json") SerializeWireTraces(*evt, geom, json);
   else{
     write_notfound404(sock);
     close(sock);

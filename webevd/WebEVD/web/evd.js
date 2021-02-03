@@ -70,7 +70,10 @@ let camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHe
 let renderer = new THREE.WebGLRenderer();
 renderer.setSize( window.innerWidth, window.innerHeight);
 
-renderer.setClearColor('black');
+if(document.body.className == 'lighttheme')
+    renderer.setClearColor('white');
+else
+    renderer.setClearColor('black');
 
 renderer.domElement.addEventListener("click", OnClick, true);
 
@@ -518,15 +521,7 @@ async function handle_hits(xhits_promise, planes_promise){
             hits.add(h);
         }
 
-        let btn = document.createElement('button');
-        SetVisibility(hits, false, btn, label);
-
-        btn.addEventListener('click', function(){
-            SetVisibility(hits, !hits.visible, btn, label);
-            requestAnimationFrame(animate);
-        });
-
-        document.getElementById('hits_dropdown').appendChild(btn);
+        AddDropdownToggle('hits_dropdown', hits, label);
     } // end for label
 
     requestAnimationFrame(animate);
@@ -536,10 +531,10 @@ handle_hits(xhits, planes);
 
 
 reco_vtxs.then(reco_vtxs => {
-    for(let key in reco_vtxs){
+    for(let label in reco_vtxs){
         let vvtxs = [];
         let vidxs = [];
-        for(let v of reco_vtxs[key]){
+        for(let v of reco_vtxs[label]){
             push_icosahedron_vtxs(ArrToVec(v), .5, vvtxs, vidxs);
         }
 
@@ -550,15 +545,7 @@ reco_vtxs.then(reco_vtxs => {
         for(let i = 0; i < kNLayers; ++i) vtxs.layers.enable(i);
         scene.add(vtxs);
 
-        let btn = document.createElement('button');
-        SetVisibility(vtxs, false, btn, key);
-
-        btn.addEventListener('click', function(){
-            SetVisibility(vtxs, !vtxs.visible, btn, key);
-            requestAnimationFrame(animate);
-        });
-
-        document.getElementById('vertices_dropdown').appendChild(btn);
+        AddDropdownToggle('vertices_dropdown', vtxs, label);
     }
 
     requestAnimationFrame(animate);
@@ -623,7 +610,13 @@ opdets.then(opdets => {
 function AddDropdownToggle(dropdown_id, what, label, init = false,
                           texs = undefined)
 {
+    let tag = dropdown_id+'/'+label;
+    if(window.sessionStorage[tag] != undefined){
+        init = (window.sessionStorage[tag] == 'true');
+    }
+
     let btn = document.createElement('button');
+    btn.id = tag;
     SetVisibility(what, init, btn, label);
 
     btn.addEventListener('click', function(){
@@ -906,6 +899,8 @@ function animate() {
 
 function SetVisibility(col, state, elem, str)
 {
+    window.sessionStorage[elem.id] = state;
+
     col.visible = state;
     // Tick and Cross emojis respectively
     elem.innerHTML = (state ? '&#x2705 ' : '&#x274c ')+str;
@@ -1202,6 +1197,8 @@ window.Theme = function(theme)
     if(theme == 'darktheme') renderer.setClearColor('black'); else renderer.setClearColor('white');
 
     requestAnimationFrame(animate);
+
+    window.sessionStorage.theme = theme;
 }
 
 
@@ -1231,5 +1228,3 @@ animate();
 // position after the initial setup.
 scene.matrixAutoUpdate = false;
 scene.autoUpdate = false;
-
-console.log(renderer.info);

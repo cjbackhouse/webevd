@@ -19,6 +19,44 @@ let dig_traces = fetch("dig_traces.json").then(response => response.json());
 let wire_traces = fetch("wire_traces.json").then(response => response.json());
 let hits = fetch("hits.json").then(response => response.json());
 
+// This could all be done with CSS but the APIs for manipulating it don't look
+// great
+function GetCurrentVisibility(klass)
+{
+    for(let elem of document.getElementsByClassName(klass)){
+        let vis = elem.getAttribute('visibility')
+        return vis != 'hidden';
+    }
+
+    return false;// no elems at all
+}
+
+function SetVisibilityLabel(klass, state, button, str)
+{
+    for(let elem of document.getElementsByClassName(klass)){
+        elem.setAttribute('visibility', state ? 'visible' : 'hidden');
+    }
+    // Tick and Cross emojis respectively
+    button.innerHTML = (state ? '&#x2705 ' : '&#x274c ')+str;
+}
+
+function AddDropdownToggle(dropdown_id, klass, label, init = false)
+{
+    let btn = document.createElement('button');
+    SetVisibilityLabel(klass, init, btn, label);
+
+    btn.addEventListener('click', function(){
+        SetVisibilityLabel(klass, !GetCurrentVisibility(klass), btn, label);
+    });
+
+    document.getElementById(dropdown_id).appendChild(btn);
+}
+
+function new_svg_elem(name)
+{
+    return document.createElementNS('http://www.w3.org/2000/svg', name);
+}
+
 function EnsureSVGs(dict)
 {
     let content = document.getElementById('content');
@@ -32,14 +70,14 @@ function EnsureSVGs(dict)
             h2.appendChild(document.createTextNode(plane));
             content.appendChild(h2);
 
-            let svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            let svg = new_svg_elem('svg');
             svg.id = plane;
             content.appendChild(svg);
         } // end for plane
     } // end for label
 }
 
-async function handle_dig_traces(traces, color)
+async function handletraces(traces, tag, color, init)
 {
     traces = await traces;
 
@@ -52,10 +90,14 @@ async function handle_dig_traces(traces, color)
             let maxx = svg.getAttribute('width');
             let maxy = svg.getAttribute('height');
 
+            // Collect all the svgs of the same label under one class
+            let planegroup = new_svg_elem('g');
+            planegroup.setAttribute('class', tag+'/'+label);
+
             for(let wireNo in traces[label][plane]){
                 let wire = traces[label][plane][wireNo];
 
-                let poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                let poly = new_svg_elem('polyline');
                 poly.setAttribute('stroke', color);
                 poly.setAttribute('fill', 'none');
 
@@ -73,18 +115,22 @@ async function handle_dig_traces(traces, color)
 
                 poly.setAttribute('points', pts);
 
-                let trans = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                let trans = new_svg_elem('g');
                 let offset = wireNo*stride + offset0;
                 trans.setAttribute('transform', 'translate(0, '+offset+')');
                 if(offset+stride > maxy) maxy = offset+stride;
 
                 trans.appendChild(poly);
-                svg.appendChild(trans);
+                planegroup.appendChild(trans);
             } // end for wire
 
             svg.setAttribute('width', maxx);
             svg.setAttribute('height', maxy);
+
+            svg.appendChild(planegroup);
         } //end for plane
+
+        AddDropdownToggle(tag+'_dropdown', tag+'/'+label, label, init);
     } // end for label
 }
 
@@ -120,8 +166,12 @@ async function handle_hits(hits)
             let maxx = svg.getAttribute('width');
             let maxy = svg.getAttribute('height');
 
+            // Collect all the svgs of the same label under one class
+            let planegroup = new_svg_elem('g');
+            planegroup.setAttribute('class', 'hits/'+label);
+
             for(let hit of hits[label][plane]){
-                let poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                let poly = new_svg_elem('polyline');
                 poly.setAttribute('stroke', 'red');
                 poly.setAttribute('fill', 'none');
 
@@ -134,22 +184,26 @@ async function handle_hits(hits)
 
                 poly.setAttribute('points', pts);
 
-                let trans = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                let trans = new_svg_elem('g');
                 let offset = offset0 + stride*hit.wire
                 trans.setAttribute('transform', 'translate(0, '+offset+')');
                 if(offset+stride > maxy) maxy = offset+stride;
 
                 trans.appendChild(poly);
-                svg.appendChild(trans);
+                planegroup.appendChild(trans);
             } // end for wire
 
             svg.setAttribute('width', maxx);
             svg.setAttribute('height', maxy);
+
+            svg.appendChild(planegroup);
         } //end for plane
+
+        AddDropdownToggle('hits_dropdown', 'hits/'+label, label, false);
     } // end for label
 }
 
-handle_dig_traces(dig_traces, 'gray');
-handle_dig_traces(wire_traces, 'green');
+handletraces(dig_traces, 'digs', 'gray', false);
+handletraces(wire_traces, 'wires', 'green', true);
 handle_hits(hits);
 dig_traces = wire_traces = hits = undefined; // allow large JSONs to be GC'd

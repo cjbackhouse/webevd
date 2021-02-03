@@ -337,7 +337,8 @@ JSONFormatter& operator<<(JSONFormatter& json, const recob::Hit& hit)
 {
   return json << "{\"wire\": " << geo::WireID(hit.WireID()).Wire
               << ", \"tick\": " << hit.PeakTime()
-              << ", \"rms\": " << hit.RMS() << "}";
+              << ", \"rms\": " << hit.RMS()
+              << ", \"peakamp\": " << hit.PeakAmplitude() << "}";
 }
 
 // ----------------------------------------------------------------------------
@@ -665,7 +666,7 @@ template<class T> void SerializeDigitTraces(const T& evt,
                                             JSONFormatter& json)
 {
   // [tag][plane][wire index][t0]
-  std::map<art::InputTag, std::map<geo::PlaneID, std::vector<std::map<int, std::vector<short>>>>> traces;
+  std::map<art::InputTag, std::map<geo::PlaneID, std::map<int, std::map<int, std::vector<short>>>>> traces;
 
   for(art::InputTag tag: getInputTags<raw::RawDigit>(evt)){
     typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
@@ -678,7 +679,7 @@ template<class T> void SerializeDigitTraces(const T& evt,
         raw::RawDigit::ADCvector_t adcs(dig.Samples());
         raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
 
-        traces[tag][plane].push_back(ToSnippets(adcs, short(dig.GetPedestal())));
+        traces[tag][plane][wire.Wire] = ToSnippets(adcs, short(dig.GetPedestal()));
       } // end for wire
     } // end for dig
   } // end for tag
@@ -691,48 +692,21 @@ template<class T> void SerializeWireTraces(const T& evt,
                                            const geo::GeometryCore* geom,
                                            JSONFormatter& json)
 {
-  // [tag][plane][wire index][t0]
-  std::map<art::InputTag, std::map<std::string, std::vector<std::map<int, std::vector<float>>>>> traces;
-  const std::string plane = "TODO planes";
+  // [tag][plane][wire][t0]
+  std::map<art::InputTag, std::map<geo::PlaneID, std::map<int, std::map<int, std::vector<float>>>>> traces;
 
   for(art::InputTag tag: getInputTags<recob::Wire>(evt)){
     typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
     evt.getByLabel(tag, wires);
 
     for(const recob::Wire& rbwire: *wires){
-      // TODO assign to planes/wire numbers somehow
+      // Place all wire traces on the first wire (== channel) they are found on
+      const geo::WireID wire =  geom->ChannelToWire(rbwire.Channel())[0];
+      const geo::PlaneID plane(wire);
 
       const std::vector<float>& adcs = rbwire.Signal();
 
-      traces[tag][plane].push_back(ToSnippets(rbwire.Signal()));
-
-      std::vector<float> snip;
-      snip.reserve(rbwire.NSignal());
-
-      std::map<int, std::vector<float>>& snips = traces[tag][plane].emplace_back();
-
-      // TODO factor out the snip logic
-      int t = 0;
-      for(float adc: adcs){
-          if(adc == 0){
-            if(!snip.empty()){
-              snips[t-snip.size()] = snip;
-              snip.clear();
-            }
-          }
-          else{
-            snip.push_back(adc);
-          }
-
-          ++t;
-        } // end for adc
-
-        // Save last in-progress snippet if necessary
-        if(!snip.empty()) snips[t-snip.size()] = snip;
-
-        // this is a bit of a hack to teach the viewer how long the full trace
-        // is
-        snips[rbwire.NSignal()] = {};
+      traces[tag][plane][wire.Wire] = ToSnippets(rbwire.Signal());
     } // end for rbwire
   } // end for tag
 

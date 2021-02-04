@@ -209,6 +209,9 @@ scene.add(outlines);
 scene.add(truth);
 scene.add(chargedTruth);
 
+AddDropdownToggle('truth_dropdown', truth, 'All', true);
+AddDropdownToggle('truth_dropdown', chargedTruth, 'Charged', false);
+
 let uperp = null;
 let vperp = null;
 let anyy = false;
@@ -297,6 +300,7 @@ class PlaneGeom{
 
 // Physical APAs
 let apas = new THREE.Group();
+AddDropdownToggle('physical_dropdown', apas, 'APAs', true);
 
 planes.then(planes => {
     for(let key in planes){
@@ -552,6 +556,7 @@ reco_vtxs.then(reco_vtxs => {
 }); // end "then" (reco_vtxs)
 
 let cryogroup = new THREE.Group();
+AddDropdownToggle('physical_dropdown', cryogroup, 'Cryostats', true);
 
 cryos.then(cryos => {
     // Physical cryostat
@@ -577,6 +582,7 @@ cryos.then(cryos => {
 });
 
 let opdetgroup = new THREE.Group();
+AddDropdownToggle('physical_dropdown', opdetgroup, 'OpDets', false);
 let opdetlabels_div = document.getElementById('opdetlabels_div');
 
 opdets.then(opdets => {
@@ -935,29 +941,11 @@ function ToggleLabel(col, id, str){
     requestAnimationFrame(animate);
 }
 
-// TODO - would be better to have this javascript look up the buttons in the
-// HTML and attach the handlers to them.
-window.ToggleAllTruth = function(){Toggle(truth, 'allTruth', 'All');}
-window.ToggleChargedTruth = function(){Toggle(chargedTruth, 'chargedTruth', 'Charged');}
-window.ToggleCryos = function(){Toggle(cryogroup, 'cryos', 'Cryostats');}
-window.ToggleAPAs = function(){Toggle(apas, 'apas', 'APAs');}
-window.ToggleOpDets = function(){Toggle(opdetgroup, 'opdets', 'OpDets');}
-
-
 AllViews();
 ThreeDControls();
 
 // Try to pre-load all textures - doesn't work
 //renderer.compile(scene, camera);
-
-//SetVisibilityById(digs, false, 'rawdigits', 'RawDigits');
-//SetVisibilityById(wires, false, 'wires', 'Wires');
-SetVisibilityById(truth, true, 'allTruth', 'All');
-SetVisibilityById(chargedTruth, false, 'chargedTruth', 'Charged');
-
-SetVisibilityById(cryogroup, true, 'cryos', 'Cryostats');
-SetVisibilityById(apas, true, 'apas', 'APAs');
-SetVisibilityById(opdetgroup, false, 'opdets', 'OpDets');
 
 let animStart = null;
 let animFunc = null;

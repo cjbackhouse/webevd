@@ -627,8 +627,7 @@ function AddDropdownToggle(dropdown_id, what, label, init = false,
 
     btn.addEventListener('click', function(){
         if(texs != undefined) FinalizeTextures(texs);
-        SetVisibility(what, !what.visible, btn, label);
-        requestAnimationFrame(animate);
+        Toggle(what, btn, label);
     });
 
     document.getElementById(dropdown_id).appendChild(btn);
@@ -980,38 +979,20 @@ function SetVisibility(col, state, elem, str)
 {
     window.sessionStorage[elem.id] = state;
 
-    col.visible = state;
+    // GL objects
+    if(col.visible != undefined) col.visible = state;
+    // DOM objects
+    if(col.style != undefined) col.style.display = state ? 'initial' : 'none';
+
     // Tick and Cross emojis respectively
     elem.innerHTML = (state ? '&#x2705 ' : '&#x274c ')+str;
-}
 
-function SetVisibilityById(col, state, id, str)
-{
-    SetVisibility(col, state, document.getElementById(id), str);
-}
-
-function Toggle(col, id, str){
-    SetVisibilityById(col, !col.visible, id, str);
     requestAnimationFrame(animate);
 }
 
-function SetVisibilityLabel(col, state, elem, str)
-{
-    col.style.display = state ? "initial" : "none";
-    // Tick and Cross emojis respectively
-    elem.innerHTML = (state ? '&#x2705 ' : '&#x274c ')+str;
-}
-
-function SetVisibilityByIdLabel(col, state, id, str)
-{
-    SetVisibilityLabel(col, state, document.getElementById(id), str);
-}
-
-function ToggleLabel(col, id, str){
-    SetVisibilityByIdLabel(col,
-                           col.style.display == "none",
-                           id, str);
-    requestAnimationFrame(animate);
+function Toggle(col, elem, str){
+    if(col.visible != undefined) SetVisibility(col, !col.visible, elem, str);
+    if(col.style != undefined) SetVisibility(col, col.style.display == 'none', elem, str);
 }
 
 AllViews();
@@ -1227,19 +1208,8 @@ window.WireTickAxes = function()
     requestAnimationFrame(animate);
 }
 
-window.OpDetLabels = function()
-{
-    ToggleLabel(opdetlabels_div, 'opdetlabels', 'OpDets');
-}
-// default
-SetVisibilityByIdLabel(opdetlabels_div, false, 'opdetlabels', 'OpDets')
-
-window.TPCLabels = function()
-{
-    ToggleLabel(tpclabels_div, 'tpclabels', 'TPCs');
-}
-// default
-SetVisibilityByIdLabel(tpclabels_div, false, 'tpclabels', 'TPCs');
+AddDropdownToggle('labels_dropdown', opdetlabels_div, 'OpDets', false);
+AddDropdownToggle('labels_dropdown', tpclabels_div, 'TPCs', false);
 
 function OnClick()
 {

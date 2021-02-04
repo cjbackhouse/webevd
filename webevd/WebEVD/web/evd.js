@@ -943,8 +943,6 @@ function LoadCameraAndControls()
 
     camera.updateProjectionMatrix();
     controls.update();
-
-    scene.update();
 }
 
 function animate() {

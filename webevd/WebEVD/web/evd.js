@@ -730,11 +730,14 @@ truth_trajs.then(truth_trajs => add_tracks(truth_trajs, chargedTruth, true));
 let controls = new OrbitControls(camera, renderer.domElement);
 
 // Look at the center of the scene once we know where it is
+let gAutoPositionCamera = true;
 com.then(com => {
     controls.target = com;
 
-    camera.translateX(1000);
-    camera.lookAt(com);
+    // I would like to skip this whole function, but apparently the restoration
+    // sequence misses something. It's not too bad to have the target reset to
+    // the COM though.
+    if(gAutoPositionCamera) camera.translateX(1000);
 
     controls.update();
 
@@ -874,6 +877,74 @@ function PaintLabels(div)
     }
 }
 
+let gSaveCamera = false;
+
+function SaveCameraAndControls()
+{
+    if(!gSaveCamera) return; // Allow a chance to load first
+
+    let store = window.sessionStorage;
+    store.camera_fov = camera.fov;
+    store.camera_near = camera.near;
+    store.camera_far = camera.far;
+    store.camera_position_x = camera.position.x;
+    store.camera_position_y = camera.position.y;
+    store.camera_position_z = camera.position.z;
+    store.camera_up_x = camera.up.x;
+    store.camera_up_y = camera.up.y;
+    store.camera_up_z = camera.up.z;
+//    store.controls_target_x = controls.target.x;
+//    store.controls_target_y = controls.target.y;
+//    store.controls_target_z = controls.target.z;
+
+    store.camera_layers_mask = camera.layers.mask;
+
+    store.controls_screenSpacePanning = controls.screenSpacePanning;
+    store.controls_enableRotate = controls.enableRotate;
+    store.controls_mouseButtons_LEFT   = controls.mouseButtons.LEFT;
+    store.controls_mouseButtons_MIDDLE = controls.mouseButtons.MIDDLE;
+    store.controls_mouseButtons_RIGHT  = controls.mouseButtons.RIGHT;
+}
+
+function LoadCameraAndControls()
+{
+    gSaveCamera = true; // OK to start saving state now
+
+    let store = window.sessionStorage;
+
+    if(!store.camera_fov) return; // info not in session store
+
+    gAutoPositionCamera = false; // don't auto-position - it will fight with what we load
+
+    camera.fov = parseFloat(store.camera_fov);
+    camera.near = parseFloat(store.camera_near);
+    camera.far = parseFloat(store.camera_far);
+    camera.position.set(parseFloat(store.camera_position_x),
+                        parseFloat(store.camera_position_y),
+                        parseFloat(store.camera_position_z));
+    camera.up.set(parseFloat(store.camera_up_x),
+                  parseFloat(store.camera_up_y),
+                  parseFloat(store.camera_up_z));
+
+    camera.layers.mask = parseInt(store.camera_layers_mask);
+
+    controls.screenSpacePanning = (store.controls_screenSpacePanning == 'true');
+    controls.enableRotate = (store.controls_enableRotate == 'true');
+
+    controls.mouseButtons = {
+        LEFT:   parseInt(store.controls_mouseButtons_LEFT),
+        MIDDLE: parseInt(store.controls_mouseButtons_MIDDLE),
+        RIGHT:  parseInt(store.controls_mouseButtons_RIGHT)
+    };
+
+    // controls.target.set(parseFloat(store.controls_target_x),
+    //                     parseFloat(store.controls_target_y),
+    //                     parseFloat(store.controls_target_z));
+
+    camera.updateProjectionMatrix();
+    controls.update();
+}
+
 function animate() {
     if(gAnimReentrant) return;
     gAnimReentrant = true;
@@ -901,6 +972,8 @@ function animate() {
     if(tpclabels_div.style.display != "none") PaintLabels(tpclabels_div);
 
     gAnimReentrant = false;
+
+    SaveCameraAndControls();
 }
 
 function SetVisibility(col, state, elem, str)
@@ -963,10 +1036,8 @@ window.VUView = function(){camera.layers.set(kVU); requestAnimationFrame(animate
 
 // Remains as a free function so others can call it
 function AllViews(){
-    camera.layers.enable(kU);
-    camera.layers.enable(kV);
-    camera.layers.enable(kZ);
-    camera.layers.enable(kY);
+    for(let v = 0; v < kNViews; ++v) camera.layers.enable(v);
+    requestAnimationFrame(animate);
 }
 window.AllViews = AllViews;
 
@@ -1070,13 +1141,13 @@ function TwoDControls(){
         LEFT: THREE.MOUSE.PAN,
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: null
-    }
+    };
 
     // Seems to hang the touch controls entirely :(
     //controls.touches = {
     //    ONE: THREE.TOUCH.DOLLY_PAN,
     //    TWO: THREE.TOUCH.ROTATE
-    //}
+    //};
 
     controls.update();
 }
@@ -1090,7 +1161,7 @@ function ThreeDControls(){
         LEFT: THREE.MOUSE.ROTATE,
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: THREE.MOUSE.PAN
-    }
+    };
 
     controls.update();
 }
@@ -1216,3 +1287,5 @@ animate();
 // position after the initial setup.
 scene.matrixAutoUpdate = false;
 scene.autoUpdate = false;
+
+LoadCameraAndControls();

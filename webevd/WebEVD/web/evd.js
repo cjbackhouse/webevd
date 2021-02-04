@@ -1184,29 +1184,17 @@ window.Orbit = function()
     requestAnimationFrame(animate);
 }
 
-window.NoAxes = function()
+function SetAxesType(type)
 {
-    gAxesType = AXES_NONE;
+    gAxesType = type;
+    window.sessionStorage.axestype = type;
     requestAnimationFrame(animate);
 }
 
-window.PhysicalAxes = function()
-{
-    gAxesType = AXES_CMCM;
-    requestAnimationFrame(animate);
-}
-
-window.WireCmAxes = function()
-{
-    gAxesType = AXES_WIRECM;
-    requestAnimationFrame(animate);
-}
-
-window.WireTickAxes = function()
-{
-    gAxesType = AXES_WIRETICK;
-    requestAnimationFrame(animate);
-}
+window.NoAxes       = function(){SetAxesType(AXES_NONE);}
+window.PhysicalAxes = function(){SetAxesType(AXES_CMCM);}
+window.WireCmAxes   = function(){SetAxesType(AXES_WIRECM);}
+window.WireTickAxes = function(){SetAxesType(AXES_WIRETICK);}
 
 AddDropdownToggle('labels_dropdown', opdetlabels_div, 'OpDets', false);
 AddDropdownToggle('labels_dropdown', tpclabels_div, 'TPCs', false);
@@ -1259,3 +1247,5 @@ scene.matrixAutoUpdate = false;
 scene.autoUpdate = false;
 
 LoadCameraAndControls();
+
+if(window.sessionStorage.axestype) SetAxesType(parseInt(window.sessionStorage.axestype));

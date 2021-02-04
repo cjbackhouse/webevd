@@ -624,6 +624,7 @@ function AddDropdownToggle(dropdown_id, what, label, init = false,
     let btn = document.createElement('button');
     btn.id = tag;
     SetVisibility(what, init, btn, label);
+    if(init && texs != undefined) FinalizeTextures(texs);
 
     btn.addEventListener('click', function(){
         if(texs != undefined) FinalizeTextures(texs);
@@ -942,6 +943,8 @@ function LoadCameraAndControls()
 
     camera.updateProjectionMatrix();
     controls.update();
+
+    scene.update();
 }
 
 function animate() {

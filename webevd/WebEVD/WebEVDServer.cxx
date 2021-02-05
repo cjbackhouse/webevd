@@ -479,20 +479,7 @@ getInputTags(const art::Event& evt)
 template<class T> std::vector<art::InputTag>
 getInputTags(const gallery::Event& evt)
 {
-  std::string label = "pandora";
-  if constexpr(std::is_same_v<T, recob::Hit>) label = "gaushit";
-
-  std::cout << "Warning: getInputTags() not supported by gallery (https://cdcvs.fnal.gov/redmine/issues/23615) defaulting to \"" << label << "\"" << std::endl;
-
-  try{
-    evt.getValidHandle<std::vector<T>>(art::InputTag(label));
-  }
-  catch(...){
-    std::cout << "...but \"" << label << "\" not found in file" << std::endl;
-    return {};
-  }
-
-  return {art::InputTag(label)};
+  return evt.getInputTags<std::vector<T>>();
 }
 
 // ----------------------------------------------------------------------------
@@ -504,6 +491,9 @@ SerializeProduct(const TEvt& evt,
   if(!label.empty()) json << "var " << label << " = {\n"; else json << "{";
 
   const std::vector<art::InputTag> tags = getInputTags<TProd>(evt);
+  // TODO I have no idea why I can't just write
+  // tags = evt.getInputTags<std::vector<TProd>>();
+
   for(const art::InputTag& tag: tags){
     json << "  " << tag << ": ";
 

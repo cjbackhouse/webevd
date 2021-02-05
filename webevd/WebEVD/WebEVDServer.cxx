@@ -15,6 +15,7 @@
 #include "gallery/Event.h"
 
 #include "lardataobj/RecoBase/Hit.h"
+#include "lardataobj/RecoBase/OpFlash.h"
 #include "lardataobj/RecoBase/SpacePoint.h"
 #include "lardataobj/RecoBase/Wire.h"
 #include "lardataobj/RecoBase/Track.h"
@@ -406,6 +407,22 @@ JSONFormatter& operator<<(JSONFormatter& json, const simb::MCParticle& part)
 }
 
 // ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const recob::OpFlash& flash)
+{
+  json << std::map<std::string, double>{
+    {"tcenter", flash.Time()},
+    {"twidth", flash.TimeWidth()},
+    {"ycenter", flash.YCenter()},
+    {"ywidth", flash.YWidth()},
+    {"zcenter", flash.ZCenter()},
+    {"zwidth", flash.ZWidth()},
+    {"totpe", flash.TotalPE()}
+  };
+
+  return json;
+}
+
+// ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const geo::CryostatGeo& cryo)
 {
   const TVector3 r0(cryo.MinX(), cryo.MinY(), cryo.MinZ());
@@ -662,6 +679,7 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
   else if(doc == "/spacepoints.json") SerializeProduct<recob::SpacePoint>(*evt, json);
   else if(doc == "/vtxs.json")        SerializeProduct<recob::Vertex>(*evt, json);
   else if(doc == "/trajs.json")       SerializeProductByLabel<simb::MCParticle>(*evt, "largeant", json);
+  else if(doc == "/opflashes.json")   SerializeProduct<recob::OpFlash>(*evt, json);
   else if(doc == "/hits.json")        SerializeHits(*evt, geom, json);
   else if(doc == "/geom.json")        SerializeGeometry(geom, *detprop, json);
   else if(doc == "/digs.json")        digs->Serialize(json);

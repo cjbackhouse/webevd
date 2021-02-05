@@ -55,6 +55,7 @@ let spacepoints = fetch("spacepoints.json").then(response => response.json());
 let reco_vtxs = fetch("vtxs.json").then(response => response.json());
 let xdigs = fetch("digs.json").then(response => response.json());
 let xwires = fetch("wires.json").then(response => response.json());
+let opflashes = fetch("opflashes.json").then(response => response.json());
 
 // Extract the individual geometry pieces
 let planes = geom.then(geom => geom.planes);
@@ -94,6 +95,8 @@ let mat_geo = new THREE.LineBasicMaterial({color: 'darkred'});
 let mat_hit = new THREE.MeshBasicMaterial({color: 'gray', side: THREE.DoubleSide});
 
 let mat_sps = new THREE.MeshBasicMaterial({color: 'blue'});
+
+let mat_flash = new THREE.MeshBasicMaterial({color: 'gray', opacity: 0.5, transparent: true});
 
 let mat_vtxs = new THREE.MeshBasicMaterial({color: 'red'});
 
@@ -563,6 +566,42 @@ reco_vtxs.then(reco_vtxs => {
 
     requestAnimationFrame(animate);
 }); // end "then" (reco_vtxs)
+
+async function handle_flashes(flashes_promise, planes_promise)
+{
+    let flashes = await flashes_promise;
+    let planes = await planes_promise;
+
+    for(let label in flashes){
+        let group = new THREE.Group();
+        for(let flash of flashes[label]){
+            if(flash.twidth == 0 || flash.ywidth == 0 || flash.zwidth == 0){
+                console.log('Skipping bad flash', label, flash);
+                continue;
+            }
+
+            for(let key in planes){
+                let plane = planes[key];
+                let t = plane.tick_origin + flash.tcenter * plane.tick_pitch;
+                let dt = flash.twidth * plane.tick_pitch;
+                console.log(flash.tcenter, flash.twidth, plane.tick_origin, plane.tick_pitch, '->', t, dt);
+
+                let geom = new THREE.SphereGeometry(1, 16, 16);
+                geom.scale(dt, flash.ywidth, flash.zwidth);
+                geom.translate(t, flash.ycenter, flash.zcenter);
+
+                group.add(new THREE.Mesh(geom, mat_flash));
+            }
+        }
+
+        for(let i = 0; i < kNLayers; ++i) group.layers.enable(i);
+        scene.add(group);
+
+        AddDropdownToggle('opflashes_dropdown', group, label);
+    }
+}
+
+handle_flashes(opflashes, planes);
 
 let cryogroup = new THREE.Group();
 

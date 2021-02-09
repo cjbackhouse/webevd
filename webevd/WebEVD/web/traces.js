@@ -33,6 +33,8 @@ function GetCurrentVisibility(klass)
 
 function SetVisibilityLabel(klass, state, button, str)
 {
+    window.sessionStorage[button.id] = state;
+
     for(let elem of document.getElementsByClassName(klass)){
         elem.setAttribute('visibility', state ? 'visible' : 'hidden');
     }
@@ -42,7 +44,13 @@ function SetVisibilityLabel(klass, state, button, str)
 
 function AddDropdownToggle(dropdown_id, klass, label, init = false)
 {
+    let tag = dropdown_id+'/'+label;
+    if(window.sessionStorage[tag] != undefined){
+        init = (window.sessionStorage[tag] == 'true');
+    }
+
     let btn = document.createElement('button');
+    btn.id = tag;
     SetVisibilityLabel(klass, init, btn, label);
 
     btn.addEventListener('click', function(){
@@ -202,6 +210,13 @@ async function handle_hits(hits)
         AddDropdownToggle('hits_dropdown', 'hits/'+label, label, false);
     } // end for label
 }
+
+window.Theme = function(theme)
+{
+    document.body.className = theme;
+    window.sessionStorage.theme = theme;
+}
+
 
 handletraces(dig_traces, 'digs', 'gray', false);
 handletraces(wire_traces, 'wires', 'green', true);

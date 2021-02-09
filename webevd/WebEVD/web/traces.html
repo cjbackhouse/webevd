@@ -8,10 +8,13 @@
   </head>
 
   <body class="darktheme">
+    <!-- Trigger this as soon as possible to avoid flicker -->
+    <script>if(window.sessionStorage.theme) document.body.className = window.sessionStorage.theme;</script>
+
     <!-- "Float" buttons over the display -->
     <div style="position:fixed">
       <button onclick="location.href='PREV'" title="Previous">&#x2b05&#xfe0f</button>
-      <button onclick="location.reload(true)" title="Reload">&#x1f504&#xfe0f</button>
+      <button onclick="window.sessionStorage.clear();location.reload(true)" title="Reset">&#x1f504&#xfe0f</button>
       <button onclick="location.href='NEXT'" title="Next">&#x27a1&#xfe0f</button>
       <button onclick="location.href='index.html'" title="evd">EVD</button>
 
@@ -22,8 +25,8 @@
       <div class="dropdown">
         <button>Theme...</button>
         <div class="dropdown-content">
-          <button onclick="document.body.className='darktheme'">Dark</button>
-          <button onclick="document.body.className='lighttheme'">Light</button>
+          <button onclick="Theme('darktheme')">Dark</button>
+          <button onclick="Theme('lighttheme')">Light</button>
         </div>
       </div>
 

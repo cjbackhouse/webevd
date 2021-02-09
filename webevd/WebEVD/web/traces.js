@@ -10,7 +10,7 @@ fetch("evtid.json").then(resp => resp.json()).then(evtid => {
 document.OnKeyDown = function(evt)
 {
     if(evt.keyCode == 13) { // enter
-        window.location.href = "seek/" + document.getElementById('runbox').value + '/' + document.getElementById('subrunbox').value + '/' + document.getElementById('evtbox').value;
+        window.location.href = "seek_traces/" + document.getElementById('runbox').value + '/' + document.getElementById('subrunbox').value + '/' + document.getElementById('evtbox').value;
     }
 }
 

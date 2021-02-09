@@ -140,12 +140,18 @@ Result HandleCommand(std::string cmd, int sock)
 {
   EResult code = kERROR;
   int run = -1, subrun = -1, evt = -1;
+  bool traces = false;
 
   if(cmd == "/QUIT") code = kQUIT;
   if(cmd == "/NEXT") code = kNEXT;
   if(cmd == "/PREV") code = kPREV;
+  if(cmd == "/NEXT_TRACES"){ code = kNEXT; traces = true;}
+  if(cmd == "/PREV_TRACES"){ code = kPREV; traces = true;}
 
-  if(cmd.find("/seek/") == 0){
+  if(cmd.find("/seek/") == 0 ||
+     cmd.find("/seek_traces/") == 0){
+    if(cmd.find("/seek_traces/") == 0) traces = true;
+
     code = kSEEK;
     char* ctx;
     strtok_r(cmd.data(), "/", &ctx); // consumes the "seek" text
@@ -159,10 +165,11 @@ Result HandleCommand(std::string cmd, int sock)
 
   const int delay = (code == kQUIT) ? 2000 : 0;
   const std::string txt = (code == kQUIT) ? "Goodbye!" : "Please wait...";
+  const std::string next = traces ? "/traces.html" : "/";
 
   // The script tag to set the style is a pretty egregious layering violation,
   // but doing more seems overkill for a simple interstitial page.
-  const std::string msg = TString::Format("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>setTimeout(function(){window.location.replace('/');}, %d);</script></head><body><script>if(window.sessionStorage.theme == 'darktheme'){document.body.style.backgroundColor='black';document.body.style.color='white';}</script><h1>%s</h1></body></html>", delay, txt.c_str()).Data();
+  const std::string msg = TString::Format("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>setTimeout(function(){window.location.replace('%s');}, %d);</script></head><body><script>if(window.sessionStorage.theme == 'darktheme'){document.body.style.backgroundColor='black';document.body.style.color='white';}</script><h1>%s</h1></body></html>", next.c_str(), delay, txt.c_str()).Data();
 
   write(sock, msg.c_str(), msg.size());
   close(sock);
@@ -1017,8 +1024,11 @@ serve(const T& evt,
 
       if(sreq == "/NEXT" ||
          sreq == "/PREV" ||
+         sreq == "/NEXT_TRACES" ||
+         sreq == "/PREV_TRACES" ||
          sreq == "/QUIT" ||
-         sreq.find("/seek/") == 0){
+         sreq.find("/seek/") == 0 ||
+         sreq.find("/seek_traces/") == 0){
         for(std::thread& t: threads) t.join();
         return HandleCommand(sreq, sock);
       }

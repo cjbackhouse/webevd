@@ -8,10 +8,13 @@
   </head>
 
   <body class="darktheme" style="overflow:hidden">
+    <!-- Trigger this as soon as possible to avoid flicker -->
+    <script>if(window.sessionStorage.theme) document.body.className = window.sessionStorage.theme;</script>
+
     <!-- "Float" buttons over the display -->
     <div style="position:absolute">
       <button onclick="location.href='PREV'" title="Previous">&#x2b05&#xfe0f</button>
-      <button onclick="location.reload(true)" title="Reload">&#x1f504&#xfe0f</button>
+      <button onclick="window.sessionStorage.clear();location.reload(true)" title="Reset">&#x1f504&#xfe0f</button>
       <button onclick="location.href='NEXT'" title="Next">&#x27a1&#xfe0f</button>
       <button onclick="location.href='traces.html'" title="Traces">TRACES</button>
 
@@ -50,15 +53,13 @@
 
       <div class="dropdown">
         <button>Labels...</button>
-        <div class="dropdown-content">
+        <div class="dropdown-content" id="labels_dropdown">
           <b>Axes</b>
           <button onclick="NoAxes()">None</button>
           <button onclick="PhysicalAxes()">cm/cm</button>
           <button onclick="WireCmAxes()">wire/cm</button>
           <button onclick="WireTickAxes()">wire/tick</button>
           <b>Labels</b>
-          <button id="tpclabels" onclick="TPCLabels()">TPCs</button>
-          <button id="opdetlabels" onclick="OpDetLabels()">OpDets</button>
         </div>
 
       </div>
@@ -73,10 +74,7 @@
 
       <div class="dropdown">
         <button>Physical...</button>
-        <div class="dropdown-content">
-          <button id="cryos" onclick="ToggleCryos()"></button>
-          <button id="apas" onclick="ToggleAPAs()"></button>
-          <button id="opdets" onclick="ToggleOpDets()"></button>
+        <div class="dropdown-content" id="physical_dropdown">
         </div>
       </div>
 
@@ -118,9 +116,7 @@
 
       <div class="dropdown">
         <button>MC Truth...</button>
-        <div class="dropdown-content">
-          <button id="allTruth" onclick="ToggleAllTruth()"></button>
-          <button id="chargedTruth" onclick="ToggleChargedTruth()"></button>
+        <div class="dropdown-content" id="truth_dropdown">
         </div>
       </div>
 

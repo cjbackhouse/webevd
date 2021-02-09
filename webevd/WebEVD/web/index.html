@@ -16,11 +16,17 @@
       <button onclick="location.href='PREV'" title="Previous">&#x2b05&#xfe0f</button>
       <button onclick="window.sessionStorage.clear();location.reload(true)" title="Reset">&#x1f504&#xfe0f</button>
       <button onclick="location.href='NEXT'" title="Next">&#x27a1&#xfe0f</button>
-      <button onclick="location.href='traces.html'" title="Traces">TRACES</button>
 
       <!-- <button onclick="document.documentElement.requestFullscreen();">Fullscreen</button> -->
 
       <button onclick="location.href='QUIT'">&#x1f6d1 Quit</button>
+
+      <div class="dropdown">
+        <button>Mode...</button>
+        <div class="dropdown-content">
+          <button onclick="location.href='traces.html'">Traces</button>
+        </div>
+      </div>
 
       <div class="dropdown">
         <button>View...</button>

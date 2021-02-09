@@ -599,8 +599,7 @@ async function handle_flashes(flashes_promise)
 
         scene.add(group);
 
-        AddDropdownToggle('opflashes_dropdown', group, label);
-        AddDropdownToggle('opflashes_dropdown', labeldiv, label+' labels');
+        AddDropdownToggle('opflashes_dropdown', [group, labeldiv], label);
     } // end for label
 
     requestAnimationFrame(animate);
@@ -665,10 +664,14 @@ opdets.then(opdets => {
     requestAnimationFrame(animate);
 });
 
+function is_iterable(value){return Symbol.iterator in Object(value);}
 
+// 'what' may be a single object or an array of objects to be handled together
 function AddDropdownToggle(dropdown_id, what, label, init = false,
                           texs = undefined)
 {
+    if(!is_iterable(what)) what = [what];
+
     let tag = dropdown_id+'/'+label;
     if(window.sessionStorage[tag] != undefined){
         init = (window.sessionStorage[tag] == 'true');
@@ -676,12 +679,12 @@ function AddDropdownToggle(dropdown_id, what, label, init = false,
 
     let btn = document.createElement('button');
     btn.id = tag;
-    SetVisibility(what, init, btn, label);
+    for(let w of what) SetVisibility(w, init, btn, label);
     if(init && texs != undefined) FinalizeTextures(texs);
 
     btn.addEventListener('click', function(){
         if(texs != undefined) FinalizeTextures(texs);
-        Toggle(what, btn, label);
+        for(let w of what) Toggle(w, btn, label);
     });
 
     document.getElementById(dropdown_id).appendChild(btn);

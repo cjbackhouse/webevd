@@ -187,7 +187,7 @@ Result HandleCommand(std::string cmd, int sock)
 
   // The script tag to set the style is a pretty egregious layering violation,
   // but doing more seems overkill for a simple interstitial page.
-  const std::string msg = TString::Format("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>setTimeout(function(){window.location.replace('/');}, %d);</script></head><body><script>if(window.sessionStorage.theme == 'darktheme'){document.body.style.backgroundColor='black';document.body.style.color='white';}</script><h1>%s</h1></body></html>", delay, txt.c_str()).Data();
+  const std::string msg = TString::Format("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>setTimeout(function(){window.location.replace('/');}, %d);</script></head><body><script>if(window.sessionStorage.theme != 'lighttheme'){document.body.style.backgroundColor='black';document.body.style.color='white';}</script><h1>%s</h1></body></html>", delay, txt.c_str()).Data();
 
   write(sock, msg.c_str(), msg.size());
   close(sock);

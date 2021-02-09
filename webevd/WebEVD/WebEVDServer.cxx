@@ -328,6 +328,12 @@ void write_compressed_file(const std::string& loc, int fd_out, int level)
 }
 
 // ----------------------------------------------------------------------------
+bool startswith(const std::string& s, const std::string& prefix)
+{
+  return s.find(prefix) == 0;
+}
+
+// ----------------------------------------------------------------------------
 bool endswith(const std::string& s, const std::string& suffix)
 {
   return s.rfind(suffix)+suffix.size() == s.size();
@@ -683,7 +689,7 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
 // ----------------------------------------------------------------------------
 template<class T> void _HandleGet(std::string doc, int sock, const T* evt, ILazy* digs, ILazy* wires, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop)
 {
-  if(doc == "/") doc = "/index.html";
+  if(doc == "/") doc = "/static/index.html";
 
   if(endswith(doc, ".png")){
     _HandleGetPNG(doc, sock, digs, wires);
@@ -702,9 +708,16 @@ template<class T> void _HandleGet(std::string doc, int sock, const T* evt, ILazy
   if(endswith(doc, ".ico")) mime = "image/vnd.microsoft.icon";
 
   // Otherwise it must be a physical file
+  if(doc.find("/static/") != 0){
+    write_notfound404(sock);
+    close(sock);
+    return;
+  }
+
+  doc = doc.substr(8); // remove "/static/" from front
 
   // Don't accidentally serve any file we shouldn't
-  const std::set<std::string> whitelist = {"/evd.css", "/evd.js", "/favicon.ico", "/index.html"};
+  const std::set<std::string> whitelist = {"evd.css", "evd.js", "favicon.ico", "index.html"};
 
   if(whitelist.count(doc)){
     write_ok200(sock, mime, true);
@@ -916,6 +929,80 @@ protected:
   std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> fImgs;
 };
 
+
+// ----------------------------------------------------------------------------
+std::string CanonicalPath(const std::string& dir, const std::string basename)
+{
+  char* path = realpath((dir+"/"+basename).c_str(), 0);
+  if(!path) return "ERROR";
+  std::string ret(path);
+  free(path);
+  return ret;
+}
+
+// ----------------------------------------------------------------------------
+bool IsDirectory(const std::string& dir, dirent* ent)
+{
+#ifdef _DIRENT_HAVE_D_TYPE
+  const unsigned char type = ent->d_type;
+  // don't have to stat if we have d_type info, unless it's a symlink
+  if(type != DT_UNKNOWN && type != DT_LNK) return type == DT_DIR;
+#endif
+
+  struct stat st;
+  stat(CanonicalPath(dir, ent->d_name).c_str(), &st); // stat() follows symlinks
+
+  return S_ISDIR(st.st_mode);
+}
+
+// ----------------------------------------------------------------------------
+void HandleGetBrowser(std::string path, int sock)
+{
+  if(path.empty()) path = "/";
+
+  DIR* dir = opendir(path.c_str());
+
+  if(!dir){
+    write_notfound404(sock);
+    close(sock);
+    return;
+  }
+
+  std::vector<std::string> dirs, files;
+  while(dirent* ent = readdir(dir)){
+    if(IsDirectory(path, ent))
+      dirs.push_back(ent->d_name);
+    else
+      files.push_back(ent->d_name);
+  }
+  closedir(dir);
+
+  std::sort(dirs.begin(), dirs.end());
+  std::sort(files.begin(), files.end());
+
+  std::string buf;
+  buf += "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>"+path+"</title></head><body><h1>"+path+"</h1>\n";
+
+  for(const std::string& d: dirs){
+    buf += "<a href=\"/browser"+CanonicalPath(path, d)+"\">"+d+"</a><br>\n";
+  }
+  buf += "<hr>\n";
+  for(const std::string& f: files)
+    if(f.rfind(".root") == f.size()-5)
+      //      buf += "<a href=\"/browser"+CanonicalPath(path, f)+"\">"+f+"</a><br>\n";
+      buf += "<a href=\"/\">"+f+"</a><br>\n"; // dumb hack
+    else
+      buf += f+"<br>\n";
+
+  buf += "</body></html>\n";
+
+  write_ok200(sock, "text/html", true);
+
+  write_compressed_buffer((unsigned char*)buf.c_str(), buf.size(), sock, Z_DEFAULT_COMPRESSION);
+
+  close(sock);
+}
+
 // ----------------------------------------------------------------------------
 template<class T> Result WebEVDServer<T>::
 serve(const T& evt,
@@ -955,6 +1042,10 @@ serve(const T& evt,
         for(std::thread& t: threads) t.join();
         return HandleCommand(sreq, sock);
       }
+      else if(sreq == "/browser" || startswith(sreq, "/browser/")){
+        HandleGetBrowser(sreq.substr(8), sock);
+        continue;
+      }
       else{
         threads.emplace_back(_HandleGet<T>, sreq, sock, &evt, &digs, &wires, geom, &detprop);
       }
@@ -966,76 +1057,6 @@ serve(const T& evt,
   }
 
   // unreachable
-}
-
-// ----------------------------------------------------------------------------
-std::string CanonicalPath(const std::string& dir, const std::string basename)
-{
-  char* path = realpath((dir+"/"+basename).c_str(), 0);
-  if(!path) return "ERROR";
-  std::string ret(path);
-  free(path);
-  return ret;
-}
-
-// ----------------------------------------------------------------------------
-bool IsDirectory(const std::string& dir, dirent* ent)
-{
-#ifdef _DIRENT_HAVE_D_TYPE
-  const unsigned char type = ent->d_type;
-  // don't have to stat if we have d_type info, unless it's a symlink
-  if(type != DT_UNKNOWN && type != DT_LNK) return type == DT_DIR;
-#endif
-
-  struct stat st;
-  stat(CanonicalPath(dir, ent->d_name).c_str(), &st); // stat() follows symlinks
-
-  return S_ISDIR(st.st_mode);
-}
-
-// ----------------------------------------------------------------------------
-void HandleGetBrowser(const std::string& path, int sock)
-{
-  DIR* dir = opendir(path.c_str());
-
-  if(!dir){
-    write_notfound404(sock);
-    close(sock);
-    return;
-  }
-
-  std::vector<std::string> dirs, files;
-  while(dirent* ent = readdir(dir)){
-    if(IsDirectory(path, ent))
-      dirs.push_back(ent->d_name);
-    else
-      files.push_back(ent->d_name);
-  }
-  closedir(dir);
-
-  std::sort(dirs.begin(), dirs.end());
-  std::sort(files.begin(), files.end());
-
-  std::string buf;
-  buf += "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>"+path+"</title></head><body><h1>"+path+"</h1>\n";
-
-  for(const std::string& d: dirs){
-    buf += "<a href=\"/browser"+CanonicalPath(path, d)+"\">"+d+"</a><br>\n";
-  }
-  buf += "<hr>\n";
-  for(const std::string& f: files)
-    if(f.rfind(".root") == f.size()-5)
-      buf += "<a href=\"/browser"+CanonicalPath(path, f)+"\">"+f+"</a><br>\n";
-    else
-      buf += f+"<br>\n";
-
-  buf += "</body></html>\n";
-
-  write_ok200(sock, "text/html", true);
-
-  write_compressed_buffer((unsigned char*)buf.c_str(), buf.size(), sock, Z_DEFAULT_COMPRESSION);
-
-  close(sock);
 }
 
 // ----------------------------------------------------------------------------
@@ -1060,7 +1081,7 @@ serve_browser()
       std::string sreq(freq);
       if(sreq == "/") sreq = "/browser/";
 
-      if(sreq.substr(0, 9) == "/browser/"){
+      if(startswith(sreq, "/browser/")){
         HandleGetBrowser(sreq.substr(8), sock);
         continue;
       }

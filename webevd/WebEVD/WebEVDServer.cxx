@@ -15,6 +15,7 @@
 #include "gallery/Event.h"
 
 #include "lardataobj/RecoBase/Hit.h"
+#include "lardataobj/RecoBase/OpFlash.h"
 #include "lardataobj/RecoBase/SpacePoint.h"
 #include "lardataobj/RecoBase/Wire.h"
 #include "lardataobj/RecoBase/Track.h"
@@ -169,7 +170,7 @@ Result HandleCommand(std::string cmd, int sock)
 
   // The script tag to set the style is a pretty egregious layering violation,
   // but doing more seems overkill for a simple interstitial page.
-  const std::string msg = TString::Format("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>setTimeout(function(){window.location.replace('%s');}, %d);</script></head><body><script>if(window.sessionStorage.theme == 'darktheme'){document.body.style.backgroundColor='black';document.body.style.color='white';}</script><h1>%s</h1></body></html>", next.c_str(), delay, txt.c_str()).Data();
+  const std::string msg = TString::Format("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>setTimeout(function(){window.location.replace('%s');}, %d);</script></head><body><script>if(window.sessionStorage.theme != 'lighttheme'){document.body.style.backgroundColor='black';document.body.style.color='white';}</script><h1>%s</h1></body></html>", next.c_str(), delay, txt.c_str()).Data();
 
   write(sock, msg.c_str(), msg.size());
   close(sock);
@@ -393,6 +394,22 @@ JSONFormatter& operator<<(JSONFormatter& json, const simb::MCParticle& part)
 }
 
 // ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const recob::OpFlash& flash)
+{
+  json << std::map<std::string, double>{
+    {"tcenter", flash.Time()},
+    {"twidth", flash.TimeWidth()},
+    {"ycenter", flash.YCenter()},
+    {"ywidth", flash.YWidth()},
+    {"zcenter", flash.ZCenter()},
+    {"zwidth", flash.ZWidth()},
+    {"totpe", flash.TotalPE()}
+  };
+
+  return json;
+}
+
+// ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const geo::CryostatGeo& cryo)
 {
   const TVector3 r0(cryo.MinX(), cryo.MinY(), cryo.MinZ());
@@ -456,33 +473,6 @@ JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
 }
 
 // ----------------------------------------------------------------------------
-template<class T> std::vector<art::InputTag>
-getInputTags(const art::Event& evt)
-{
-  return evt.getInputTags<std::vector<T>>();
-}
-
-// ----------------------------------------------------------------------------
-template<class T> std::vector<art::InputTag>
-getInputTags(const gallery::Event& evt)
-{
-  std::string label = "pandora";
-  if constexpr(std::is_same_v<T, recob::Hit>) label = "gaushit";
-
-  std::cout << "Warning: getInputTags() not supported by gallery (https://cdcvs.fnal.gov/redmine/issues/23615) defaulting to \"" << label << "\"" << std::endl;
-
-  try{
-    evt.getValidHandle<std::vector<T>>(art::InputTag(label));
-  }
-  catch(...){
-    std::cout << "...but \"" << label << "\" not found in file" << std::endl;
-    return {};
-  }
-
-  return {art::InputTag(label)};
-}
-
-// ----------------------------------------------------------------------------
 template<class TProd, class TEvt> void
 SerializeProduct(const TEvt& evt,
                  JSONFormatter& json,
@@ -490,7 +480,8 @@ SerializeProduct(const TEvt& evt,
 {
   if(!label.empty()) json << "var " << label << " = {\n"; else json << "{";
 
-  const std::vector<art::InputTag> tags = getInputTags<TProd>(evt);
+  const std::vector<art::InputTag> tags = evt.template getInputTags<std::vector<TProd>>();
+
   for(const art::InputTag& tag: tags){
     json << "  " << tag << ": ";
 
@@ -613,7 +604,7 @@ SerializeHits(const T& evt, const geo::GeometryCore* geom, JSONFormatter& json)
 {
   std::map<art::InputTag, std::map<geo::PlaneID, std::vector<recob::Hit>>> plane_hits;
 
-  for(art::InputTag tag: getInputTags<recob::Hit>(evt)){
+  for(art::InputTag tag: evt.template getInputTags<std::vector<recob::Hit>>()){
     typename T::template HandleT<std::vector<recob::Hit>> hits; // deduce handle type
     evt.getByLabel(tag, hits);
 
@@ -736,6 +727,7 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
   else if(doc == "/spacepoints.json") SerializeProduct<recob::SpacePoint>(*evt, json);
   else if(doc == "/vtxs.json")        SerializeProduct<recob::Vertex>(*evt, json);
   else if(doc == "/trajs.json")       SerializeProductByLabel<simb::MCParticle>(*evt, "largeant", json);
+  else if(doc == "/opflashes.json")   SerializeProduct<recob::OpFlash>(*evt, json);
   else if(doc == "/hits.json")        SerializeHits(*evt, geom, json);
   else if(doc == "/geom.json")        SerializeGeometry(geom, *detprop, json);
   else if(doc == "/digs.json")        digs->Serialize(json);
@@ -864,7 +856,7 @@ protected:
 
     if(!fEvt || !fGeom) return; // already init'd
 
-    for(art::InputTag tag: getInputTags<raw::RawDigit>(*fEvt)){
+    for(art::InputTag tag: fEvt->template getInputTags<std::vector<raw::RawDigit>>()){
       typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
       fEvt->getByLabel(tag, digs);
 
@@ -945,7 +937,7 @@ protected:
 
     if(!fEvt || !fGeom) return; // already init'd
 
-    for(art::InputTag tag: getInputTags<recob::Wire>(*fEvt)){
+    for(art::InputTag tag: fEvt->template getInputTags<std::vector<recob::Wire>>()){
       typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
       fEvt->getByLabel(tag, wires);
 

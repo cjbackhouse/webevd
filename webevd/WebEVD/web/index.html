@@ -45,6 +45,8 @@
           <button id="yview2d_button" onclick="YView2D()">Y</button>
           <button id="uvview2d_button" onclick="UVView2D()">U/V</button>
           <button id="vuview2d_button" onclick="VUView2D()">V/U</button>
+          <button id="sideview2d_button" onclick="SideView2D()">Side</button>
+          <button id="frontview2d_button" onclick="FrontView2D()">Front</button>
         </div>
       </div>
 
@@ -121,6 +123,12 @@
       </div>
 
       <div class="dropdown">
+        <button>OpFlashes...</button>
+        <div class="dropdown-content" id="opflashes_dropdown">
+        </div>
+      </div>
+
+      <div class="dropdown">
         <button>MC Truth...</button>
         <div class="dropdown-content" id="truth_dropdown">
         </div>
@@ -138,6 +146,7 @@
     <div style="overflow:hidden;" id="axislabels_div"></div>
     <div style="overflow:hidden;display:none" id="tpclabels_div"></div>
     <div style="overflow:hidden;display:none" id="opdetlabels_div"></div>
+    <div style="overflow:hidden" id="flashlabels_div"></div>
 
     <script type="module" src="evd.js"></script>
   </body>

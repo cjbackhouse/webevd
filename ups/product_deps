@@ -2,7 +2,7 @@
 
 # The *parent* line must the first non-commented line and defines this product and version
 # The version should be of the form vxx_yy_zz (e.g. v01_02_03)
-parent webevd v09_01_02
+parent webevd v09_03_00
 defaultqual e19
 
 # These optional lines define the installed directories where headers,
@@ -34,22 +34,20 @@ flcdir  product_dir     fcl
 # These versions are based on the versions set up by larsoft v08_48_01
 
 product         version
-lardata         v09_01_08
-gallery         v1_14_03
-cetbuildtools   v7_15_01  -  only_for_build
+lardata         v09_02_00
+gallery         v1_16_02
+cetbuildtools   v7_17_01  -  only_for_build
 end_product_list
 
 # We now define allowed qualifiers and the corresponding qualifiers for the depdencies.
 # Make a table by adding columns before "notes".
 qualifier      lardata       gallery     notes
+e20:debug      e20:debug     e20:debug
+e20:prof       e20:prof      e20:prof
 e19:debug      e19:debug     e19:debug
 e19:prof       e19:prof      e19:prof
 c7:debug       c7:debug      c7:debug
 c7:prof        c7:prof       c7:prof
-e19:py2:debug  e19:py2:debug e19:py2:debug
-e19:py2:prof   e19:py2:prof  e19:py2:prof
-c7:py2:debug   c7:py2:debug  c7:py2:debug
-c7:py2:prof    c7:py2:prof   c7:py2:prof
 end_qualifier_list
 
 # Preserve tabs and formatting in emacs and vi / vim:

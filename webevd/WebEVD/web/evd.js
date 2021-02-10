@@ -55,6 +55,7 @@ let spacepoints = fetch("spacepoints.json").then(response => response.json());
 let reco_vtxs = fetch("vtxs.json").then(response => response.json());
 let xdigs = fetch("digs.json").then(response => response.json());
 let xwires = fetch("wires.json").then(response => response.json());
+let opflashes = fetch("opflashes.json").then(response => response.json());
 
 // Extract the individual geometry pieces
 let planes = geom.then(geom => geom.planes);
@@ -97,6 +98,8 @@ let mat_geo = new THREE.LineBasicMaterial({color: 'darkred'});
 let mat_hit = new THREE.MeshBasicMaterial({color: 'gray', side: THREE.DoubleSide});
 
 let mat_sps = new THREE.MeshBasicMaterial({color: 'blue'});
+
+let mat_flash = new THREE.MeshBasicMaterial({color: 'yellow', opacity: 0.5, transparent: true});
 
 let mat_vtxs = new THREE.MeshBasicMaterial({color: 'red'});
 
@@ -555,6 +558,55 @@ reco_vtxs.then(reco_vtxs => {
     requestAnimationFrame(animate);
 }); // end "then" (reco_vtxs)
 
+let flashlabels_div = document.getElementById('flashlabels_div');
+
+async function handle_flashes(flashes_promise)
+{
+    let flashes = await flashes_promise;
+
+    for(let label in flashes){
+        let group = new THREE.Group();
+        let labeldiv = document.createElement('div');
+        labeldiv.id = 'flash/'+label;
+
+        for(let flash of flashes[label]){
+            if(flash.twidth == 0 || flash.ywidth == 0 || flash.zwidth == 0){
+                console.log('Skipping bad flash', label, flash);
+                continue;
+            }
+
+            // There's not an easy sensible way to place the flash in X. Let's
+            // just put it in the centre, which for current geometries is also
+            // the CPA
+            let geom = new THREE.SphereGeometry(1, 16, 16);
+            geom.scale(0, flash.ywidth, flash.zwidth);
+            geom.translate(0, flash.ycenter, flash.zcenter);
+
+            let mesh = new THREE.Mesh(geom, mat_flash);
+            for(let i = 0; i < kNLayers; ++i) mesh.layers.enable(i);
+            group.add(mesh);
+
+            let div = document.createElement('div');
+            div.className = 'label';
+            div.appendChild(document.createTextNode('PE='+flash.totpe));
+            div.appendChild(document.createElement('br'));
+            div.appendChild(document.createTextNode('t='+flash.tcenter+'us'));
+            div.pos = new THREE.Vector3(0, flash.ycenter, flash.zcenter); // stash the 3D position on the HTML element
+            labeldiv.appendChild(div);
+        }
+
+        flashlabels_div.appendChild(labeldiv);
+
+        scene.add(group);
+
+        AddDropdownToggle('opflashes_dropdown', [group, labeldiv], label);
+    } // end for label
+
+    requestAnimationFrame(animate);
+}
+
+handle_flashes(opflashes);
+
 let cryogroup = new THREE.Group();
 AddDropdownToggle('physical_dropdown', cryogroup, 'Cryostats', true);
 
@@ -612,10 +664,14 @@ opdets.then(opdets => {
     requestAnimationFrame(animate);
 });
 
+function is_iterable(value){return Symbol.iterator in Object(value);}
 
+// 'what' may be a single object or an array of objects to be handled together
 function AddDropdownToggle(dropdown_id, what, label, init = false,
                           texs = undefined)
 {
+    if(!is_iterable(what)) what = [what];
+
     let tag = dropdown_id+'/'+label;
     if(window.sessionStorage[tag] != undefined){
         init = (window.sessionStorage[tag] == 'true');
@@ -623,12 +679,12 @@ function AddDropdownToggle(dropdown_id, what, label, init = false,
 
     let btn = document.createElement('button');
     btn.id = tag;
-    SetVisibility(what, init, btn, label);
+    for(let w of what) SetVisibility(w, init, btn, label);
     if(init && texs != undefined) FinalizeTextures(texs);
 
     btn.addEventListener('click', function(){
         if(texs != undefined) FinalizeTextures(texs);
-        Toggle(what, btn, label);
+        for(let w of what) Toggle(w, btn, label);
     });
 
     document.getElementById(dropdown_id).appendChild(btn);
@@ -737,7 +793,7 @@ com.then(com => {
     // I would like to skip this whole function, but apparently the restoration
     // sequence misses something. It's not too bad to have the target reset to
     // the COM though.
-    if(gAutoPositionCamera) camera.translateX(1000);
+    if(gAutoPositionCamera) camera.translateX(-1000);
 
     controls.update();
 
@@ -970,6 +1026,9 @@ function animate() {
     PaintAxes();
     if(opdetlabels_div.style.display != "none") PaintLabels(opdetlabels_div);
     if(tpclabels_div.style.display != "none") PaintLabels(tpclabels_div);
+    for(let label of flashlabels_div.children){
+        if(label.style.display != "none") PaintLabels(label);
+    }
 
     gAnimReentrant = false;
 
@@ -1173,6 +1232,16 @@ window.UVView2D = function(){
 window.VUView2D = function(){
     camera.layers.enable(kVU);
     AnimateTo(uperp, new THREE.Vector3(1, 0, 0), 1e-6, VUView);
+    TwoDControls();
+}
+
+window.SideView2D = function(){
+    AnimateTo(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 1, 0), 1e-6, NoView);
+    TwoDControls();
+}
+
+window.FrontView2D = function(){
+    AnimateTo(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 1, 0), 1e-6, NoView);
     TwoDControls();
 }
 

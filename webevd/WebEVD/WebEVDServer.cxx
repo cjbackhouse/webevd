@@ -471,33 +471,6 @@ JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
 }
 
 // ----------------------------------------------------------------------------
-template<class T> std::vector<art::InputTag>
-getInputTags(const art::Event& evt)
-{
-  return evt.getInputTags<std::vector<T>>();
-}
-
-// ----------------------------------------------------------------------------
-template<class T> std::vector<art::InputTag>
-getInputTags(const gallery::Event& evt)
-{
-  std::string label = "pandora";
-  if constexpr(std::is_same_v<T, recob::Hit>) label = "gaushit";
-
-  std::cout << "Warning: getInputTags() not supported by gallery (https://cdcvs.fnal.gov/redmine/issues/23615) defaulting to \"" << label << "\"" << std::endl;
-
-  try{
-    evt.getValidHandle<std::vector<T>>(art::InputTag(label));
-  }
-  catch(...){
-    std::cout << "...but \"" << label << "\" not found in file" << std::endl;
-    return {};
-  }
-
-  return {art::InputTag(label)};
-}
-
-// ----------------------------------------------------------------------------
 template<class TProd, class TEvt> void
 SerializeProduct(const TEvt& evt,
                  JSONFormatter& json,
@@ -505,7 +478,8 @@ SerializeProduct(const TEvt& evt,
 {
   if(!label.empty()) json << "var " << label << " = {\n"; else json << "{";
 
-  const std::vector<art::InputTag> tags = getInputTags<TProd>(evt);
+  const std::vector<art::InputTag> tags = evt.template getInputTags<std::vector<TProd>>();
+
   for(const art::InputTag& tag: tags){
     json << "  " << tag << ": ";
 
@@ -628,7 +602,7 @@ SerializeHits(const T& evt, const geo::GeometryCore* geom, JSONFormatter& json)
 {
   std::map<art::InputTag, std::map<geo::PlaneID, std::vector<recob::Hit>>> plane_hits;
 
-  for(art::InputTag tag: getInputTags<recob::Hit>(evt)){
+  for(art::InputTag tag: evt.template getInputTags<std::vector<recob::Hit>>()){
     typename T::template HandleT<std::vector<recob::Hit>> hits; // deduce handle type
     evt.getByLabel(tag, hits);
 
@@ -790,7 +764,7 @@ protected:
 
     if(!fEvt || !fGeom) return; // already init'd
 
-    for(art::InputTag tag: getInputTags<raw::RawDigit>(*fEvt)){
+    for(art::InputTag tag: fEvt->template getInputTags<std::vector<raw::RawDigit>>()){
       typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
       fEvt->getByLabel(tag, digs);
 
@@ -871,7 +845,7 @@ protected:
 
     if(!fEvt || !fGeom) return; // already init'd
 
-    for(art::InputTag tag: getInputTags<recob::Wire>(*fEvt)){
+    for(art::InputTag tag: fEvt->template getInputTags<std::vector<recob::Wire>>()){
       typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
       fEvt->getByLabel(tag, wires);
 

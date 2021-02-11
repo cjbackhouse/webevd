@@ -704,8 +704,6 @@ template<class T> void SerializeWireTraces(const T& evt,
       const geo::WireID wire =  geom->ChannelToWire(rbwire.Channel())[0];
       const geo::PlaneID plane(wire);
 
-      const std::vector<float>& adcs = rbwire.Signal();
-
       traces[tag][plane][wire.Wire] = ToSnippets(rbwire.Signal());
     } // end for rbwire
   } // end for tag

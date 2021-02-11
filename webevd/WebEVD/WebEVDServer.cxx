@@ -115,30 +115,6 @@ void write_unimp501(int sock)
   write(sock, str, strlen(str));
 }
 
-void write_file(const std::string& fname, int sock)
-{
-  std::cout << "Serving " << fname << std::endl;
-
-  std::vector<char> buf(1024*1024);
-  FILE* f = fopen(fname.c_str(), "r");
-
-  if(!f){
-    std::cout << fname << " not found!" << std::endl;
-    return;
-  }
-
-  while(true){
-    int nread = fread(&buf.front(), 1, buf.size(), f);
-    if(nread <= 0){
-      std::cout << "Done\n" << std::endl;
-      fclose(f);
-      return;
-    }
-    std::cout << "Writing " << nread << " bytes" << std::endl;
-    write(sock, &buf.front(), nread);
-  }
-}
-
 std::string read_all(int sock)
 {
   std::string ret;
@@ -165,12 +141,18 @@ Result HandleCommand(std::string cmd, int sock)
 {
   EResult code = kERROR;
   int run = -1, subrun = -1, evt = -1;
+  bool traces = false;
 
   if(cmd == "/QUIT") code = kQUIT;
   if(cmd == "/NEXT") code = kNEXT;
   if(cmd == "/PREV") code = kPREV;
+  if(cmd == "/NEXT_TRACES"){ code = kNEXT; traces = true;}
+  if(cmd == "/PREV_TRACES"){ code = kPREV; traces = true;}
 
-  if(cmd.find("/seek/") == 0){
+  if(cmd.find("/seek/") == 0 ||
+     cmd.find("/seek_traces/") == 0){
+    if(cmd.find("/seek_traces/") == 0) traces = true;
+
     code = kSEEK;
     char* ctx;
     strtok_r(cmd.data(), "/", &ctx); // consumes the "seek" text
@@ -184,10 +166,11 @@ Result HandleCommand(std::string cmd, int sock)
 
   const int delay = (code == kQUIT) ? 2000 : 0;
   const std::string txt = (code == kQUIT) ? "Goodbye!" : "Please wait...";
+  const std::string next = traces ? "/traces.html" : "/";
 
   // The script tag to set the style is a pretty egregious layering violation,
   // but doing more seems overkill for a simple interstitial page.
-  const std::string msg = TString::Format("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>setTimeout(function(){window.location.replace('/');}, %d);</script></head><body><script>if(window.sessionStorage.theme != 'lighttheme'){document.body.style.backgroundColor='black';document.body.style.color='white';}</script><h1>%s</h1></body></html>", delay, txt.c_str()).Data();
+  const std::string msg = TString::Format("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>setTimeout(function(){window.location.replace('%s');}, %d);</script></head><body><script>if(window.sessionStorage.theme != 'lighttheme'){document.body.style.backgroundColor='black';document.body.style.color='white';}</script><h1>%s</h1></body></html>", next.c_str(), delay, txt.c_str()).Data();
 
   write(sock, msg.c_str(), msg.size());
   close(sock);
@@ -301,12 +284,13 @@ void gzip_buffer(unsigned char* src,
 void write_compressed_buffer(unsigned char* src,
                              int length,
                              int sock,
-                             int level)
+                             int level,
+                             const std::string& name)
 {
   std::vector<unsigned char> dest;
   gzip_buffer(src, length, dest, level);
 
-  std::cout << "Writing " << length << " bytes (compressed to " << dest.size() << ")\n" << std::endl;
+  std::cout << "Writing " << length << " bytes (compressed to " << dest.size() << ") for " << name << "\n" << std::endl;
 
   write(sock, dest.data(), dest.size());
 }
@@ -321,7 +305,7 @@ void write_compressed_file(const std::string& loc, int fd_out, int level)
   fstat(fd_in, &st);
   unsigned char* src = (unsigned char*)mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fd_in, 0);
 
-  write_compressed_buffer(src, st.st_size, fd_out, level);
+  write_compressed_buffer(src, st.st_size, fd_out, level, loc);
 
   munmap(src, st.st_size);
 
@@ -363,7 +347,8 @@ JSONFormatter& operator<<(JSONFormatter& json, const recob::Hit& hit)
 {
   return json << "{\"wire\": " << geo::WireID(hit.WireID()).Wire
               << ", \"tick\": " << hit.PeakTime()
-              << ", \"rms\": " << hit.RMS() << "}";
+              << ", \"rms\": " << hit.RMS()
+              << ", \"peakamp\": " << hit.PeakAmplitude() << "}";
 }
 
 // ----------------------------------------------------------------------------
@@ -643,6 +628,91 @@ SerializeHits(const T& evt, const geo::GeometryCore* geom, JSONFormatter& json)
 }
 
 // ----------------------------------------------------------------------------
+template<class T> std::map<int, std::vector<T>> ToSnippets(const std::vector<T>& adcs, T pedestal = 0)
+{
+  std::vector<T> snip;
+  snip.reserve(adcs.size());
+
+  std::map<int, std::vector<T>> snips;
+
+  int t = 0;
+  for(T adc: adcs){
+    if(adc == 0){
+      if(!snip.empty()){
+        snips[t-snip.size()] = snip;
+        snip.clear();
+      }
+    }
+    else{
+      snip.push_back(adc - pedestal);
+    }
+
+    ++t;
+  } // end for adc
+
+  // Save last in-progress snippet if necessary
+  if(!snip.empty()) snips[t-snip.size()] = snip;
+
+  // this is a bit of a hack to teach the viewer how long the full trace
+  // is
+  snips[adcs.size()] = {};
+
+  return snips;
+}
+
+// ----------------------------------------------------------------------------
+template<class T> void SerializeDigitTraces(const T& evt,
+                                            const geo::GeometryCore* geom,
+                                            JSONFormatter& json)
+{
+  // [tag][plane][wire index][t0]
+  std::map<art::InputTag, std::map<geo::PlaneID, std::map<int, std::map<int, std::vector<short>>>>> traces;
+
+  for(art::InputTag tag: evt.template getInputTags<raw::RawDigit>()){
+    typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
+    evt.getByLabel(tag, digs);
+
+    for(const raw::RawDigit& dig: *digs){
+      for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
+        const geo::PlaneID plane(wire);
+
+        raw::RawDigit::ADCvector_t adcs(dig.Samples());
+        raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
+
+        traces[tag][plane][wire.Wire] = ToSnippets(adcs, short(dig.GetPedestal()));
+      } // end for wire
+    } // end for dig
+  } // end for tag
+
+  json << traces;
+}
+
+// ----------------------------------------------------------------------------
+template<class T> void SerializeWireTraces(const T& evt,
+                                           const geo::GeometryCore* geom,
+                                           JSONFormatter& json)
+{
+  // [tag][plane][wire][t0]
+  std::map<art::InputTag, std::map<geo::PlaneID, std::map<int, std::map<int, std::vector<float>>>>> traces;
+
+  for(art::InputTag tag: evt.template getInputTags<recob::Wire>()){
+    typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
+    evt.getByLabel(tag, wires);
+
+    for(const recob::Wire& rbwire: *wires){
+      // Place all wire traces on the first wire (== channel) they are found on
+      const geo::WireID wire =  geom->ChannelToWire(rbwire.Channel())[0];
+      const geo::PlaneID plane(wire);
+
+      traces[tag][plane][wire.Wire] = ToSnippets(rbwire.Signal());
+    } // end for rbwire
+  } // end for tag
+
+  json << traces;
+}
+
+
+// ----------------------------------------------------------------------------
 template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, ILazy* digs, ILazy* wires)
 {
   const std::string mime = "application/json";
@@ -660,6 +730,8 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
   else if(doc == "/geom.json")        SerializeGeometry(geom, *detprop, json);
   else if(doc == "/digs.json")        digs->Serialize(json);
   else if(doc == "/wires.json")       wires->Serialize(json);
+  else if(doc == "/dig_traces.json")  SerializeDigitTraces(*evt, geom, json);
+  else if(doc == "/wire_traces.json") SerializeWireTraces(*evt, geom, json);
   else{
     write_notfound404(sock);
     close(sock);
@@ -668,7 +740,7 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
 
   std::string response = ss.str();
   write_ok200(sock, mime, true);
-  write_compressed_buffer((unsigned char*)response.data(), response.size(), sock, Z_DEFAULT_COMPRESSION);
+  write_compressed_buffer((unsigned char*)response.data(), response.size(), sock, Z_DEFAULT_COMPRESSION, doc);
   close(sock);
 }
 
@@ -696,7 +768,7 @@ template<class T> void _HandleGet(std::string doc, int sock, const T* evt, ILazy
   // Otherwise it must be a physical file
 
   // Don't accidentally serve any file we shouldn't
-  const std::set<std::string> whitelist = {"/evd.css", "/evd.js", "/favicon.ico", "/index.html"};
+  const std::set<std::string> whitelist = {"/evd.css", "/evd.js", "/traces.js", "/favicon.ico", "/index.html", "/traces.html"};
 
   if(whitelist.count(doc)){
     write_ok200(sock, mime, true);
@@ -942,8 +1014,11 @@ serve(const T& evt,
 
       if(sreq == "/NEXT" ||
          sreq == "/PREV" ||
+         sreq == "/NEXT_TRACES" ||
+         sreq == "/PREV_TRACES" ||
          sreq == "/QUIT" ||
-         sreq.find("/seek/") == 0){
+         sreq.find("/seek/") == 0 ||
+         sreq.find("/seek_traces/") == 0){
         for(std::thread& t: threads) t.join();
         return HandleCommand(sreq, sock);
       }

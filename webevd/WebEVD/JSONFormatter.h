@@ -87,6 +87,20 @@ public:
     return *this;
   }
 
+  template<class T>
+  JSONFormatter& operator<<(const std::map<int, T>& m)
+  {
+    fStream << "{\n";
+    unsigned int n = 0;
+    for(auto& it: m){
+      (*this) << "  \"" << it.first << "\": " << it.second;
+      ++n;
+      if(n != m.size()) (*this) << ",\n";
+    }
+    fStream << "\n}";
+    return *this;
+  }
+
   JSONFormatter& operator<<(const TVector3& v)
   {
     *this << "["

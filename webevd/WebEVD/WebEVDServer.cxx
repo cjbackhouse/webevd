@@ -668,7 +668,7 @@ template<class T> void SerializeDigitTraces(const T& evt,
   // [tag][plane][wire index][t0]
   std::map<art::InputTag, std::map<geo::PlaneID, std::map<int, std::map<int, std::vector<short>>>>> traces;
 
-  for(art::InputTag tag: getInputTags<raw::RawDigit>(evt)){
+  for(art::InputTag tag: evt.template getInputTags<raw::RawDigit>()){
     typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
     evt.getByLabel(tag, digs);
 
@@ -695,7 +695,7 @@ template<class T> void SerializeWireTraces(const T& evt,
   // [tag][plane][wire][t0]
   std::map<art::InputTag, std::map<geo::PlaneID, std::map<int, std::map<int, std::vector<float>>>>> traces;
 
-  for(art::InputTag tag: getInputTags<recob::Wire>(evt)){
+  for(art::InputTag tag: evt.template getInputTags<recob::Wire>()){
     typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
     evt.getByLabel(tag, wires);
 

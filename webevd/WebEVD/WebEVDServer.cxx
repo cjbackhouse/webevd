@@ -960,12 +960,25 @@ protected:
           const auto adcs = rbwire.Signal();
           for(unsigned int tick = 0; tick < adcs.size(); tick += gStride){
             double avgadc = 0;
-            int nadc = std::min(gStride, (unsigned int)adcs.size()-tick);
-            for(int i = 0; i < nadc; ++i) avgadc += double(adcs[tick+i])/nadc;
+            // Averaging ramp outputs rather than ADCs. Seems a little
+            // better. NB, not doing this for RawDigits yet.
+            double avgr = 0, avgg = 0, avgb = 0, avga = 0;
+            const int nadc = std::min(gStride, (unsigned int)adcs.size()-tick);
+            for(int i = 0; i < nadc; ++i){
+              avgadc += double(adcs[tick+1])/nadc;
+              const ColorRamp::RGBA rgba = fRamp->GetRGBAWires(adcs[tick+i]);
+              avgr += double(rgba[0])/nadc;
+              avgg += double(rgba[1])/nadc;
+              avgb += double(rgba[2])/nadc;
+              avga += double(rgba[3])/nadc;
+            }
 
-            const ColorRamp::RGBA rgba = fRamp->GetRGBAWires(avgadc);
+            if(avgadc == 0) continue;
 
-            for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick/gStride, c) = rgba[c];
+            bytes(wire.Wire-w0.Wire, tick/gStride, 0) = avgr;
+            bytes(wire.Wire-w0.Wire, tick/gStride, 1) = avgg;
+            bytes(wire.Wire-w0.Wire, tick/gStride, 2) = avgb;
+            bytes(wire.Wire-w0.Wire, tick/gStride, 3) = avga;
           } // end for tick
         } // end for wire
       } // end for rbwire

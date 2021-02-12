@@ -890,7 +890,7 @@ protected:
             if(avgadc != 0){
               const ColorRamp::RGBA rgba = fRamp->GetRGBADigits(avgadc);
 
-              for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick, c) = rgba[c];
+              for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick/gStride, c) = rgba[c];
             }
           } // end for tick
         } // end for wire
@@ -965,7 +965,7 @@ protected:
 
             const ColorRamp::RGBA rgba = fRamp->GetRGBAWires(avgadc);
 
-            for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick, c) = rgba[c];
+            for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick/gStride, c) = rgba[c];
           } // end for tick
         } // end for wire
       } // end for rbwire

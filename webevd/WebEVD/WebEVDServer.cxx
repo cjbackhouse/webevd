@@ -45,6 +45,8 @@
 
 #include <thread>
 
+const unsigned int gStride = 6; // aim for square pixels in cm/cm space
+
 namespace std{
   bool operator<(const art::InputTag& a, const art::InputTag& b)
   {
@@ -456,9 +458,9 @@ JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
 
       os << "{"
          << "\"x\": " << ix*PNGArena::kBlockSize << ", "
-         << "\"y\": " << iy*PNGArena::kBlockSize << ", "
+         << "\"y\": " << iy*PNGArena::kBlockSize*gStride << ", "
          << "\"dx\": " << PNGArena::kBlockSize << ", "
-         << "\"dy\": " << PNGArena::kBlockSize << ", "
+         << "\"dy\": " << PNGArena::kBlockSize*gStride << ", "
          << "\"fname\": \"" << v.arena.name << "_" << dataidx << "\", "
          << "\"texdim\": " << PNGArena::kArenaSize << ", "
          << "\"u\": " << texdx << ", "
@@ -875,19 +877,24 @@ protected:
           raw::RawDigit::ADCvector_t adcs(dig.Samples());
           raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
 
-          for(unsigned int tick = 0; tick < adcs.size(); ++tick){
-            const int adc = adcs[tick] ? int(adcs[tick])-dig.GetPedestal() : 0;
+          for(unsigned int tick = 0; tick < adcs.size(); tick += gStride){
+            double avgadc = 0;
+            const int nadc = std::min(gStride, (unsigned int)adcs.size()-tick);
+            for(int i = 0; i < nadc; ++i){
+              const int adc = adcs[tick+1] ? int(adcs[tick+1])-dig.GetPedestal() : 0;
+              avgadc += double(adc)/nadc;
+            }
 
-            if(adc != 0){
+            if(avgadc != 0){
               // alpha
-              bytes(wire.Wire-w0.Wire, tick, 3) = std::min(abs(adc), 255);
-              if(adc > 0){
+              bytes(wire.Wire-w0.Wire, tick/gStride, 3) = std::min(abs(int(avgadc)), 255);
+              if(avgadc > 0){
                 // red
-                bytes(wire.Wire-w0.Wire, tick, 0) = 255;
+                bytes(wire.Wire-w0.Wire, tick/gStride, 0) = 255;
               }
               else{
                 // blue
-                bytes(wire.Wire-w0.Wire, tick, 2) = 255;
+                bytes(wire.Wire-w0.Wire, tick/gStride, 2) = 255;
               }
             }
           } // end for tick
@@ -948,19 +955,23 @@ protected:
           const unsigned int Nw = fGeom->Nwires(plane);
 
           if(fImgs[tag].count(plane) == 0){
-            fImgs[tag].emplace(plane, PNGView(fArena, Nw, rbwire.NSignal()));
+            fImgs[tag].emplace(plane, PNGView(fArena, Nw, rbwire.NSignal()/gStride));
           }
 
           PNGView& bytes = fImgs[tag].find(plane)->second;
 
           const auto adcs = rbwire.Signal();
-          for(unsigned int tick = 0; tick < adcs.size(); ++tick){
-            if(adcs[tick] <= 0) continue;
+          for(unsigned int tick = 0; tick < adcs.size(); tick += gStride){
+            double avgadc = 0;
+            int nadc = std::min(gStride, (unsigned int)adcs.size()-tick);
+            for(int i = 0; i < nadc; ++i) avgadc += double(adcs[tick+i])/nadc;
+
+            if(avgadc <= 0) continue;
 
             // green channel
-            bytes(wire.Wire-w0.Wire, tick, 1) = 128; // dark green
+            bytes(wire.Wire-w0.Wire, tick/gStride, 1) = 128; // dark green
             // alpha channel
-            bytes(wire.Wire-w0.Wire, tick, 3) = std::max(0, std::min(int(10*adcs[tick]), 255));
+            bytes(wire.Wire-w0.Wire, tick/gStride, 3) = std::max(0, std::min(int(10*avgadc), 255));
           } // end for tick
         } // end for wire
       } // end for rbwire

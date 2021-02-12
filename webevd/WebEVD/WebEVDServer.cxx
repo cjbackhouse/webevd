@@ -4,6 +4,8 @@
 
 #include "webevd/WebEVD/PNGArena.h"
 
+#include "webevd/WebEVD/ColorRamp.h"
+
 #include "webevd/WebEVD/JSONFormatter.h"
 
 #include <string>
@@ -832,8 +834,8 @@ template<class T> int WebEVDServer<T>::EnsureListen()
 template<class T> class LazyDigits: public ILazy
 {
 public:
-  LazyDigits(const T& evt, const geo::GeometryCore* geom)
-    : fEvt(&evt), fGeom(geom), fArena("dig")
+  LazyDigits(const T& evt, const geo::GeometryCore* geom, const evd::ColorRamp* ramp)
+    : fEvt(&evt), fGeom(geom), fRamp(ramp), fArena("dig")
   {
   }
 
@@ -854,7 +856,7 @@ protected:
   {
     std::lock_guard guard(fLock);
 
-    if(!fEvt || !fGeom) return; // already init'd
+    if(!fEvt || !fGeom || !fRamp) return; // already init'd
 
     for(art::InputTag tag: fEvt->template getInputTags<std::vector<raw::RawDigit>>()){
       typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
@@ -886,16 +888,9 @@ protected:
             }
 
             if(avgadc != 0){
-              // alpha
-              bytes(wire.Wire-w0.Wire, tick/gStride, 3) = std::min(abs(int(avgadc)), 255);
-              if(avgadc > 0){
-                // red
-                bytes(wire.Wire-w0.Wire, tick/gStride, 0) = 255;
-              }
-              else{
-                // blue
-                bytes(wire.Wire-w0.Wire, tick/gStride, 2) = 255;
-              }
+              const ColorRamp::RGBA rgba = fRamp->GetRGBADigits(avgadc);
+
+              for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick, c) = rgba[c];
             }
           } // end for tick
         } // end for wire
@@ -904,10 +899,12 @@ protected:
 
     fEvt = 0;
     fGeom = 0;
+    fRamp = 0;
   }
 
   const T* fEvt;
   const geo::GeometryCore* fGeom;
+  const evd::ColorRamp* fRamp;
 
   std::mutex fLock;
   PNGArena fArena;
@@ -918,8 +915,8 @@ protected:
 template<class T> class LazyWires: public ILazy
 {
 public:
-  LazyWires(const T& evt, const geo::GeometryCore* geom)
-    : fEvt(&evt), fGeom(geom), fArena("wire")
+  LazyWires(const T& evt, const geo::GeometryCore* geom, const evd::ColorRamp* ramp)
+    : fEvt(&evt), fGeom(geom), fRamp(ramp), fArena("wire")
   {
   }
 
@@ -940,7 +937,7 @@ protected:
   {
     std::lock_guard guard(fLock);
 
-    if(!fEvt || !fGeom) return; // already init'd
+    if(!fEvt || !fGeom || !fRamp) return; // already init'd
 
     for(art::InputTag tag: fEvt->template getInputTags<std::vector<recob::Wire>>()){
       typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
@@ -966,12 +963,9 @@ protected:
             int nadc = std::min(gStride, (unsigned int)adcs.size()-tick);
             for(int i = 0; i < nadc; ++i) avgadc += double(adcs[tick+i])/nadc;
 
-            if(avgadc <= 0) continue;
+            const ColorRamp::RGBA rgba = fRamp->GetRGBAWires(avgadc);
 
-            // green channel
-            bytes(wire.Wire-w0.Wire, tick/gStride, 1) = 128; // dark green
-            // alpha channel
-            bytes(wire.Wire-w0.Wire, tick/gStride, 3) = std::max(0, std::min(int(10*avgadc), 255));
+            for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick, c) = rgba[c];
           } // end for tick
         } // end for wire
       } // end for rbwire
@@ -979,11 +973,13 @@ protected:
 
     fEvt = 0;
     fGeom = 0;
+    fRamp = 0;
   }
 
 protected:
   const T* fEvt;
   const geo::GeometryCore* fGeom;
+  const evd::ColorRamp* fRamp;
 
   std::mutex fLock;
   PNGArena fArena;
@@ -995,7 +991,8 @@ protected:
 template<class T> Result WebEVDServer<T>::
 serve(const T& evt,
       const geo::GeometryCore* geom,
-      const detinfo::DetectorPropertiesData& detprop)
+      const detinfo::DetectorPropertiesData& detprop,
+      const ColorRamp* ramp)
 {
   // Don't want a sigpipe signal when the browser hangs up on us. This way we
   // will get an error return from the write() call instead.
@@ -1003,8 +1000,8 @@ serve(const T& evt,
 
   if(EnsureListen() != 0) return kERROR;
 
-  LazyDigits<T> digs(evt, geom);
-  LazyWires<T> wires(evt, geom);
+  LazyDigits<T> digs(evt, geom, ramp);
+  LazyWires<T> wires(evt, geom, ramp);
 
   std::list<std::thread> threads;
 

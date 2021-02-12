@@ -73,6 +73,8 @@ renderer.setSize( window.innerWidth, window.innerHeight);
 
 if(document.body.className == 'lighttheme')
     renderer.setClearColor('white');
+else if(document.body.className == 'bluetheme')
+    renderer.setClearColor('blue');
 else
     renderer.setClearColor('black');
 
@@ -1282,6 +1284,7 @@ window.Theme = function(theme)
     // renderer.setClearColor(window.getComputedStyle(document.body, null).getPropertyValue('backgroundColor'));
 
     if(theme == 'darktheme') renderer.setClearColor('black'); else renderer.setClearColor('white');
+    if(theme == 'bluetheme') renderer.setClearColor(new THREE.Color(0, 0, 99./255));
 
     requestAnimationFrame(animate);
 

@@ -47,7 +47,7 @@
 
 #include <thread>
 
-const unsigned int gStride = 6; // aim for square pixels in cm/cm space
+const unsigned int gStride = 3;//6; // aim for square pixels in cm/cm space
 
 namespace std{
   bool operator<(const art::InputTag& a, const art::InputTag& b)

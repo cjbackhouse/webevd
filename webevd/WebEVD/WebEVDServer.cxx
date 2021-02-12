@@ -1064,7 +1064,7 @@ void HandleGetBrowser(std::string path, int sock)
 
   write_ok200(sock, "text/html", true);
 
-  write_compressed_buffer((unsigned char*)buf.c_str(), buf.size(), sock, Z_DEFAULT_COMPRESSION);
+  write_compressed_buffer((unsigned char*)buf.c_str(), buf.size(), sock, Z_DEFAULT_COMPRESSION, path);
 
   close(sock);
 }

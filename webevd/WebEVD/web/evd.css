@@ -4,7 +4,7 @@ div { margin : 0; }
 
 body.darktheme { color: green; background-color: black; }
 body.lighttheme { background-color: white; }
-body.bluetheme { color: white; background-color: blue; }
+body.bluetheme { color: white; background-color: rgb(0, 0, 99); }
 
 button {
     z-index: 1; /* doesn't seem to work (labels overdraw buttons) */

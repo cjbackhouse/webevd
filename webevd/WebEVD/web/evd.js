@@ -74,7 +74,7 @@ renderer.setSize( window.innerWidth, window.innerHeight);
 if(document.body.className == 'lighttheme')
     renderer.setClearColor('white');
 else if(document.body.className == 'bluetheme')
-    renderer.setClearColor('blue');
+    renderer.setClearColor(new THREE.Color(0, 0, 99./255));
 else
     renderer.setClearColor('black');
 

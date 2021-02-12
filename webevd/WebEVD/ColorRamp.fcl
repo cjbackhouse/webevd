@@ -20,9 +20,41 @@ rainbow_stops: [
     [1,    [110,   0,   2, 255]]
 ]
 
+# case 53 in TColor.cxx
+darkbody_stops: [
+    [0,    [  0,   0,   0, 255]],
+    [.125, [ 45,   0,   1, 255]],
+    [.25,  [ 99,   0,   1, 255]],
+    [.375, [156,  45,   3, 255]],
+    [.5,   [212, 101,   9, 255]],
+    [.625, [230, 168,   8, 255]],
+    [.75,  [237, 238,  11, 255]],
+    [.875, [234, 238,  95, 255]],
+    [1,    [242, 243, 230, 255]]
+]
+
+# case 56 in TColor.cxx, literally the reverse of the above
+inverteddarkbody_stops: [
+    [0,    [242, 243, 230, 255]],
+    [.125, [234, 238,  95, 255]],
+    [.25,  [237, 238,  11, 255]],
+    [.375, [230, 168,   8, 255]],
+    [.5,   [212, 101,   9, 255]],
+    [.625, [156,  45,   3, 255]],
+    [.75,  [ 99,   0,   1, 255]],
+    [.875, [ 45,   0,   1, 255]],
+    [1,    [  0,   0,   0, 255]]
+]
+
 # Same as above, but use a zero alpha value for the very first stop
 rainbow_stops_transparent: @local::rainbow_stops
 rainbow_stops_transparent[0][1][3]: 0
+
+darkbody_stops_transparent: @local::darkbody_stops
+darkbody_stops_transparent[0][1][3]: 0
+
+inverteddarkbody_stops_transparent: @local::inverteddarkbody_stops
+inverteddarkbody_stops_transparent[0][1]: [255, 255, 255, 0] # transparent white
 
 blue_zero_red_stops: [
     [ -1, [   0, 0, 255, 255]], # blue
@@ -33,7 +65,8 @@ blue_zero_red_stops: [
 
 standard_colorramp:
 {
-    WireStops: @local::rainbow_stops_transparent
+#    WireStops: @local::rainbow_stops_transparent
+    WireStops: @local::darkbody_stops_transparent
     DigitStops: @local::blue_zero_red_stops
 
     # The ADC values that will map to "1" in the color ramp

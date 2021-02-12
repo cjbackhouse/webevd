@@ -55,6 +55,7 @@ let spacepoints = fetch("spacepoints.json").then(response => response.json());
 let reco_vtxs = fetch("vtxs.json").then(response => response.json());
 let xdigs = fetch("digs.json").then(response => response.json());
 let xwires = fetch("wires.json").then(response => response.json());
+let opflashes = fetch("opflashes.json").then(response => response.json());
 
 // Extract the individual geometry pieces
 let planes = geom.then(geom => geom.planes);
@@ -70,7 +71,10 @@ let camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHe
 let renderer = new THREE.WebGLRenderer();
 renderer.setSize( window.innerWidth, window.innerHeight);
 
-renderer.setClearColor('black');
+if(document.body.className == 'lighttheme')
+    renderer.setClearColor('white');
+else
+    renderer.setClearColor('black');
 
 renderer.domElement.addEventListener("click", OnClick, true);
 
@@ -94,6 +98,8 @@ let mat_geo = new THREE.LineBasicMaterial({color: 'darkred'});
 let mat_hit = new THREE.MeshBasicMaterial({color: 'gray', side: THREE.DoubleSide});
 
 let mat_sps = new THREE.MeshBasicMaterial({color: 'blue'});
+
+let mat_flash = new THREE.MeshBasicMaterial({color: 'yellow', opacity: 0.5, transparent: true});
 
 let mat_vtxs = new THREE.MeshBasicMaterial({color: 'red'});
 
@@ -206,6 +212,9 @@ scene.add(outlines);
 scene.add(truth);
 scene.add(chargedTruth);
 
+AddDropdownToggle('truth_dropdown', truth, 'All', true);
+AddDropdownToggle('truth_dropdown', chargedTruth, 'Charged', false);
+
 let uperp = null;
 let vperp = null;
 let anyy = false;
@@ -294,6 +303,7 @@ class PlaneGeom{
 
 // Physical APAs
 let apas = new THREE.Group();
+AddDropdownToggle('physical_dropdown', apas, 'APAs', true);
 
 planes.then(planes => {
     for(let key in planes){
@@ -518,15 +528,7 @@ async function handle_hits(xhits_promise, planes_promise){
             hits.add(h);
         }
 
-        let btn = document.createElement('button');
-        SetVisibility(hits, false, btn, label);
-
-        btn.addEventListener('click', function(){
-            SetVisibility(hits, !hits.visible, btn, label);
-            requestAnimationFrame(animate);
-        });
-
-        document.getElementById('hits_dropdown').appendChild(btn);
+        AddDropdownToggle('hits_dropdown', hits, label);
     } // end for label
 
     requestAnimationFrame(animate);
@@ -536,10 +538,10 @@ handle_hits(xhits, planes);
 
 
 reco_vtxs.then(reco_vtxs => {
-    for(let key in reco_vtxs){
+    for(let label in reco_vtxs){
         let vvtxs = [];
         let vidxs = [];
-        for(let v of reco_vtxs[key]){
+        for(let v of reco_vtxs[label]){
             push_icosahedron_vtxs(ArrToVec(v), .5, vvtxs, vidxs);
         }
 
@@ -550,21 +552,63 @@ reco_vtxs.then(reco_vtxs => {
         for(let i = 0; i < kNLayers; ++i) vtxs.layers.enable(i);
         scene.add(vtxs);
 
-        let btn = document.createElement('button');
-        SetVisibility(vtxs, false, btn, key);
-
-        btn.addEventListener('click', function(){
-            SetVisibility(vtxs, !vtxs.visible, btn, key);
-            requestAnimationFrame(animate);
-        });
-
-        document.getElementById('vertices_dropdown').appendChild(btn);
+        AddDropdownToggle('vertices_dropdown', vtxs, label);
     }
 
     requestAnimationFrame(animate);
 }); // end "then" (reco_vtxs)
 
+let flashlabels_div = document.getElementById('flashlabels_div');
+
+async function handle_flashes(flashes_promise)
+{
+    let flashes = await flashes_promise;
+
+    for(let label in flashes){
+        let group = new THREE.Group();
+        let labeldiv = document.createElement('div');
+        labeldiv.id = 'flash/'+label;
+
+        for(let flash of flashes[label]){
+            if(flash.twidth == 0 || flash.ywidth == 0 || flash.zwidth == 0){
+                console.log('Skipping bad flash', label, flash);
+                continue;
+            }
+
+            // There's not an easy sensible way to place the flash in X. Let's
+            // just put it in the centre, which for current geometries is also
+            // the CPA
+            let geom = new THREE.SphereGeometry(1, 16, 16);
+            geom.scale(0, flash.ywidth, flash.zwidth);
+            geom.translate(0, flash.ycenter, flash.zcenter);
+
+            let mesh = new THREE.Mesh(geom, mat_flash);
+            for(let i = 0; i < kNLayers; ++i) mesh.layers.enable(i);
+            group.add(mesh);
+
+            let div = document.createElement('div');
+            div.className = 'label';
+            div.appendChild(document.createTextNode('PE='+flash.totpe));
+            div.appendChild(document.createElement('br'));
+            div.appendChild(document.createTextNode('t='+flash.tcenter+'us'));
+            div.pos = new THREE.Vector3(0, flash.ycenter, flash.zcenter); // stash the 3D position on the HTML element
+            labeldiv.appendChild(div);
+        }
+
+        flashlabels_div.appendChild(labeldiv);
+
+        scene.add(group);
+
+        AddDropdownToggle('opflashes_dropdown', [group, labeldiv], label);
+    } // end for label
+
+    requestAnimationFrame(animate);
+}
+
+handle_flashes(opflashes);
+
 let cryogroup = new THREE.Group();
+AddDropdownToggle('physical_dropdown', cryogroup, 'Cryostats', true);
 
 cryos.then(cryos => {
     // Physical cryostat
@@ -590,6 +634,7 @@ cryos.then(cryos => {
 });
 
 let opdetgroup = new THREE.Group();
+AddDropdownToggle('physical_dropdown', opdetgroup, 'OpDets', false);
 let opdetlabels_div = document.getElementById('opdetlabels_div');
 
 opdets.then(opdets => {
@@ -619,17 +664,27 @@ opdets.then(opdets => {
     requestAnimationFrame(animate);
 });
 
+function is_iterable(value){return Symbol.iterator in Object(value);}
 
+// 'what' may be a single object or an array of objects to be handled together
 function AddDropdownToggle(dropdown_id, what, label, init = false,
                           texs = undefined)
 {
+    if(!is_iterable(what)) what = [what];
+
+    let tag = dropdown_id+'/'+label;
+    if(window.sessionStorage[tag] != undefined){
+        init = (window.sessionStorage[tag] == 'true');
+    }
+
     let btn = document.createElement('button');
-    SetVisibility(what, init, btn, label);
+    btn.id = tag;
+    for(let w of what) SetVisibility(w, init, btn, label);
+    if(init && texs != undefined) FinalizeTextures(texs);
 
     btn.addEventListener('click', function(){
         if(texs != undefined) FinalizeTextures(texs);
-        SetVisibility(what, !what.visible, btn, label);
-        requestAnimationFrame(animate);
+        for(let w of what) Toggle(w, btn, label);
     });
 
     document.getElementById(dropdown_id).appendChild(btn);
@@ -731,11 +786,14 @@ truth_trajs.then(truth_trajs => add_tracks(truth_trajs, chargedTruth, true));
 let controls = new OrbitControls(camera, renderer.domElement);
 
 // Look at the center of the scene once we know where it is
+let gAutoPositionCamera = true;
 com.then(com => {
     controls.target = com;
 
-    camera.translateX(1000);
-    camera.lookAt(com);
+    // I would like to skip this whole function, but apparently the restoration
+    // sequence misses something. It's not too bad to have the target reset to
+    // the COM though.
+    if(gAutoPositionCamera) camera.translateX(-1000);
 
     controls.update();
 
@@ -875,6 +933,74 @@ function PaintLabels(div)
     }
 }
 
+let gSaveCamera = false;
+
+function SaveCameraAndControls()
+{
+    if(!gSaveCamera) return; // Allow a chance to load first
+
+    let store = window.sessionStorage;
+    store.camera_fov = camera.fov;
+    store.camera_near = camera.near;
+    store.camera_far = camera.far;
+    store.camera_position_x = camera.position.x;
+    store.camera_position_y = camera.position.y;
+    store.camera_position_z = camera.position.z;
+    store.camera_up_x = camera.up.x;
+    store.camera_up_y = camera.up.y;
+    store.camera_up_z = camera.up.z;
+//    store.controls_target_x = controls.target.x;
+//    store.controls_target_y = controls.target.y;
+//    store.controls_target_z = controls.target.z;
+
+    store.camera_layers_mask = camera.layers.mask;
+
+    store.controls_screenSpacePanning = controls.screenSpacePanning;
+    store.controls_enableRotate = controls.enableRotate;
+    store.controls_mouseButtons_LEFT   = controls.mouseButtons.LEFT;
+    store.controls_mouseButtons_MIDDLE = controls.mouseButtons.MIDDLE;
+    store.controls_mouseButtons_RIGHT  = controls.mouseButtons.RIGHT;
+}
+
+function LoadCameraAndControls()
+{
+    gSaveCamera = true; // OK to start saving state now
+
+    let store = window.sessionStorage;
+
+    if(!store.camera_fov) return; // info not in session store
+
+    gAutoPositionCamera = false; // don't auto-position - it will fight with what we load
+
+    camera.fov = parseFloat(store.camera_fov);
+    camera.near = parseFloat(store.camera_near);
+    camera.far = parseFloat(store.camera_far);
+    camera.position.set(parseFloat(store.camera_position_x),
+                        parseFloat(store.camera_position_y),
+                        parseFloat(store.camera_position_z));
+    camera.up.set(parseFloat(store.camera_up_x),
+                  parseFloat(store.camera_up_y),
+                  parseFloat(store.camera_up_z));
+
+    camera.layers.mask = parseInt(store.camera_layers_mask);
+
+    controls.screenSpacePanning = (store.controls_screenSpacePanning == 'true');
+    controls.enableRotate = (store.controls_enableRotate == 'true');
+
+    controls.mouseButtons = {
+        LEFT:   parseInt(store.controls_mouseButtons_LEFT),
+        MIDDLE: parseInt(store.controls_mouseButtons_MIDDLE),
+        RIGHT:  parseInt(store.controls_mouseButtons_RIGHT)
+    };
+
+    // controls.target.set(parseFloat(store.controls_target_x),
+    //                     parseFloat(store.controls_target_y),
+    //                     parseFloat(store.controls_target_z));
+
+    camera.updateProjectionMatrix();
+    controls.update();
+}
+
 function animate() {
     if(gAnimReentrant) return;
     gAnimReentrant = true;
@@ -900,69 +1026,40 @@ function animate() {
     PaintAxes();
     if(opdetlabels_div.style.display != "none") PaintLabels(opdetlabels_div);
     if(tpclabels_div.style.display != "none") PaintLabels(tpclabels_div);
+    for(let label of flashlabels_div.children){
+        if(label.style.display != "none") PaintLabels(label);
+    }
 
     gAnimReentrant = false;
+
+    SaveCameraAndControls();
 }
 
 function SetVisibility(col, state, elem, str)
 {
-    col.visible = state;
+    window.sessionStorage[elem.id] = state;
+
+    // GL objects
+    if(col.visible != undefined) col.visible = state;
+    // DOM objects
+    if(col.style != undefined) col.style.display = state ? 'initial' : 'none';
+
     // Tick and Cross emojis respectively
     elem.innerHTML = (state ? '&#x2705 ' : '&#x274c ')+str;
-}
 
-function SetVisibilityById(col, state, id, str)
-{
-    SetVisibility(col, state, document.getElementById(id), str);
-}
-
-function Toggle(col, id, str){
-    SetVisibilityById(col, !col.visible, id, str);
     requestAnimationFrame(animate);
 }
 
-function SetVisibilityLabel(col, state, elem, str)
-{
-    col.style.display = state ? "initial" : "none";
-    // Tick and Cross emojis respectively
-    elem.innerHTML = (state ? '&#x2705 ' : '&#x274c ')+str;
+function Toggle(col, elem, str){
+    if(col.visible != undefined) SetVisibility(col, !col.visible, elem, str);
+    if(col.style != undefined) SetVisibility(col, col.style.display == 'none', elem, str);
 }
-
-function SetVisibilityByIdLabel(col, state, id, str)
-{
-    SetVisibilityLabel(col, state, document.getElementById(id), str);
-}
-
-function ToggleLabel(col, id, str){
-    SetVisibilityByIdLabel(col,
-                           col.style.display == "none",
-                           id, str);
-    requestAnimationFrame(animate);
-}
-
-// TODO - would be better to have this javascript look up the buttons in the
-// HTML and attach the handlers to them.
-window.ToggleAllTruth = function(){Toggle(truth, 'allTruth', 'All');}
-window.ToggleChargedTruth = function(){Toggle(chargedTruth, 'chargedTruth', 'Charged');}
-window.ToggleCryos = function(){Toggle(cryogroup, 'cryos', 'Cryostats');}
-window.ToggleAPAs = function(){Toggle(apas, 'apas', 'APAs');}
-window.ToggleOpDets = function(){Toggle(opdetgroup, 'opdets', 'OpDets');}
-
 
 AllViews();
 ThreeDControls();
 
 // Try to pre-load all textures - doesn't work
 //renderer.compile(scene, camera);
-
-//SetVisibilityById(digs, false, 'rawdigits', 'RawDigits');
-//SetVisibilityById(wires, false, 'wires', 'Wires');
-SetVisibilityById(truth, true, 'allTruth', 'All');
-SetVisibilityById(chargedTruth, false, 'chargedTruth', 'Charged');
-
-SetVisibilityById(cryogroup, true, 'cryos', 'Cryostats');
-SetVisibilityById(apas, true, 'apas', 'APAs');
-SetVisibilityById(opdetgroup, false, 'opdets', 'OpDets');
 
 let animStart = null;
 let animFunc = null;
@@ -980,10 +1077,8 @@ window.VUView = function(){camera.layers.set(kVU); requestAnimationFrame(animate
 
 // Remains as a free function so others can call it
 function AllViews(){
-    camera.layers.enable(kU);
-    camera.layers.enable(kV);
-    camera.layers.enable(kZ);
-    camera.layers.enable(kY);
+    for(let v = 0; v < kNViews; ++v) camera.layers.enable(v);
+    requestAnimationFrame(animate);
 }
 window.AllViews = AllViews;
 
@@ -1087,13 +1182,13 @@ function TwoDControls(){
         LEFT: THREE.MOUSE.PAN,
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: null
-    }
+    };
 
     // Seems to hang the touch controls entirely :(
     //controls.touches = {
     //    ONE: THREE.TOUCH.DOLLY_PAN,
     //    TWO: THREE.TOUCH.ROTATE
-    //}
+    //};
 
     controls.update();
 }
@@ -1107,7 +1202,7 @@ function ThreeDControls(){
         LEFT: THREE.MOUSE.ROTATE,
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: THREE.MOUSE.PAN
-    }
+    };
 
     controls.update();
 }
@@ -1140,6 +1235,16 @@ window.VUView2D = function(){
     TwoDControls();
 }
 
+window.SideView2D = function(){
+    AnimateTo(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 1, 0), 1e-6, NoView);
+    TwoDControls();
+}
+
+window.FrontView2D = function(){
+    AnimateTo(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 1, 0), 1e-6, NoView);
+    TwoDControls();
+}
+
 window.Perspective = function(){AnimateTo(null, null,   50, null);}
 window.Ortho       = function(){AnimateTo(null, null, 1e-6, null);}
 
@@ -1149,43 +1254,20 @@ window.Orbit = function()
     requestAnimationFrame(animate);
 }
 
-window.NoAxes = function()
+function SetAxesType(type)
 {
-    gAxesType = AXES_NONE;
+    gAxesType = type;
+    window.sessionStorage.axestype = type;
     requestAnimationFrame(animate);
 }
 
-window.PhysicalAxes = function()
-{
-    gAxesType = AXES_CMCM;
-    requestAnimationFrame(animate);
-}
+window.NoAxes       = function(){SetAxesType(AXES_NONE);}
+window.PhysicalAxes = function(){SetAxesType(AXES_CMCM);}
+window.WireCmAxes   = function(){SetAxesType(AXES_WIRECM);}
+window.WireTickAxes = function(){SetAxesType(AXES_WIRETICK);}
 
-window.WireCmAxes = function()
-{
-    gAxesType = AXES_WIRECM;
-    requestAnimationFrame(animate);
-}
-
-window.WireTickAxes = function()
-{
-    gAxesType = AXES_WIRETICK;
-    requestAnimationFrame(animate);
-}
-
-window.OpDetLabels = function()
-{
-    ToggleLabel(opdetlabels_div, 'opdetlabels', 'OpDets');
-}
-// default
-SetVisibilityByIdLabel(opdetlabels_div, false, 'opdetlabels', 'OpDets')
-
-window.TPCLabels = function()
-{
-    ToggleLabel(tpclabels_div, 'tpclabels', 'TPCs');
-}
-// default
-SetVisibilityByIdLabel(tpclabels_div, false, 'tpclabels', 'TPCs');
+AddDropdownToggle('labels_dropdown', opdetlabels_div, 'OpDets', false);
+AddDropdownToggle('labels_dropdown', tpclabels_div, 'TPCs', false);
 
 function OnClick()
 {
@@ -1202,6 +1284,8 @@ window.Theme = function(theme)
     if(theme == 'darktheme') renderer.setClearColor('black'); else renderer.setClearColor('white');
 
     requestAnimationFrame(animate);
+
+    window.sessionStorage.theme = theme;
 }
 
 
@@ -1232,4 +1316,6 @@ animate();
 scene.matrixAutoUpdate = false;
 scene.autoUpdate = false;
 
-console.log(renderer.info);
+LoadCameraAndControls();
+
+if(window.sessionStorage.axestype) SetAxesType(parseInt(window.sessionStorage.axestype));

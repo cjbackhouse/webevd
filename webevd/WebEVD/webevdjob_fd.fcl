@@ -18,6 +18,14 @@ services:
   InputSeeker: {}
 }
 
+#services.Geometry: @local::dune10kt_1x2x6_geo # latest is v4
+services.Geometry: @local::dune10kt_1x2x6_v1_geo
+
+# For MCC11
+services.Geometry.Name: "dune10kt_v2_1x2x6"
+services.Geometry.GDML: "dune10kt_v2_1x2x6.gdml"
+services.Geometry.ROOT: "dune10kt_v2_1x2x6.gdml"
+
 # Faster
 services.BackTrackerService: @erase
 services.PhotonBackTrackerService: @erase

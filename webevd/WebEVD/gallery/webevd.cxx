@@ -130,8 +130,8 @@ int main(int argc, char** argv)
   if(isFD){
     fclConfig +=
       "@table::dunefd_services\n"
-      "Geometry.GDML: \"dune10kt_v1_1x2x6.gdml\"\n";
-    // TODO why is it necessary to manually specify the GDML?
+      "Geometry: @local::dune10kt_1x2x6_v1_geo\n";
+      //      "Geometry: @local::dune10kt_1x2x6_geo\n"; // latest is v4
   }
   else{
     fclConfig +=

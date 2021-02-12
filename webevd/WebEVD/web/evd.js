@@ -73,6 +73,8 @@ renderer.setSize( window.innerWidth, window.innerHeight);
 
 if(document.body.className == 'lighttheme')
     renderer.setClearColor('white');
+else if(document.body.className == 'bluetheme')
+    renderer.setClearColor('blue');
 else
     renderer.setClearColor('black');
 

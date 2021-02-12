@@ -6,6 +6,8 @@
 
 #include "webevd/WebEVD/ColorRamp.h"
 
+#include "webevd/WebEVD/JSONFormatter.h"
+
 #include <string>
 
 #include "fhiclcpp/ParameterSet.h"
@@ -15,6 +17,7 @@
 #include "gallery/Event.h"
 
 #include "lardataobj/RecoBase/Hit.h"
+#include "lardataobj/RecoBase/OpFlash.h"
 #include "lardataobj/RecoBase/SpacePoint.h"
 #include "lardataobj/RecoBase/Wire.h"
 #include "lardataobj/RecoBase/Track.h"
@@ -114,30 +117,6 @@ void write_unimp501(int sock)
   write(sock, str, strlen(str));
 }
 
-void write_file(const std::string& fname, int sock)
-{
-  std::cout << "Serving " << fname << std::endl;
-
-  std::vector<char> buf(1024*1024);
-  FILE* f = fopen(fname.c_str(), "r");
-
-  if(!f){
-    std::cout << fname << " not found!" << std::endl;
-    return;
-  }
-
-  while(true){
-    int nread = fread(&buf.front(), 1, buf.size(), f);
-    if(nread <= 0){
-      std::cout << "Done\n" << std::endl;
-      fclose(f);
-      return;
-    }
-    std::cout << "Writing " << nread << " bytes" << std::endl;
-    write(sock, &buf.front(), nread);
-  }
-}
-
 std::string read_all(int sock)
 {
   std::string ret;
@@ -164,12 +143,18 @@ Result HandleCommand(std::string cmd, int sock)
 {
   EResult code = kERROR;
   int run = -1, subrun = -1, evt = -1;
+  bool traces = false;
 
   if(cmd == "/QUIT") code = kQUIT;
   if(cmd == "/NEXT") code = kNEXT;
   if(cmd == "/PREV") code = kPREV;
+  if(cmd == "/NEXT_TRACES"){ code = kNEXT; traces = true;}
+  if(cmd == "/PREV_TRACES"){ code = kPREV; traces = true;}
 
-  if(cmd.find("/seek/") == 0){
+  if(cmd.find("/seek/") == 0 ||
+     cmd.find("/seek_traces/") == 0){
+    if(cmd.find("/seek_traces/") == 0) traces = true;
+
     code = kSEEK;
     char* ctx;
     strtok_r(cmd.data(), "/", &ctx); // consumes the "seek" text
@@ -183,8 +168,11 @@ Result HandleCommand(std::string cmd, int sock)
 
   const int delay = (code == kQUIT) ? 2000 : 0;
   const std::string txt = (code == kQUIT) ? "Goodbye!" : "Please wait...";
+  const std::string next = traces ? "/traces.html" : "/";
 
-  const std::string msg = TString::Format("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>setTimeout(function(){window.location.replace('/');}, %d);</script></head><body style=\"background-color:black;color:white;\"><h1>%s</h1></body></html>", delay, txt.c_str()).Data();
+  // The script tag to set the style is a pretty egregious layering violation,
+  // but doing more seems overkill for a simple interstitial page.
+  const std::string msg = TString::Format("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><script>setTimeout(function(){window.location.replace('%s');}, %d);</script></head><body><script>if(window.sessionStorage.theme != 'lighttheme'){document.body.style.backgroundColor='black';document.body.style.color='white';}</script><h1>%s</h1></body></html>", next.c_str(), delay, txt.c_str()).Data();
 
   write(sock, msg.c_str(), msg.size());
   close(sock);
@@ -217,21 +205,48 @@ std::string FindWebDir()
   return webdir;
 }
 
+class ILazy
+{
+public:
+  virtual void Serialize(JSONFormatter& json) = 0;
+  virtual PNGArena& GetArena() = 0;
+};
+
 // ----------------------------------------------------------------------------
-void _HandleGetPNG(std::string doc, int sock, PNGArena* arena)
+void _HandleGetPNG(std::string doc, int sock, ILazy* digs, ILazy* wires)
 {
   const std::string mime = "image/png";
 
-  write_ok200(sock, mime, false);
-
   // Parse the filename
   char* ctx;
-  strtok_r(&doc.front(), "_", &ctx); // consume the "arena" text
-  const int imgIdx = atoi(strtok_r(0, "_", &ctx));
-  const int dim = atoi(strtok_r(0, ".", &ctx));
 
+  const char* pName = strtok_r(&doc.front(), "_", &ctx);
+  const char* pIdx = strtok_r(0, "_", &ctx);
+  const char* pDim = strtok_r(0, ".", &ctx);
+
+  if(!pName || !pIdx || !pDim){
+    write_notfound404(sock);
+    close(sock);
+    return;
+  }
+
+  const std::string name(pName);
+  const int idx = atoi(pIdx);
+  const int dim = atoi(pDim);
+
+  PNGArena* arena = 0;
+  if(name == "/dig") arena = &digs->GetArena();
+  if(name == "/wire") arena = &wires->GetArena();
+
+  if(!arena || idx >= int(arena->data.size()) || dim > PNGArena::kArenaSize){
+    write_notfound404(sock);
+    close(sock);
+    return;
+  }
+
+  write_ok200(sock, mime, false);
   FILE* f = fdopen(sock, "wb");
-  arena->WritePNGBytes(f, imgIdx, dim);
+  arena->WritePNGBytes(f, idx, dim);
   fclose(f);
 }
 
@@ -271,12 +286,13 @@ void gzip_buffer(unsigned char* src,
 void write_compressed_buffer(unsigned char* src,
                              int length,
                              int sock,
-                             int level)
+                             int level,
+                             const std::string& name)
 {
   std::vector<unsigned char> dest;
   gzip_buffer(src, length, dest, level);
 
-  std::cout << "Writing " << length << " bytes (compressed to " << dest.size() << ")\n" << std::endl;
+  std::cout << "Writing " << length << " bytes (compressed to " << dest.size() << ") for " << name << "\n" << std::endl;
 
   write(sock, dest.data(), dest.size());
 }
@@ -291,7 +307,7 @@ void write_compressed_file(const std::string& loc, int fd_out, int level)
   fstat(fd_in, &st);
   unsigned char* src = (unsigned char*)mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fd_in, 0);
 
-  write_compressed_buffer(src, st.st_size, fd_out, level);
+  write_compressed_buffer(src, st.st_size, fd_out, level, loc);
 
   munmap(src, st.st_size);
 
@@ -299,36 +315,469 @@ void write_compressed_file(const std::string& loc, int fd_out, int level)
 }
 
 // ----------------------------------------------------------------------------
-void _HandleGet(std::string doc, int sock, PNGArena* arena, std::string* coords)
+bool endswith(const std::string& s, const std::string& suffix)
+{
+  return s.rfind(suffix)+suffix.size() == s.size();
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const art::InputTag& t)
+{
+  json << "\"" << t.label();
+  if(!t.instance().empty()) json << ":" << t.instance();
+  if(!t.process().empty()) json << ":" << t.process();
+  json << "\"";
+  return json;
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetID& id)
+{
+  json << "\"" << std::string(id) << "\"";
+  return json;
+}
+
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const geo::PlaneID& plane)
+{
+  return json << "\"" << std::string(plane) << "\"";
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const recob::Hit& hit)
+{
+  return json << "{\"wire\": " << geo::WireID(hit.WireID()).Wire
+              << ", \"tick\": " << hit.PeakTime()
+              << ", \"rms\": " << hit.RMS()
+              << ", \"peakamp\": " << hit.PeakAmplitude() << "}";
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const recob::Vertex& vtx)
+{
+  return json << TVector3(vtx.position().x(),
+                          vtx.position().y(),
+                          vtx.position().z());
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const recob::SpacePoint& sp)
+{
+  return json << TVector3(sp.XYZ());
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const recob::Track& track)
+{
+  std::vector<TVector3> pts;
+
+  const recob::TrackTrajectory& traj = track.Trajectory();
+  for(unsigned int j = traj.FirstValidPoint(); j <= traj.LastValidPoint(); ++j){
+    if(!traj.HasValidPoint(j)) continue;
+    const geo::Point_t pt = traj.LocationAtPoint(j);
+    pts.emplace_back(pt.X(), pt.Y(), pt.Z());
+  }
+
+  return json << "{ \"positions\": " << pts << " }";
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const simb::MCParticle& part)
+{
+  const int apdg = abs(part.PdgCode());
+  if(apdg == 12 || apdg == 14 || apdg == 16) return json << "{ \"pdg\": " << apdg << ", \"positions\": [] }"; // decay neutrinos
+  std::vector<TVector3> pts;
+  for(unsigned int j = 0; j < part.NumberTrajectoryPoints(); ++j){
+    pts.emplace_back(part.Vx(j), part.Vy(j), part.Vz(j));
+  }
+
+  return json << "{ \"pdg\": " << apdg << ", \"positions\": " << pts << " }";
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const recob::OpFlash& flash)
+{
+  json << std::map<std::string, double>{
+    {"tcenter", flash.Time()},
+    {"twidth", flash.TimeWidth()},
+    {"ycenter", flash.YCenter()},
+    {"ywidth", flash.YWidth()},
+    {"zcenter", flash.ZCenter()},
+    {"zwidth", flash.ZWidth()},
+    {"totpe", flash.TotalPE()}
+  };
+
+  return json;
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const geo::CryostatGeo& cryo)
+{
+  const TVector3 r0(cryo.MinX(), cryo.MinY(), cryo.MinZ());
+  const TVector3 r1(cryo.MaxX(), cryo.MaxY(), cryo.MaxZ());
+  return json << "{ \"min\": "  << r0 << ", \"max\": " << r1 << " }";
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetGeo& opdet)
+{
+  return json << "{ \"name\": " << opdet.ID() << ", "
+              << "\"center\": " << TVector3(opdet.GetCenter().X(),
+                                            opdet.GetCenter().Y(),
+                                            opdet.GetCenter().Z()) << ", "
+              << "\"length\": " << opdet.Length() << ", "
+              << "\"width\": " << opdet.Width() << ", "
+              << "\"height\": " << opdet.Height() << " }";
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
+{
+  bool first = true;
+  os << "{\"blocks\": [\n";
+  for(unsigned int ix = 0; ix < v.blocks.size(); ++ix){
+    for(unsigned int iy = 0; iy < v.blocks[ix].size(); ++iy){
+      const png_byte* b = v.blocks[ix][iy];
+      if(!b) continue;
+
+      if(!first) os << ",\n";
+      first = false;
+
+      int dataidx = 0;
+      for(unsigned int d = 0; d < v.arena.data.size(); ++d){
+        if(b >= &v.arena.data[d]->front() &&
+           b <  &v.arena.data[d]->front() + 4*PNGArena::kArenaSize*PNGArena::kArenaSize){
+          dataidx = d;
+          break;
+        }
+      }
+
+      const int texdx = ((b-&v.arena.data[dataidx]->front())/4)%PNGArena::kArenaSize;
+      const int texdy = ((b-&v.arena.data[dataidx]->front())/4)/PNGArena::kArenaSize;
+
+      os << "{"
+         << "\"x\": " << ix*PNGArena::kBlockSize << ", "
+         << "\"y\": " << iy*PNGArena::kBlockSize << ", "
+         << "\"dx\": " << PNGArena::kBlockSize << ", "
+         << "\"dy\": " << PNGArena::kBlockSize << ", "
+         << "\"fname\": \"" << v.arena.name << "_" << dataidx << "\", "
+         << "\"texdim\": " << PNGArena::kArenaSize << ", "
+         << "\"u\": " << texdx << ", "
+         << "\"v\": " << texdy << ", "
+         << "\"du\": " << PNGArena::kBlockSize << ", "
+         << "\"dv\": " << PNGArena::kBlockSize
+         << "}";
+    }
+  }
+  os << "\n]}";
+  return os;
+}
+
+// ----------------------------------------------------------------------------
+template<class TProd, class TEvt> void
+SerializeProduct(const TEvt& evt,
+                 JSONFormatter& json,
+                 const std::string& label = "")
+{
+  if(!label.empty()) json << "var " << label << " = {\n"; else json << "{";
+
+  const std::vector<art::InputTag> tags = evt.template getInputTags<std::vector<TProd>>();
+
+  for(const art::InputTag& tag: tags){
+    json << "  " << tag << ": ";
+
+    typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
+    evt.getByLabel(tag, prods);
+
+    json << *prods;
+
+    if(tag != tags.back()){
+      json << ",";
+    }
+    json << "\n";
+  }
+  if(!label.empty()) json << "};\n\n"; else json << "}";
+}
+
+// ----------------------------------------------------------------------------
+template<class TProd, class TEvt> void
+SerializeProductByLabel(const TEvt& evt,
+                        const std::string& in_label,
+                        JSONFormatter& json)
+{
+  typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
+  evt.getByLabel(in_label, prods);
+
+  if(prods.isValid()){
+    json << *prods;
+  }
+  else{
+    json << "[]";
+  }
+}
+
+// ----------------------------------------------------------------------------
+template<class T> void SerializeEventID(const T& evt, JSONFormatter& json)
+{
+  typedef std::map<std::string, int> EIdMap;
+  json << EIdMap({{"run", evt.run()}, {"subrun", evt.subRun()}, {"evt", evt.event()}});
+}
+
+// ----------------------------------------------------------------------------
+void SerializeEventID(const gallery::Event& evt, JSONFormatter& json)
+{
+  SerializeEventID(evt.eventAuxiliary(), json);
+}
+
+// ----------------------------------------------------------------------------
+void SerializePlanes(const geo::GeometryCore* geom,
+                     const detinfo::DetectorPropertiesData& detprop,
+                     JSONFormatter& json)
+{
+  bool first = true;
+
+  json << "  \"planes\": {\n";
+  for(geo::PlaneID plane: geom->IteratePlaneIDs()){
+    const geo::PlaneGeo& planegeo = geom->Plane(plane);
+    const int view = planegeo.View();
+    const unsigned int nwires = planegeo.Nwires();
+    const double pitch = planegeo.WirePitch();
+    const TVector3 c = planegeo.GetCenter();
+
+    const TVector3 d = planegeo.GetIncreasingWireDirection();
+    const TVector3 n = planegeo.GetNormalDirection();
+
+    const TVector3 wiredir = planegeo.GetWireDirection();
+    const double depth = planegeo.Depth(); // really height
+
+    const double tick_origin = detprop.ConvertTicksToX(0, plane);
+    const double tick_pitch = detprop.ConvertTicksToX(1, plane) - tick_origin;
+
+    const int maxTick = detprop.NumberTimeSamples();
+
+    if(!first) json << ",\n";
+    first = false;
+
+    json << "    " << plane << ": {"
+         << "\"view\": " << view << ", "
+         << "\"nwires\": " << nwires << ", "
+         << "\"pitch\": " << pitch << ", "
+         << "\"nticks\": " << maxTick << ", "
+         << "\"tick_origin\": " << tick_origin << ", "
+         << "\"tick_pitch\": " << tick_pitch << ", "
+         << "\"center\": " << c << ", "
+         << "\"across\": " << d << ", "
+         << "\"wiredir\": " << wiredir << ", "
+         << "\"depth\": " << depth << ", "
+         << "\"normal\": " << n << "}";
+  }
+  json << "\n  }";
+}
+
+// ----------------------------------------------------------------------------
+void SerializeGeometry(const geo::GeometryCore* geom,
+                       const detinfo::DetectorPropertiesData& detprop,
+                       JSONFormatter& json)
+{
+  json << "{\n";
+  SerializePlanes(geom, detprop, json);
+  json << ",\n\n";
+
+  json << "  \"cryos\": [\n";
+  for(unsigned int i = 0; i < geom->Ncryostats(); ++i){
+    json << "    " << geom->Cryostat(i);
+    if(i != geom->Ncryostats()-1) json << ",\n"; else json << "\n";
+  }
+  json << "  ],\n\n";
+
+  json << "  \"opdets\": [\n";
+  for(unsigned int i = 0; i < geom->NOpDets(); ++i){
+    json << "    " << geom->OpDetGeoFromOpDet(i);
+    if(i != geom->NOpDets()-1) json << ",\n"; else json << "\n";
+  }
+  json << "  ]\n";
+  json << "}\n";
+}
+
+// ----------------------------------------------------------------------------
+template<class T> void
+SerializeHits(const T& evt, const geo::GeometryCore* geom, JSONFormatter& json)
+{
+  std::map<art::InputTag, std::map<geo::PlaneID, std::vector<recob::Hit>>> plane_hits;
+
+  for(art::InputTag tag: evt.template getInputTags<std::vector<recob::Hit>>()){
+    typename T::template HandleT<std::vector<recob::Hit>> hits; // deduce handle type
+    evt.getByLabel(tag, hits);
+
+    for(const recob::Hit& hit: *hits){
+      // Would possibly be right for disambiguated hits?
+      //    const geo::WireID wire(hit.WireID());
+
+      for(geo::WireID wire: geom->ChannelToWire(hit.Channel())){
+        const geo::PlaneID plane(wire);
+
+        // Correct for disambiguated hits
+        //      plane_hits[plane].push_back(hit);
+
+        // Otherwise we have to update the wire number
+        plane_hits[tag][plane].emplace_back(hit.Channel(), hit.StartTick(), hit.EndTick(), hit.PeakTime(), hit.SigmaPeakTime(), hit.RMS(), hit.PeakAmplitude(), hit.SigmaPeakAmplitude(), hit.SummedADC(), hit.Integral(), hit.SigmaIntegral(), hit.Multiplicity(), hit.LocalIndex(), hit.GoodnessOfFit(), hit.DegreesOfFreedom(), hit.View(), hit.SignalType(), wire);
+      }
+    }
+  } // end for tag
+
+  json << plane_hits;
+}
+
+// ----------------------------------------------------------------------------
+template<class T> std::map<int, std::vector<T>> ToSnippets(const std::vector<T>& adcs, T pedestal = 0)
+{
+  std::vector<T> snip;
+  snip.reserve(adcs.size());
+
+  std::map<int, std::vector<T>> snips;
+
+  int t = 0;
+  for(T adc: adcs){
+    if(adc == 0){
+      if(!snip.empty()){
+        snips[t-snip.size()] = snip;
+        snip.clear();
+      }
+    }
+    else{
+      snip.push_back(adc - pedestal);
+    }
+
+    ++t;
+  } // end for adc
+
+  // Save last in-progress snippet if necessary
+  if(!snip.empty()) snips[t-snip.size()] = snip;
+
+  // this is a bit of a hack to teach the viewer how long the full trace
+  // is
+  snips[adcs.size()] = {};
+
+  return snips;
+}
+
+// ----------------------------------------------------------------------------
+template<class T> void SerializeDigitTraces(const T& evt,
+                                            const geo::GeometryCore* geom,
+                                            JSONFormatter& json)
+{
+  // [tag][plane][wire index][t0]
+  std::map<art::InputTag, std::map<geo::PlaneID, std::map<int, std::map<int, std::vector<short>>>>> traces;
+
+  for(art::InputTag tag: evt.template getInputTags<raw::RawDigit>()){
+    typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
+    evt.getByLabel(tag, digs);
+
+    for(const raw::RawDigit& dig: *digs){
+      for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
+        const geo::PlaneID plane(wire);
+
+        raw::RawDigit::ADCvector_t adcs(dig.Samples());
+        raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
+
+        traces[tag][plane][wire.Wire] = ToSnippets(adcs, short(dig.GetPedestal()));
+      } // end for wire
+    } // end for dig
+  } // end for tag
+
+  json << traces;
+}
+
+// ----------------------------------------------------------------------------
+template<class T> void SerializeWireTraces(const T& evt,
+                                           const geo::GeometryCore* geom,
+                                           JSONFormatter& json)
+{
+  // [tag][plane][wire][t0]
+  std::map<art::InputTag, std::map<geo::PlaneID, std::map<int, std::map<int, std::vector<float>>>>> traces;
+
+  for(art::InputTag tag: evt.template getInputTags<recob::Wire>()){
+    typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
+    evt.getByLabel(tag, wires);
+
+    for(const recob::Wire& rbwire: *wires){
+      // Place all wire traces on the first wire (== channel) they are found on
+      const geo::WireID wire =  geom->ChannelToWire(rbwire.Channel())[0];
+      const geo::PlaneID plane(wire);
+
+      traces[tag][plane][wire.Wire] = ToSnippets(rbwire.Signal());
+    } // end for rbwire
+  } // end for tag
+
+  json << traces;
+}
+
+
+// ----------------------------------------------------------------------------
+template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop, ILazy* digs, ILazy* wires)
+{
+  const std::string mime = "application/json";
+
+  std::stringstream ss;
+  JSONFormatter json(ss);
+
+  /***/if(doc == "/evtid.json")       SerializeEventID(*evt, json);
+  else if(doc == "/tracks.json")      SerializeProduct<recob::Track>(*evt, json);
+  else if(doc == "/spacepoints.json") SerializeProduct<recob::SpacePoint>(*evt, json);
+  else if(doc == "/vtxs.json")        SerializeProduct<recob::Vertex>(*evt, json);
+  else if(doc == "/trajs.json")       SerializeProductByLabel<simb::MCParticle>(*evt, "largeant", json);
+  else if(doc == "/opflashes.json")   SerializeProduct<recob::OpFlash>(*evt, json);
+  else if(doc == "/hits.json")        SerializeHits(*evt, geom, json);
+  else if(doc == "/geom.json")        SerializeGeometry(geom, *detprop, json);
+  else if(doc == "/digs.json")        digs->Serialize(json);
+  else if(doc == "/wires.json")       wires->Serialize(json);
+  else if(doc == "/dig_traces.json")  SerializeDigitTraces(*evt, geom, json);
+  else if(doc == "/wire_traces.json") SerializeWireTraces(*evt, geom, json);
+  else{
+    write_notfound404(sock);
+    close(sock);
+    return;
+  }
+
+  std::string response = ss.str();
+  write_ok200(sock, mime, true);
+  write_compressed_buffer((unsigned char*)response.data(), response.size(), sock, Z_DEFAULT_COMPRESSION, doc);
+  close(sock);
+}
+
+// ----------------------------------------------------------------------------
+template<class T> void _HandleGet(std::string doc, int sock, const T* evt, ILazy* digs, ILazy* wires, const geo::GeometryCore* geom, const detinfo::DetectorPropertiesData* detprop)
 {
   if(doc == "/") doc = "/index.html";
 
-  if(doc.find(".png") != std::string::npos){
-    _HandleGetPNG(doc, sock, arena);
+  if(endswith(doc, ".png")){
+    _HandleGetPNG(doc, sock, digs, wires);
+    return;
+  }
+
+  if(endswith(doc, ".json")){
+    _HandleGetJSON(doc, sock, evt, geom, detprop, digs, wires);
     return;
   }
 
   // TODO - more sophisticated MIME type handling
   std::string mime = "text/html";
-  if(doc.find(".js") != std::string::npos) mime = "application/javascript";
-  if(doc.find(".css") != std::string::npos) mime = "text/css";
+  if(endswith(doc, ".js" )) mime = "application/javascript";
+  if(endswith(doc, ".css")) mime = "text/css";
+  if(endswith(doc, ".ico")) mime = "image/vnd.microsoft.icon";
 
-  if(doc == "/coords.js"){
-    // Special treatment since it's not a real file
+  // Otherwise it must be a physical file
+
+  // Don't accidentally serve any file we shouldn't
+  const std::set<std::string> whitelist = {"/evd.css", "/evd.js", "/traces.js", "/favicon.ico", "/index.html", "/traces.html"};
+
+  if(whitelist.count(doc)){
     write_ok200(sock, mime, true);
-    write_compressed_buffer((unsigned char*)coords->c_str(), coords->size(), sock, Z_DEFAULT_COMPRESSION);
+    write_compressed_file(FindWebDir()+doc, sock, Z_DEFAULT_COMPRESSION);
   }
   else{
-    // Don't accidentally serve any file we shouldn't
-    const std::set<std::string> whitelist = {"/evd.css", "/evd.js", "/favicon.ico", "/index.html"};
-
-    if(whitelist.count(doc)){
-      write_ok200(sock, mime, true);
-      write_compressed_file(FindWebDir()+doc, sock, Z_DEFAULT_COMPRESSION);
-    }
-    else{
-      write_notfound404(sock);
-    }
+    write_notfound404(sock);
   }
 
   close(sock);
@@ -380,10 +829,170 @@ template<class T> int WebEVDServer<T>::EnsureListen()
   return 0;
 }
 
-// ----------------------------------------------------------------------------
-template<class T> Result WebEVDServer<T>::do_serve(PNGArena& arena)
+template<class T> class LazyDigits: public ILazy
 {
+public:
+  LazyDigits(const T& evt, const geo::GeometryCore* geom, const evd::ColorRamp* ramp)
+    : fEvt(&evt), fGeom(geom), fRamp(ramp), fArena("dig")
+  {
+  }
+
+  virtual void Serialize(JSONFormatter& json) override
+  {
+    Init();
+    json << fImgs;
+  }
+
+  virtual PNGArena& GetArena() override
+  {
+    Init();
+    return fArena;
+  }
+
+protected:
+  void Init()
+  {
+    std::lock_guard guard(fLock);
+
+    if(!fEvt || !fGeom || !fRamp) return; // already init'd
+
+    for(art::InputTag tag: fEvt->template getInputTags<std::vector<raw::RawDigit>>()){
+      typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
+      fEvt->getByLabel(tag, digs);
+
+      for(const raw::RawDigit& dig: *digs){
+        for(geo::WireID wire: fGeom->ChannelToWire(dig.Channel())){
+          //        const geo::TPCID tpc(wire);
+          const geo::PlaneID plane(wire);
+
+          const geo::WireID w0 = fGeom->GetBeginWireID(plane);
+          const unsigned int Nw = fGeom->Nwires(plane);
+
+          if(fImgs[tag].count(plane) == 0){
+            fImgs[tag].emplace(plane, PNGView(fArena, Nw, dig.Samples()));
+          }
+
+          PNGView& bytes = fImgs[tag].find(plane)->second;
+
+          raw::RawDigit::ADCvector_t adcs(dig.Samples());
+          raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
+
+          for(unsigned int tick = 0; tick < adcs.size(); ++tick){
+            const int adc = adcs[tick] ? int(adcs[tick])-dig.GetPedestal() : 0;
+
+            if(adc != 0){
+              const ColorRamp::RGBA rgba = fRamp->GetRGBADigits(adc);
+
+              for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick, c) = rgba[c];
+            }
+          } // end for tick
+        } // end for wire
+      } // end for dig
+    } // end for tag
+
+    fEvt = 0;
+    fGeom = 0;
+    fRamp = 0;
+  }
+
+  const T* fEvt;
+  const geo::GeometryCore* fGeom;
+  const evd::ColorRamp* fRamp;
+
+  std::mutex fLock;
+  PNGArena fArena;
+
+  std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> fImgs;
+};
+
+template<class T> class LazyWires: public ILazy
+{
+public:
+  LazyWires(const T& evt, const geo::GeometryCore* geom, const evd::ColorRamp* ramp)
+    : fEvt(&evt), fGeom(geom), fRamp(ramp), fArena("wire")
+  {
+  }
+
+  virtual void Serialize(JSONFormatter& json) override
+  {
+    Init();
+    json << fImgs;
+  }
+
+  virtual PNGArena& GetArena() override
+  {
+    Init();
+    return fArena;
+  }
+
+protected:
+  void Init()
+  {
+    std::lock_guard guard(fLock);
+
+    if(!fEvt || !fGeom || !fRamp) return; // already init'd
+
+    for(art::InputTag tag: fEvt->template getInputTags<std::vector<recob::Wire>>()){
+      typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
+      fEvt->getByLabel(tag, wires);
+
+      for(const recob::Wire& rbwire: *wires){
+        for(geo::WireID wire: fGeom->ChannelToWire(rbwire.Channel())){
+          //        const geo::TPCID tpc(wire);
+          const geo::PlaneID plane(wire);
+
+          const geo::WireID w0 = fGeom->GetBeginWireID(plane);
+          const unsigned int Nw = fGeom->Nwires(plane);
+
+          if(fImgs[tag].count(plane) == 0){
+            fImgs[tag].emplace(plane, PNGView(fArena, Nw, rbwire.NSignal()));
+          }
+
+          PNGView& bytes = fImgs[tag].find(plane)->second;
+
+          const auto adcs = rbwire.Signal();
+          for(unsigned int tick = 0; tick < adcs.size(); ++tick){
+            if(adcs[tick] <= 0) continue;
+
+            const ColorRamp::RGBA rgba = fRamp->GetRGBAWires(adcs[tick]);
+
+            for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick, c) = rgba[c];
+          } // end for tick
+        } // end for wire
+      } // end for rbwire
+    } // end for tag
+
+    fEvt = 0;
+    fGeom = 0;
+    fRamp = 0;
+  }
+
+protected:
+  const T* fEvt;
+  const geo::GeometryCore* fGeom;
+  const evd::ColorRamp* fRamp;
+
+  std::mutex fLock;
+  PNGArena fArena;
+
+  std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> fImgs;
+};
+
+// ----------------------------------------------------------------------------
+template<class T> Result WebEVDServer<T>::
+serve(const T& evt,
+      const geo::GeometryCore* geom,
+      const detinfo::DetectorPropertiesData& detprop,
+      const ColorRamp* ramp)
+{
+  // Don't want a sigpipe signal when the browser hangs up on us. This way we
+  // will get an error return from the write() call instead.
+  signal(SIGPIPE, SIG_IGN);
+
   if(EnsureListen() != 0) return kERROR;
+
+  LazyDigits<T> digs(evt, geom, ramp);
+  LazyWires<T> wires(evt, geom, ramp);
 
   std::list<std::thread> threads;
 
@@ -404,13 +1013,16 @@ template<class T> Result WebEVDServer<T>::do_serve(PNGArena& arena)
 
       if(sreq == "/NEXT" ||
          sreq == "/PREV" ||
+         sreq == "/NEXT_TRACES" ||
+         sreq == "/PREV_TRACES" ||
          sreq == "/QUIT" ||
-         sreq.find("/seek/") == 0){
+         sreq.find("/seek/") == 0 ||
+         sreq.find("/seek_traces/") == 0){
         for(std::thread& t: threads) t.join();
         return HandleCommand(sreq, sock);
       }
       else{
-        threads.emplace_back(_HandleGet, sreq, sock, &arena, &fCoords);
+        threads.emplace_back(_HandleGet<T>, sreq, sock, &evt, &digs, &wires, geom, &detprop);
       }
     }
     else{
@@ -420,520 +1032,6 @@ template<class T> Result WebEVDServer<T>::do_serve(PNGArena& arena)
   }
 
   // unreachable
-}
-
-// ----------------------------------------------------------------------------
-class JSONFormatter
-{
-public:
-  JSONFormatter(std::ostream& os) : fStream(os) {}
-
-  template<class T> JSONFormatter& operator<<(const T& x)
-  {
-    static_assert(std::is_arithmetic_v<T> ||
-                  std::is_enum_v<T> ||
-                  std::is_same_v<T, std::string> ||
-                  std::is_same_v<T, geo::OpDetID>);
-    fStream << x;
-    return *this;
-  }
-
-  JSONFormatter& operator<<(double x)
-  {
-    if(isnan(x)) fStream << "NaN";
-    else if(isinf(x)) fStream << "Infinity";
-    else fStream << x;
-    return *this;
-  }
-
-  JSONFormatter& operator<<(float x){return *this << double(x);}
-
-  JSONFormatter& operator<<(const char* x)
-  {
-    fStream << x;
-    return *this;
-  }
-
-  template<class T> JSONFormatter& operator<<(const std::vector<T>& v)
-  {
-    fStream << "[";
-    for(const T& x: v){
-      (*this) << x;
-      if(&x != &v.back()) (*this) << ", ";
-    }
-    fStream << "]";
-    return *this;
-  }
-
-  template<class T, class U>
-  JSONFormatter& operator<<(const std::map<T, U>& m)
-  {
-    fStream << "{\n";
-    unsigned int n = 0;
-    for(auto& it: m){
-      (*this) << "  " << it.first << ": " << it.second;
-      ++n;
-      if(n != m.size()) (*this) << ",\n";
-    }
-    fStream << "\n}";
-    return *this;
-  }
-
-  JSONFormatter& operator<<(const TVector3& v)
-  {
-    *this << "["
-          << v.X() << ", "
-          << v.Y() << ", "
-          << v.Z() << "]";
-    return *this;
-  }
-
-  JSONFormatter& operator<<(const art::InputTag& t)
-  {
-    fStream << "\"" << t.label();
-    if(!t.instance().empty()) fStream << ":" << t.instance();
-    if(!t.process().empty()) fStream << ":" << t.process();
-    fStream << "\"";
-    return *this;
-  }
-
-  JSONFormatter& operator<<(const geo::OpDetID& id)
-  {
-    fStream << "\"" << id << "\"";
-    return *this;
-  }
-
-protected:
-  std::ostream& fStream;
-};
-
-// ----------------------------------------------------------------------------
-JSONFormatter& operator<<(JSONFormatter& json, const geo::PlaneID& plane)
-{
-  return json << "\"" << std::string(plane) << "\"";
-}
-
-// ----------------------------------------------------------------------------
-JSONFormatter& operator<<(JSONFormatter& json, const recob::Hit& hit)
-{
-  return json << "{wire: " << geo::WireID(hit.WireID()).Wire
-              << ", tick: " << hit.PeakTime()
-              << ", rms: " << hit.RMS() << "}";
-}
-
-// ----------------------------------------------------------------------------
-JSONFormatter& operator<<(JSONFormatter& json, const recob::Vertex& vtx)
-{
-  return json << TVector3(vtx.position().x(),
-                          vtx.position().y(),
-                          vtx.position().z());
-}
-
-// ----------------------------------------------------------------------------
-JSONFormatter& operator<<(JSONFormatter& json, const recob::SpacePoint& sp)
-{
-  return json << TVector3(sp.XYZ());
-}
-
-// ----------------------------------------------------------------------------
-JSONFormatter& operator<<(JSONFormatter& json, const recob::Track& track)
-{
-  std::vector<TVector3> pts;
-
-  const recob::TrackTrajectory& traj = track.Trajectory();
-  for(unsigned int j = traj.FirstValidPoint(); j <= traj.LastValidPoint(); ++j){
-    if(!traj.HasValidPoint(j)) continue;
-    const geo::Point_t pt = traj.LocationAtPoint(j);
-    pts.emplace_back(pt.X(), pt.Y(), pt.Z());
-  }
-
-  return json << "{ positions: " << pts << " }";
-}
-
-// ----------------------------------------------------------------------------
-JSONFormatter& operator<<(JSONFormatter& json, const simb::MCParticle& part)
-{
-  const int apdg = abs(part.PdgCode());
-  if(apdg == 12 || apdg == 14 || apdg == 16) return json << "{ positions: [] }"; // decay neutrinos
-  std::vector<TVector3> pts;
-  for(unsigned int j = 0; j < part.NumberTrajectoryPoints(); ++j){
-    pts.emplace_back(part.Vx(j), part.Vy(j), part.Vz(j));
-  }
-
-  return json << "{ pdg: " << apdg << ", positions: " << pts << " }";
-}
-
-// ----------------------------------------------------------------------------
-JSONFormatter& operator<<(JSONFormatter& json, const geo::CryostatGeo& cryo)
-{
-  const TVector3 r0(cryo.MinX(), cryo.MinY(), cryo.MinZ());
-  const TVector3 r1(cryo.MaxX(), cryo.MaxY(), cryo.MaxZ());
-  return json << "{ min: "  << r0 << ", max: " << r1 << " }";
-}
-
-// ----------------------------------------------------------------------------
-JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetGeo& opdet)
-{
-  return json << "{ name: " << opdet.ID() << ", "
-              << "center: " << TVector3(opdet.GetCenter().X(),
-                                        opdet.GetCenter().Y(),
-                                        opdet.GetCenter().Z()) << ", "
-              << "length: " << opdet.Length() << ", "
-              << "width: " << opdet.Width() << ", "
-              << "height: " << opdet.Height() << " }";
-}
-
-
-// ----------------------------------------------------------------------------
-JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
-{
-  os << "{blocks: [";
-  for(unsigned int ix = 0; ix < v.blocks.size(); ++ix){
-    for(unsigned int iy = 0; iy < v.blocks[ix].size(); ++iy){
-      const png_byte* b = v.blocks[ix][iy];
-      if(!b) continue;
-
-      int dataidx = 0;
-      for(unsigned int d = 0; d < v.arena.data.size(); ++d){
-        if(b >= &v.arena.data[d]->front() &&
-           b <  &v.arena.data[d]->front() + 4*PNGArena::kArenaSize*PNGArena::kArenaSize){
-          dataidx = d;
-          break;
-        }
-      }
-
-      const int texdx = ((b-&v.arena.data[dataidx]->front())/4)%PNGArena::kArenaSize;
-      const int texdy = ((b-&v.arena.data[dataidx]->front())/4)/PNGArena::kArenaSize;
-
-      os << "{"
-         << "x: " << ix*PNGArena::kBlockSize << ", "
-         << "y: " << iy*PNGArena::kBlockSize << ", "
-         << "dx: " << PNGArena::kBlockSize << ", "
-         << "dy: " << PNGArena::kBlockSize << ", "
-         << "fname: \"" << v.arena.name << "_" << dataidx << "\", "
-         << "texdim: " << PNGArena::kArenaSize << ", "
-         << "u: " << texdx << ", "
-         << "v: " << texdy << ", "
-         << "du: " << PNGArena::kBlockSize << ", "
-         << "dv: " << PNGArena::kBlockSize
-         << "}, ";
-    }
-  }
-  os << "]}";
-  return os;
-}
-
-// ----------------------------------------------------------------------------
-template<class T> std::vector<art::InputTag>
-getInputTags(const art::Event& evt)
-{
-  return evt.getInputTags<std::vector<T>>();
-}
-
-// ----------------------------------------------------------------------------
-template<class T> std::vector<art::InputTag>
-getInputTags(const gallery::Event& evt)
-{
-  std::string label = "pandora";
-  if constexpr(std::is_same_v<T, recob::Hit>) label = "gaushit";
-
-  std::cout << "Warning: getInputTags() not supported by gallery (https://cdcvs.fnal.gov/redmine/issues/23615) defaulting to \"" << label << "\"" << std::endl;
-
-  try{
-    evt.getValidHandle<std::vector<T>>(art::InputTag(label));
-  }
-  catch(...){
-    std::cout << "...but \"" << label << "\" not found in file" << std::endl;
-    return {};
-  }
-
-  return {art::InputTag(label)};
-}
-
-// ----------------------------------------------------------------------------
-template<class TProd, class TEvt> void
-SerializeProduct(const TEvt& evt,
-                 JSONFormatter& json,
-                 const std::string& label)
-{
-  json << "var " << label << " = {\n";
-  const std::vector<art::InputTag> tags = getInputTags<TProd>(evt);
-  for(const art::InputTag& tag: tags){
-    json << "  " << tag << ": ";
-
-    typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
-    evt.getByLabel(tag, prods);
-
-    json << *prods;
-
-    if(tag != tags.back()){
-      json << ",";
-    }
-    json << "\n";
-  }
-  json << "};\n\n";
-}
-
-// ----------------------------------------------------------------------------
-template<class TProd, class TEvt> void
-SerializeProductByLabel(const TEvt& evt,
-                        const std::string& in_label,
-                        JSONFormatter& json,
-                        const std::string& out_label)
-{
-  typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
-  evt.getByLabel(in_label, prods);
-
-  json << "var " << out_label << " = ";
-  if(prods.isValid()){
-    json << *prods << ";\n\n";
-  }
-  else{
-    json << "[];\n\n";
-  }
-}
-
-// ----------------------------------------------------------------------------
-template<class TEvt>
-unsigned long HandleDigits(const TEvt& evt, const geo::GeometryCore* geom,
-                           const evd::ColorRamp* ramp,
-                           PNGArena& arena, JSONFormatter& json)
-{
-  unsigned long maxTick = 0;
-
-  std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> imgs;
-
-  for(art::InputTag tag: getInputTags<raw::RawDigit>(evt)){
-    typename TEvt::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
-    evt.getByLabel(tag, digs);
-
-    for(const raw::RawDigit& dig: *digs) maxTick = std::max(maxTick, (unsigned long)dig.Samples());
-
-    for(const raw::RawDigit& dig: *digs){
-      for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
-        //        const geo::TPCID tpc(wire);
-        const geo::PlaneID plane(wire);
-
-        const geo::WireID w0 = geom->GetBeginWireID(plane);
-        const unsigned int Nw = geom->Nwires(plane);
-
-        if(imgs[tag].count(plane) == 0){
-          imgs[tag].emplace(plane, PNGView(arena, Nw, maxTick));
-        }
-
-        PNGView& bytes = imgs[tag].find(plane)->second;
-
-        raw::RawDigit::ADCvector_t adcs(dig.Samples());
-        raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
-
-        for(unsigned int tick = 0; tick < adcs.size(); ++tick){
-          const int adc = adcs[tick] ? int(adcs[tick])-dig.GetPedestal() : 0;
-
-          if(adc != 0){
-
-            const ColorRamp::RGBA rgba = ramp->GetRGBADigits(adc);
-
-            for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick, c) = rgba[c];
-          }
-        } // end for tick
-      } // end for wire
-    } // end for dig
-  } // end for tag
-
-  json << "var xdigs = " << imgs << ";\n\n";
-
-  return maxTick;
-}
-
-// ----------------------------------------------------------------------------
-template<class TEvt>
-unsigned long HandleWires(const TEvt& evt, const geo::GeometryCore* geom,
-                          const evd::ColorRamp* ramp,
-                          PNGArena& arena, JSONFormatter& json)
-{
-  unsigned long maxTick = 0;
-
-  std::map<art::InputTag, std::map<geo::PlaneID, PNGView>> imgs;
-
-  for(art::InputTag tag: getInputTags<recob::Wire>(evt)){
-    typename TEvt::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
-    evt.getByLabel(tag, wires);
-
-    for(const recob::Wire& wire: *wires) maxTick = std::max(maxTick, wire.NSignal());
-
-    for(const recob::Wire& rbwire: *wires){
-      for(geo::WireID wire: geom->ChannelToWire(rbwire.Channel())){
-        //        const geo::TPCID tpc(wire);
-        const geo::PlaneID plane(wire);
-
-        const geo::WireID w0 = geom->GetBeginWireID(plane);
-        const unsigned int Nw = geom->Nwires(plane);
-
-        if(imgs[tag].count(plane) == 0){
-          imgs[tag].emplace(plane, PNGView(arena, Nw, maxTick));
-        }
-
-        PNGView& bytes = imgs[tag].find(plane)->second;
-
-        const auto adcs = rbwire.Signal();
-        for(unsigned int tick = 0; tick < adcs.size(); ++tick){
-          if(adcs[tick] <= 0) continue;
-
-          const ColorRamp::RGBA rgba = ramp->GetRGBAWires(adcs[tick]);
-
-          for(int c = 0; c < 4; ++c) bytes(wire.Wire-w0.Wire, tick, c) = rgba[c];
-        } // end for tick
-      } // end for wire
-    } // end for rbwire
-  } // end for tag
-
-  json << "var xwires = " << imgs << ";\n\n";
-
-  return maxTick;
-}
-
-// ----------------------------------------------------------------------------
-template<class TEvt>
-void HandleHits(const TEvt& evt, const geo::GeometryCore* geom,
-                JSONFormatter& json)
-{
-  std::map<art::InputTag, std::map<geo::PlaneID, std::vector<recob::Hit>>> plane_hits;
-
-  for(art::InputTag tag: getInputTags<recob::Hit>(evt)){
-    typename TEvt::template HandleT<std::vector<recob::Hit>> hits; // deduce handle type
-    evt.getByLabel(tag, hits);
-
-    for(const recob::Hit& hit: *hits){
-      // Would possibly be right for disambiguated hits?
-      //    const geo::WireID wire(hit.WireID());
-
-      for(geo::WireID wire: geom->ChannelToWire(hit.Channel())){
-        const geo::PlaneID plane(wire);
-
-        // Correct for disambiguated hits
-        //      plane_hits[plane].push_back(hit);
-
-        // Otherwise we have to update the wire number
-        plane_hits[tag][plane].emplace_back(hit.Channel(), hit.StartTick(), hit.EndTick(), hit.PeakTime(), hit.SigmaPeakTime(), hit.RMS(), hit.PeakAmplitude(), hit.SigmaPeakAmplitude(), hit.SummedADC(), hit.Integral(), hit.SigmaIntegral(), hit.Multiplicity(), hit.LocalIndex(), hit.GoodnessOfFit(), hit.DegreesOfFreedom(), hit.View(), hit.SignalType(), wire);
-      }
-    }
-  } // end for tag
-
-  json << "var xhits = " << plane_hits << ";\n\n";
-}
-
-
-// ----------------------------------------------------------------------------
-template<class TEvt>
-void HandlePlanes(const TEvt& evt, const geo::GeometryCore* geom,
-                  const detinfo::DetectorPropertiesData& detprop,
-                  JSONFormatter& json, unsigned long maxTick)
-{
-  json << "var planes = {\n";
-  for(geo::PlaneID plane: geom->IteratePlaneIDs()){
-    const geo::PlaneGeo& planegeo = geom->Plane(plane);
-    const int view = planegeo.View();
-    const unsigned int nwires = planegeo.Nwires();
-    const double pitch = planegeo.WirePitch();
-    const TVector3 c = planegeo.GetCenter();
-
-    const TVector3 d = planegeo.GetIncreasingWireDirection();
-    const TVector3 n = planegeo.GetNormalDirection();
-
-    const TVector3 wiredir = planegeo.GetWireDirection();
-    const double depth = planegeo.Depth(); // really height
-
-    const double tick_origin = detprop.ConvertTicksToX(0, plane);
-    const double tick_pitch = detprop.ConvertTicksToX(1, plane) - tick_origin;
-
-    json << "  " << plane << ": {"
-         << "view: " << view << ", "
-         << "nwires: " << nwires << ", "
-         << "pitch: " << pitch << ", "
-         << "nticks: " << maxTick << ", "
-         << "tick_origin: " << tick_origin << ", "
-         << "tick_pitch: " << tick_pitch << ", "
-         << "center: " << c << ", "
-         << "across: " << d << ", "
-         << "wiredir: " << wiredir << ", "
-         << "depth: " << depth << ", "
-         << "normal: " << n << "},\n";
-  }
-  json << "};\n\n";
-}
-
-// ----------------------------------------------------------------------------
-template<class T> void WebEVDServer<T>::
-FillCoordsAndArena(const T& evt,
-                   const geo::GeometryCore* geom,
-                   const detinfo::DetectorPropertiesData& detprop,
-                   const evd::ColorRamp* ramp,
-                   PNGArena& arena)
-{
-  std::stringstream outf;
-
-  JSONFormatter json(outf);
-
-  if constexpr (std::is_same_v<T, art::Event>){
-    // art
-    json << "var run = " << evt.run() << ";\n"
-         << "var subrun = " << evt.subRun() << ";\n"
-         << "var evt  = " << evt.event() << ";\n\n";
-  }
-  else{
-    // gallery
-    const art::EventAuxiliary& aux = evt.eventAuxiliary();
-    json << "var run = " << aux.run() << ";\n"
-         << "var subrun = " << aux.subRun() << ";\n"
-         << "var evt  = " << aux.event() << ";\n\n";
-  }
-
-  unsigned long maxTick = 0;
-  maxTick = std::max(maxTick, HandleDigits(evt, geom, ramp, arena, json));
-  maxTick = std::max(maxTick, HandleWires (evt, geom, ramp, arena, json));
-
-  HandleHits(evt, geom, json);
-
-  HandlePlanes(evt, geom, detprop, json, maxTick);
-
-  SerializeProduct<recob::Track>(evt, json, "tracks");
-
-  SerializeProduct<recob::SpacePoint>(evt, json, "spacepoints");
-
-  SerializeProduct<recob::Vertex>(evt, json, "reco_vtxs");
-
-  SerializeProductByLabel<simb::MCParticle>(evt, "largeant", json, "truth_trajs");
-
-  json << "var cryos = [\n";
-  for(const geo::CryostatGeo& cryo: geom->IterateCryostats()){
-    json << "  " << cryo << ",\n";
-  }
-  json << "];\n\n";
-
-  json << "var opdets = [\n";
-  for(unsigned int i = 0; i < geom->NOpDets(); ++i){
-    json << "  " << geom->OpDetGeoFromOpDet(i);
-    if(i != geom->NOpDets()-1) json << ",\n"; else json << "\n";
-  }
-  json << "];\n";
-
-  fCoords = outf.str();
-}
-
-// ----------------------------------------------------------------------------
-template<class T> Result WebEVDServer<T>::
-serve(const T& evt,
-      const geo::GeometryCore* geom,
-      const detinfo::DetectorPropertiesData& detprop,
-      const ColorRamp* ramp)
-{
-  // Don't want a sigpipe signal when the browser hangs up on us. This way we
-  // will get an error return from the write() call instead.
-  signal(SIGPIPE, SIG_IGN);
-
-  PNGArena arena("arena");
-  FillCoordsAndArena(evt, geom, detprop, ramp, arena);
-  return do_serve(arena);
 }
 
 template class WebEVDServer<art::Event>;

@@ -7,16 +7,32 @@
 // TODO make SaveAs and Print work
 // TODO figure out z-order for objects in the plane
 
-document.getElementById('runbox').value = run;
-document.getElementById('subrunbox').value = subrun;
-document.getElementById('evtbox').value = evt;
-
 const AXES_NONE = 0;
 const AXES_CMCM = 1;
 const AXES_WIRECM = 2;
 const AXES_WIRETICK = 3;
 
 let gAxesType = AXES_NONE;
+
+// View_t enum
+const kU = 0;
+const kV = 1;
+const kZ = 2;
+const kY = 3;
+// const kX = 4; // don't exist in any detector we're interested in?
+
+// Layers used to implement mixed U/V views
+const kUV = 4;
+const kVU = 5;
+const kNViews = 6;
+const kNoView = 6; // To hide planes/views but retain geometry
+const kNLayers = 7; // for writing loops over all layers
+
+fetch("evtid.json").then(resp => resp.json()).then(evtid => {
+    document.getElementById('runbox').value = evtid.run;
+    document.getElementById('subrunbox').value = evtid.subrun;
+    document.getElementById('evtbox').value = evtid.evt;
+});
 
 document.OnKeyDown = function(evt)
 {
@@ -29,18 +45,22 @@ document.OnKeyDown = function(evt)
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@v0.110.0/build/three.module.js";
 import {OrbitControls} from "https://cdn.jsdelivr.net/npm/three@v0.110.0/examples/jsm/controls/OrbitControls.js";
 
-/*
-// This is all confusing, but should be able to fetch a JSON and read with .json()
-(async () => {
-    let response = await fetch('coords.js');
-    eval(response.text());
-    console.log('done');
-})();
-*/
 
-//fetch("coords.json")
-//    .then(response => response.json())
-//    .then(json => console.log(json));
+// Kick off the fetching of all the different JSONs
+let geom = fetch("geom.json").then(response => response.json());
+let truth_trajs = fetch("trajs.json").then(response => response.json());
+let xhits = fetch("hits.json").then(response => response.json());
+let tracks = fetch("tracks.json").then(response => response.json());
+let spacepoints = fetch("spacepoints.json").then(response => response.json());
+let reco_vtxs = fetch("vtxs.json").then(response => response.json());
+let xdigs = fetch("digs.json").then(response => response.json());
+let xwires = fetch("wires.json").then(response => response.json());
+let opflashes = fetch("opflashes.json").then(response => response.json());
+
+// Extract the individual geometry pieces
+let planes = geom.then(geom => geom.planes);
+let cryos = geom.then(geom => geom.cryos);
+let opdets = geom.then(geom => geom.opdets);
 
 let gAnimReentrant = false;
 
@@ -51,7 +71,10 @@ let camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHe
 let renderer = new THREE.WebGLRenderer();
 renderer.setSize( window.innerWidth, window.innerHeight);
 
-renderer.setClearColor('black');
+if(document.body.className == 'lighttheme')
+    renderer.setClearColor('white');
+else
+    renderer.setClearColor('black');
 
 renderer.domElement.addEventListener("click", OnClick, true);
 
@@ -76,10 +99,12 @@ let mat_hit = new THREE.MeshBasicMaterial({color: 'gray', side: THREE.DoubleSide
 
 let mat_sps = new THREE.MeshBasicMaterial({color: 'blue'});
 
+let mat_flash = new THREE.MeshBasicMaterial({color: 'yellow', opacity: 0.5, transparent: true});
+
 let mat_vtxs = new THREE.MeshBasicMaterial({color: 'red'});
 
-function TextureLoadCallback(tex, mat, mipdim, texdim){
-    console.log('Loaded callback', mipdim, texdim);
+function TextureLoadCallback(tex, mat, fname, mipdim, texdim){
+    // console.log('Loaded callback', fname, mipdim, texdim);
 
     // This is how you would create a data texture if necessary
     // let canvas = document.createElement('canvas');
@@ -90,44 +115,46 @@ function TextureLoadCallback(tex, mat, mipdim, texdim){
     // let data = context.getImageData(0, 0, tex.image.width, tex.image.height).data;
     // let newtex = new THREE.DataTexture(data, tex.image.width, tex.image.height, THREE.RGBAFormat);
 
-    // Until all the mipmaps are ready we stash them in the material
-    if(mat.tmpmipmaps == undefined) mat.tmpmipmaps = {};
-    mat.tmpmipmaps[mipdim] = tex;
+    // This function will be called from order smallest to largest
 
-    // Longest run of mipmap levels
-    let maxdim;
-    for(maxdim = 1; maxdim <= texdim; maxdim *= 2){
-        if(!(maxdim in mat.tmpmipmaps)) break;
-    }
-    if(maxdim == 1) return;
-    maxdim /= 2;
+    // Material keeps messing with its mipmap list. Keep them stored here
+    if(mat.mipstash == undefined) mat.mipstash = [];
+    mat.mipstash.unshift(tex.image); // unshift() == push_front()
 
     // We have something to show so undo the temporary loading style
     mat.opacity = 1;
 
     // TODO - is it bad that the largest resolution image is in the
     // main map and also the first element in the mipmap list?
-    mat.map = mat.tmpmipmaps[maxdim];
-
-    mat.map.mipmaps.length = 0;
-    for(let i = maxdim; i >= 1; i /= 2){
-        mat.map.mipmaps.push(mat.tmpmipmaps[i].image);
-    }
-
     mat.generateMipMaps = false;
-    if(maxdim == texdim){
+    mat.map = tex;
+
+    if(mipdim == texdim){
         // Go pixely rather than blurry when zoomed right in
         mat.map.magFilter = THREE.NearestFilter;
     }
-    else{
-        mat.map.magFilter = THREE.LinearMipmapLinearFilter;
-    }
     mat.map.minFilter = THREE.LinearMipmapLinearFilter;
 
-    // No more need for the temporaries
-    if(maxdim == texdim) delete mat.tmpmipmaps;
+    mat.map.mipmaps = mat.mipstash;
+
+    mat.needsUpdate = true;
 
     requestAnimationFrame(animate);
+
+    // Request the next higher resolution version
+    if(mipdim < texdim){
+        new THREE.TextureLoader().load(fname+'_'+(mipdim*2)+'.png',
+                                       function(t){
+                                           TextureLoadCallback(t, mat, fname, mipdim*2, texdim);
+                                       },
+                                       undefined,
+                                       function(err){
+                                           mat.opacity = 0;
+                                           mat.needsUpdate = true;
+                                           requestAnimationFrame(animate);
+                                           console.log('error loading', fname, mipdim*2, err);
+                                       });
+    }
 }
 
 // Cache so we can request the same texture material multiple times without
@@ -147,26 +174,32 @@ function TextureMaterial(fname, texdim){
     return mat;
 }
 
-function FinalizeTextures(){
-    // Load all the mipmaps
-    for(let d = 1; d <= gmaxtexdim; d *= 2){
-        for(let fname in gtexmats){
-            let mat = gtexmats[fname].mat;
-            let texdim = gtexmats[fname].texdim;
-            if(texdim < d) continue;
-            new THREE.TextureLoader().load(fname+'_'+d+'.png',
-                                           function(t){
-                                               TextureLoadCallback(t, mat, d, texdim);
-                                           },
-                                           undefined,
-                                           function(err){
-                                               mat.opacity = 0;
-                                               mat.needsUpdate = true;
-                                               requestAnimationFrame(animate);
-                                               console.log('error loading', fname, d, err);
-                                           });
-        } // end for fname
-    } // end for d
+function FinalizeTextures(prefix){
+    let survivors = {};
+
+    // Load all the mipmaps at level 1, which will trigger the rest
+    for(let fname in gtexmats){
+        if(!fname.startsWith(prefix)){
+            survivors[fname] = gtexmats[fname];
+            continue;
+        }
+
+        let mat = gtexmats[fname].mat;
+        let texdim = gtexmats[fname].texdim;
+        new THREE.TextureLoader().load(fname+'_1.png',
+                                       function(t){
+                                           TextureLoadCallback(t, mat, fname, 1, texdim);
+                                       },
+                                       undefined,
+                                       function(err){
+                                           mat.opacity = 0;
+                                           mat.needsUpdate = true;
+                                           requestAnimationFrame(animate);
+                                           console.log('error loading', fname, 1, err);
+                                       });
+    } // end for fname
+
+    gtexmats = survivors;
 }
 
 
@@ -175,16 +208,16 @@ let digs = {}; // Groups indexed by label
 let wires = {};
 let truth = new THREE.Group();
 let chargedTruth = new THREE.Group();
-
 scene.add(outlines);
 scene.add(truth);
 scene.add(chargedTruth);
 
-let com = new THREE.Vector3();
-let nplanes = 0;
+AddDropdownToggle('truth_dropdown', truth, 'All', true);
+AddDropdownToggle('truth_dropdown', chargedTruth, 'Charged', false);
 
 let uperp = null;
 let vperp = null;
+let anyy = false;
 
 function push_square_vtxs(c, du, dv, vtxs){
     let p1 = c.clone();
@@ -249,50 +282,136 @@ let hitvtxs = {}; // map indexed by reco algo
 
 let tpclabels_div = document.getElementById('tpclabels_div');
 
-let wireaxes = [[], [], [], [], []];
-let tickaxes = [[], [], [], [], []];
+let wireaxes = [[], [], [], [], [], []];
+let tickaxes = [[], [], [], [], [], []];
 
-for(let key in planes){
-    let plane = planes[key];
-    let c = ArrToVec(plane.center);
-    let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
-    let d = ArrToVec(plane.normal).multiplyScalar(plane.nticks*Math.abs(plane.tick_pitch)/2.); // drift direction
+class PlaneGeom{
+    constructor(plane) {
+        this.c = ArrToVec(plane.center);
+        this.a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
+        this.d = ArrToVec(plane.normal).multiplyScalar(plane.nticks*Math.abs(plane.tick_pitch)/2.); // drift direction
 
-    c.set(plane.tick_origin, c.y, c.z);
+        this.c.set(plane.tick_origin, this.c.y, this.c.z);
+        this.c.add(this.d); // center in the drift direction too
 
-    c.add(d); // center in the drift direction too
-
-    com.add(c);
-    nplanes += 1; // javascript is silly and doesn't have any good size() method
-
-    if(plane.view == 0){
-        uperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
+        this.uvlayer = kZ;
+        if(plane.view != kZ){
+            if(this.a.z/this.a.y > 0) this.uvlayer = kUV; else this.uvlayer = kVU;
+        }
     }
-    if(plane.view == 1){
-        // This ordering happens to give us beam left-to-right
-        vperp = ArrToVec(plane.normal).cross(ArrToVec(plane.across));
+}
+
+// Physical APAs
+let apas = new THREE.Group();
+AddDropdownToggle('physical_dropdown', apas, 'APAs', true);
+
+planes.then(planes => {
+    for(let key in planes){
+        let plane = planes[key];
+
+        if(plane.view == kZ){ // collection only for physical APAs
+            let vtxs = [];
+            let c = ArrToVec(plane.center);
+            let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
+            let d = ArrToVec(plane.wiredir).multiplyScalar(plane.depth/2.);
+            push_square_vtxs(c, a, d, vtxs);
+
+            let geom = new THREE.BufferGeometry();
+            geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+
+            let edges = new THREE.EdgesGeometry(geom);
+            let line = new THREE.LineSegments(edges, mat_geo);
+
+            for(let i = 0; i < kNLayers; ++i) line.layers.enable(i);
+
+            apas.add(line);
+        }
+
+        // Learn something for the camera
+        if(plane.view == kU){
+            uperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
+        }
+        if(plane.view == kV){
+            // This ordering happens to give us beam left-to-right
+            vperp = ArrToVec(plane.normal).cross(ArrToVec(plane.across));
+        }
+        if(plane.view == kY) anyy = true;
+
+        let pg = new PlaneGeom(plane);
+
+        let vtxs = [];
+        push_square_vtxs(pg.c, pg.a, pg.d, vtxs);
+
+        let geom = new THREE.BufferGeometry();
+        geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+
+        let edges = new THREE.EdgesGeometry( geom );
+        let line = new THREE.LineSegments( edges, mat_lin );
+
+        outlines.add(line);
+
+        let uvlayer = plane.view;
+        if(plane.view == kU || plane.view == kV){
+            if(pg.a.z/pg.a.y > 0) uvlayer = kUV; else uvlayer = kVU;
+        }
+
+        line.layers.set(plane.view);
+        line.layers.enable(pg.uvlayer);
+
+
+
+        if(plane.view == kZ){ // collection
+            let div = document.createElement('div');
+            div.className = 'label';
+            // Cut off the plane number, we want the name of the whole APA/TPC
+            div.appendChild(document.createTextNode(key.slice(0, key.lastIndexOf(' '))));
+            div.pos = pg.c; // stash the 3D position on the HTML element
+            tpclabels_div.appendChild(div);
+        }
+
+        let r0 = pg.c.clone();
+        r0.addScaledVector(pg.a, -1);
+        r0.addScaledVector(pg.d, -1);
+        let r1 = pg.c.clone();
+        r1.addScaledVector(pg.a, +1);
+        r1.addScaledVector(pg.d, -1);
+        wireaxes[plane.view].push({r0: r0, r1: r1, w: plane.nwires});
+        if(pg.uvlayer != plane.view) wireaxes[pg.uvlayer].push({r0: r0, r1: r1, w: plane.nwires});
+        let r2 = pg.c.clone();
+        r2.addScaledVector(pg.a, -1);
+        r2.addScaledVector(pg.d, +1);
+        tickaxes[plane.view].push({r0: r0, r1: r2, w: plane.nticks});
+        if(pg.uvlayer != plane.view) tickaxes[pg.uvlayer].push({r0: r0, r1: r2, w: plane.nticks});
+    } // end for plane
+
+    scene.add(apas);
+    requestAnimationFrame(animate);
+
+
+    // Disable any buttons that are irrelevant for the current geometry
+    if(uperp == undefined && vperp == undefined){
+        document.getElementById('uview_button').style.display = 'none';
+        document.getElementById('vview_button').style.display = 'none';
+        document.getElementById('uvview_button').style.display = 'none';
+        document.getElementById('vuview_button').style.display = 'none';
+        document.getElementById('uvview2d_button').style.display = 'none';
+        document.getElementById('vuview2d_button').style.display = 'none';
     }
 
-    let vtxs = [];
-    push_square_vtxs(c, a, d, vtxs);
-
-    let geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
-
-    let edges = new THREE.EdgesGeometry( geom );
-    let line = new THREE.LineSegments( edges, mat_lin );
-
-    outlines.add(line);
-
-    let uvlayer = 2;
-    if(plane.view != 2){
-        if(a.z/a.y > 0) uvlayer = 3; else uvlayer = 4;
+    if(!anyy){
+        document.getElementById('yview_button').style.display = 'none';
+        document.getElementById('yview2d_button').style.display = 'none';
     }
+}); // end then (planes)
 
-    line.layers.set(plane.view);
-    line.layers.enable(uvlayer);
+async function handle_digs_or_wires(planes_promise, dws_promise, tgt, dropdown, texprefix){
+    let planes = await planes_promise;
+    let dws = await dws_promise;
 
-    for(let dws of [xdigs, xwires]){
+    for(let key in planes){
+        let plane = planes[key];
+        let pg = new PlaneGeom(plane);
+
         for(let label in dws){
             let dw = dws[label][key];
             if(dw == undefined) continue; // sometimes wires are missing
@@ -302,15 +421,14 @@ for(let key in planes){
                 // texture file into a single geometry.
                 let geom = new THREE.BufferGeometry();
 
-                let blockc = c.clone();
-                // TODO hardcoding in (half) block size isn't good
+                let blockc = pg.c.clone();
                 blockc.addScaledVector(ArrToVec(plane.across), (block.x+block.dx/2-plane.nwires/2)*plane.pitch);
                 blockc.addScaledVector(ArrToVec(plane.normal), (block.y+block.dy/2-plane.nticks/2)*Math.abs(plane.tick_pitch));
 
                 let blocka = ArrToVec(plane.across).multiplyScalar(block.dx/2*plane.pitch);
                 let blockd = ArrToVec(plane.normal).multiplyScalar(block.dy/2*Math.abs(plane.tick_pitch));
 
-                vtxs = [];
+                let vtxs = [];
                 push_square_vtxs(blockc, blocka, blockd, vtxs);
                 geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
 
@@ -333,235 +451,266 @@ for(let key in planes){
                 let mat = TextureMaterial(block.fname, block.texdim);
                 let dmesh = new THREE.Mesh(geom, mat);
                 dmesh.layers.set(plane.view);
-                if(dws === xdigs){
-                    if(!(label in digs)){
-                        digs[label] = new THREE.Group();
-                        scene.add(digs[label]);
-                    }
-                    digs[label].add(dmesh);
-                }
-                else{
-                    if(!(label in wires)){
-                        wires[label] = new THREE.Group();
-                        scene.add(wires[label]);
-                    }
-                    wires[label].add(dmesh);
-                }
 
-                dmesh.layers.enable(uvlayer);
+                if(!(label in tgt)){
+                    tgt[label] = new THREE.Group();
+                    scene.add(tgt[label]);
+                }
+                tgt[label].add(dmesh);
+
+                dmesh.layers.enable(pg.uvlayer);
             } // end for block
         } // end for label
-    } // end for dws
+    } // end for planes
 
-    if(plane.view == 2){ // collection
-        let div = document.createElement('div');
-        div.className = 'label';
-        // Cut off the plane number, we want the name of the whole APA/TPC
-        div.appendChild(document.createTextNode(key.slice(0, key.lastIndexOf(' '))));
-        div.pos = c; // stash the 3D position on the HTML element
-        tpclabels_div.appendChild(div);
+    requestAnimationFrame(animate);
+
+    for(let label in tgt){
+        AddDropdownToggle(dropdown, tgt[label], label, false, texprefix);
     }
+}
 
-    let r0 = c.clone();
-    r0.addScaledVector(a, -1);
-    r0.addScaledVector(d, -1);
-    let r1 = c.clone();
-    r1.addScaledVector(a, +1);
-    r1.addScaledVector(d, -1);
-    wireaxes[plane.view].push({r0: r0, r1: r1, w: plane.nwires});
-    if(uvlayer != plane.view) wireaxes[uvlayer].push({r0: r0, r1: r1, w: plane.nwires});
-    let r2 = c.clone();
-    r2.addScaledVector(a, -1);
-    r2.addScaledVector(d, +1);
-    tickaxes[plane.view].push({r0: r0, r1: r2, w: plane.nticks});
-    if(uvlayer != plane.view) tickaxes[uvlayer].push({r0: r0, r1: r2, w: plane.nticks});
+handle_digs_or_wires(planes, xdigs, digs, 'digs_dropdown', 'dig_');
+handle_digs_or_wires(planes, xwires, wires, 'wires_dropdown', 'wire_');
 
-    for(let label in xhits){
-        if(!(label in hitvtxs)) hitvtxs[label] = {}; // indexed by pair of layers
-        if(xhits[label][key] == undefined) continue; // not necessarily hits on all planes
-        for(let hit of xhits[label][key]){
-            let hc = c.clone();
-            hc.addScaledVector(a, (2.*hit.wire+1)/plane.nwires-1);
-            hc.addScaledVector(d, (2.*hit.tick+1)/plane.nticks-1);
+// Compute center-of-mass (where the camera looks)
+let com = planes.then(planes => {
+    let com = new THREE.Vector3();
+    let nplanes = 0;
+    for(let key in planes){
+        com.add(ArrToVec(planes[key].center));
+        nplanes += 1; // javascript is silly and doesn't have any good size() method
+    }
+    com.divideScalar(nplanes);
+    return com;
+});
 
-            let du = ArrToVec(plane.across).multiplyScalar(plane.pitch*.45);
-            let dv = ArrToVec(plane.normal).multiplyScalar(hit.rms*Math.abs(plane.tick_pitch));
+// Now place reco hits according to the plane geometries
+async function handle_hits(xhits_promise, planes_promise){
+    let xhits = await xhits_promise;
+    let planes = await planes_promise;
 
-            let views = (plane.view, uvlayer);
-            if(!(views in hitvtxs[label])) hitvtxs[label][views] = [];
-            push_square_vtxs(hc, du, dv, hitvtxs[label][views]);
-        } // end for hit
+    for(let key in planes){
+        let plane = planes[key];
+        let pg = new PlaneGeom(plane);
+
+        for(let label in xhits){
+            if(!(label in hitvtxs)) hitvtxs[label] = {}; // indexed by pair of layers
+            if(xhits[label][key] == undefined) continue; // not necessarily hits on all planes
+
+            for(let hit of xhits[label][key]){
+                let hc = pg.c.clone();
+                hc.addScaledVector(pg.a, (2.*hit.wire+1)/plane.nwires-1);
+                hc.addScaledVector(pg.d, (2.*hit.tick+1)/plane.nticks-1);
+
+                let du = ArrToVec(plane.across).multiplyScalar(plane.pitch*.45);
+                let dv = ArrToVec(plane.normal).multiplyScalar(hit.rms*Math.abs(plane.tick_pitch));
+
+                let views = (plane.view, pg.uvlayer);
+                if(!(views in hitvtxs[label])) hitvtxs[label][views] = [];
+                push_square_vtxs(hc, du, dv, hitvtxs[label][views]);
+            } // end for hit
+        } // end for label
+    } // end for key (planes)
+
+    for(let label in hitvtxs){
+        let hits = new THREE.Group();
+        scene.add(hits);
+
+        for(let views in hitvtxs[label]){
+            let hitgeom = new THREE.BufferGeometry();
+
+            hitgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs[label][views]), 3));
+
+            let h = new THREE.Mesh(hitgeom, mat_hit);
+            h.layers.set(views[0]);
+            h.layers.enable(views[1]); // uvlayer
+            hits.add(h);
+        }
+
+        AddDropdownToggle('hits_dropdown', hits, label);
     } // end for label
-} // end for planes
 
-com.divideScalar(nplanes);
-
-
-for(let label in hitvtxs){
-    let hits = new THREE.Group();
-    scene.add(hits);
-
-    for(let views in hitvtxs[label]){
-        let hitgeom = new THREE.BufferGeometry();
-
-        hitgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(hitvtxs[label][views]), 3));
-
-        let h = new THREE.Mesh(hitgeom, mat_hit);
-        h.layers.set(views[0]);
-        h.layers.enable(views[1]); // uvlayer
-        hits.add(h);
-    }
-
-    let btn = document.createElement('button');
-    SetVisibility(hits, false, btn, label);
-
-    btn.addEventListener('click', function(){
-        SetVisibility(hits, !hits.visible, btn, label);
-        requestAnimationFrame(animate);
-    });
-
-    document.getElementById('hits_dropdown').appendChild(btn);
+    requestAnimationFrame(animate);
 }
 
+handle_hits(xhits, planes);
 
-for(let key in reco_vtxs){
-    let vvtxs = [];
-    let vidxs = [];
-    for(let v of reco_vtxs[key]){
-        push_icosahedron_vtxs(ArrToVec(v), .5, vvtxs, vidxs);
+
+reco_vtxs.then(reco_vtxs => {
+    for(let label in reco_vtxs){
+        let vvtxs = [];
+        let vidxs = [];
+        for(let v of reco_vtxs[label]){
+            push_icosahedron_vtxs(ArrToVec(v), .5, vvtxs, vidxs);
+        }
+
+        let vgeom = new THREE.BufferGeometry();
+        vgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vvtxs), 3));
+        vgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(vidxs), 1));
+        let vtxs = new THREE.Mesh(vgeom, mat_vtxs);
+        for(let i = 0; i < kNLayers; ++i) vtxs.layers.enable(i);
+        scene.add(vtxs);
+
+        AddDropdownToggle('vertices_dropdown', vtxs, label);
     }
 
-    let vgeom = new THREE.BufferGeometry();
-    vgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vvtxs), 3));
-    vgeom.setIndex(new THREE.BufferAttribute(new Uint16Array(vidxs), 1));
-    let vtxs = new THREE.Mesh(vgeom, mat_vtxs);
-    for(let i = 0; i <= 5; ++i) vtxs.layers.enable(i);
-    scene.add(vtxs);
+    requestAnimationFrame(animate);
+}); // end "then" (reco_vtxs)
 
+let flashlabels_div = document.getElementById('flashlabels_div');
 
-    let btn = document.createElement('button');
-    SetVisibility(vtxs, false, btn, key);
+async function handle_flashes(flashes_promise)
+{
+    let flashes = await flashes_promise;
 
-    btn.addEventListener('click', function(){
-            SetVisibility(vtxs, !vtxs.visible, btn, key);
-            requestAnimationFrame(animate);
-        });
+    for(let label in flashes){
+        let group = new THREE.Group();
+        let labeldiv = document.createElement('div');
+        labeldiv.id = 'flash/'+label;
 
-    document.getElementById('vertices_dropdown').appendChild(btn);
+        for(let flash of flashes[label]){
+            if(flash.twidth == 0 || flash.ywidth == 0 || flash.zwidth == 0){
+                console.log('Skipping bad flash', label, flash);
+                continue;
+            }
+
+            // There's not an easy sensible way to place the flash in X. Let's
+            // just put it in the centre, which for current geometries is also
+            // the CPA
+            let geom = new THREE.SphereGeometry(1, 16, 16);
+            geom.scale(0, flash.ywidth, flash.zwidth);
+            geom.translate(0, flash.ycenter, flash.zcenter);
+
+            let mesh = new THREE.Mesh(geom, mat_flash);
+            for(let i = 0; i < kNLayers; ++i) mesh.layers.enable(i);
+            group.add(mesh);
+
+            let div = document.createElement('div');
+            div.className = 'label';
+            div.appendChild(document.createTextNode('PE='+flash.totpe));
+            div.appendChild(document.createElement('br'));
+            div.appendChild(document.createTextNode('t='+flash.tcenter+'us'));
+            div.pos = new THREE.Vector3(0, flash.ycenter, flash.zcenter); // stash the 3D position on the HTML element
+            labeldiv.appendChild(div);
+        }
+
+        flashlabels_div.appendChild(labeldiv);
+
+        scene.add(group);
+
+        AddDropdownToggle('opflashes_dropdown', [group, labeldiv], label);
+    } // end for label
+
+    requestAnimationFrame(animate);
 }
 
-// Physical cryostat
+handle_flashes(opflashes);
+
 let cryogroup = new THREE.Group();
+AddDropdownToggle('physical_dropdown', cryogroup, 'Cryostats', true);
 
-for(let key in cryos){
-    let cryo = cryos[key];
+cryos.then(cryos => {
+    // Physical cryostat
+    for(let cryo of cryos){
+        let r0 = ArrToVec(cryo.min);
+        let r1 = ArrToVec(cryo.max);
 
-    let r0 = ArrToVec(cryo.min);
-    let r1 = ArrToVec(cryo.max);
+        let boxgeom = new THREE.BoxBufferGeometry(r1.x-r0.x, r1.y-r0.y, r1.z-r0.z);
 
-    let boxgeom = new THREE.BoxBufferGeometry(r1.x-r0.x, r1.y-r0.y, r1.z-r0.z);
+        let edges = new THREE.EdgesGeometry(boxgeom);
+        let line = new THREE.LineSegments(edges, mat_geo);
 
-    let edges = new THREE.EdgesGeometry(boxgeom);
-    let line = new THREE.LineSegments(edges, mat_geo);
+        line.position.set((r0.x+r1.x)/2, (r0.y+r1.y)/2, (r0.z+r1.z)/2);
+        line.updateMatrixWorld();
 
-    line.position.set((r0.x+r1.x)/2, (r0.y+r1.y)/2, (r0.z+r1.z)/2);
+        for(let i = 0; i < kNLayers; ++i) line.layers.enable(i);
 
-    for(let i = 0; i <= 5; ++i) line.layers.enable(i);
+        cryogroup.add(line);
+    }
 
-    cryogroup.add(line);
-}
+    scene.add(cryogroup);
+    requestAnimationFrame(animate);
+});
 
-scene.add(cryogroup);
-
-// Physical APAs
-let apas = new THREE.Group();
-
-for(let key in planes){
-    let plane = planes[key];
-    if(plane.view != 2) continue; // collection only
-
-    let c = ArrToVec(plane.center);
-    let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
-    let d = ArrToVec(plane.wiredir).multiplyScalar(plane.depth/2.);
-
-    let vtxs = [];
-    push_square_vtxs(c, a, d, vtxs);
-
-    let geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
-
-    let edges = new THREE.EdgesGeometry(geom);
-    let line = new THREE.LineSegments(edges, mat_geo);
-
-    for(let i = 0; i <= 5; ++i) line.layers.enable(i);
-
-    apas.add(line);
-}
-
-scene.add(apas);
-
-// Physical OpDets
 let opdetgroup = new THREE.Group();
-
+AddDropdownToggle('physical_dropdown', opdetgroup, 'OpDets', false);
 let opdetlabels_div = document.getElementById('opdetlabels_div');
 
-for(let opdet of opdets){
-    let c = ArrToVec(opdet.center);
-    let dy = new THREE.Vector3(0, opdet.height/2., 0);
-    let dz = new THREE.Vector3(0, 0, opdet.length/2.);
+opdets.then(opdets => {
+    // Physical OpDets
+    for(let opdet of opdets){
+        let boxgeom = new THREE.BoxBufferGeometry(opdet.width, opdet.height, opdet.length);
 
-    let vtxs = [];
-    push_square_vtxs(c, dy, dz, vtxs);
+        let edges = new THREE.EdgesGeometry(boxgeom);
+        let line = new THREE.LineSegments(edges, mat_geo);
 
-    let geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
+        let c = ArrToVec(opdet.center);
+        line.position.set(c.x, c.y, c.z);
+        line.updateMatrixWorld();
 
-    let edges = new THREE.EdgesGeometry(geom);
-    let line = new THREE.LineSegments(edges, mat_geo);
+        for(let i = 0; i < kNLayers; ++i) line.layers.enable(i);
 
-    for(let i = 0; i <= 5; ++i) line.layers.enable(i);
+        opdetgroup.add(line);
 
-    opdetgroup.add(line);
+        let d = document.createElement('div');
+        d.className = 'label';
+        d.appendChild(document.createTextNode(opdet.name));
+        d.pos = c; // stash the 3D position on the HTML element
+        opdetlabels_div.appendChild(d);
+    }
 
-    let d = document.createElement('div');
-    d.className = 'label';
-    d.appendChild(document.createTextNode(opdet.name));
-    d.pos = c; // stash the 3D position on the HTML element
-    opdetlabels_div.appendChild(d);
-}
+    scene.add(opdetgroup);
+    requestAnimationFrame(animate);
+});
 
-scene.add(opdetgroup);
+function is_iterable(value){return Symbol.iterator in Object(value);}
 
-
-function AddDropdownToggle(dropdown_id, what, label, init = false)
+// 'what' may be a single object or an array of objects to be handled together
+function AddDropdownToggle(dropdown_id, what, label, init = false,
+                          texs = undefined)
 {
+    if(!is_iterable(what)) what = [what];
+
+    let tag = dropdown_id+'/'+label;
+    if(window.sessionStorage[tag] != undefined){
+        init = (window.sessionStorage[tag] == 'true');
+    }
+
     let btn = document.createElement('button');
-    SetVisibility(what, init, btn, label);
+    btn.id = tag;
+    for(let w of what) SetVisibility(w, init, btn, label);
+    if(init && texs != undefined) FinalizeTextures(texs);
 
     btn.addEventListener('click', function(){
-        SetVisibility(what, !what.visible, btn, label);
-        requestAnimationFrame(animate);
+        if(texs != undefined) FinalizeTextures(texs);
+        for(let w of what) Toggle(w, btn, label);
     });
 
     document.getElementById(dropdown_id).appendChild(btn);
 }
 
-for(let label in spacepoints){
-    let spvtxs = [];
-    let spidxs = [];
-    for(let sp of spacepoints[label]){
-        push_icosahedron_vtxs(ArrToVec(sp), .4, spvtxs, spidxs);
+
+spacepoints.then(spacepoints => {
+    for(let label in spacepoints){
+        let spvtxs = [];
+        let spidxs = [];
+        for(let sp of spacepoints[label]){
+            push_icosahedron_vtxs(ArrToVec(sp), .4, spvtxs, spidxs);
+        }
+
+        let spgeom = new THREE.BufferGeometry();
+        spgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
+        spgeom.setIndex(new THREE.BufferAttribute(new Uint32Array(spidxs), 1));
+        let sps = new THREE.Mesh(spgeom, mat_sps);
+        for(let i = 0; i < kNLayers; ++i) sps.layers.enable(i);
+        scene.add(sps);
+
+        AddDropdownToggle('spacepoints_dropdown', sps, label);
+
+        requestAnimationFrame(animate);
     }
-
-    let spgeom = new THREE.BufferGeometry();
-    spgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(spvtxs), 3));
-    spgeom.setIndex(new THREE.BufferAttribute(new Uint32Array(spidxs), 1));
-    let sps = new THREE.Mesh(spgeom, mat_sps);
-    for(let i = 0; i <= 5; ++i) sps.layers.enable(i);
-    scene.add(sps);
-
-    AddDropdownToggle('spacepoints_dropdown', sps, label);
-}
+}); // end then (spacepoints)
 
 // Consistent colouring for each PDG.
 // Declared outside the function to ensure consistency across the many times
@@ -611,40 +760,45 @@ function add_tracks(trajs, group, must_be_charged){
         let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
         let trkline = new THREE.Line(trkgeom, mat_trk);
 
-        for(let i = 0; i <= 5; ++i) trkline.layers.enable(i);
+        for(let i = 0; i < kNLayers; ++i) trkline.layers.enable(i);
         group.add(trkline);
     }
+
+    requestAnimationFrame(animate);
 }
 
-for(let label in tracks){
-    let reco_tracks = new THREE.Group();
-    add_tracks(tracks[label], reco_tracks, false);
-    scene.add(reco_tracks);
+tracks.then(tracks => {
+    for(let label in tracks){
+        let reco_tracks = new THREE.Group();
+        add_tracks(tracks[label], reco_tracks, false);
+        scene.add(reco_tracks);
 
-    AddDropdownToggle('tracks_dropdown', reco_tracks, label);
-}
+        AddDropdownToggle('tracks_dropdown', reco_tracks, label);
 
-add_tracks(truth_trajs, truth, false);
-add_tracks(truth_trajs, chargedTruth, true);
+        requestAnimationFrame(animate);
+    }
+}); // end then (tracks)
 
-
-for(let label in xdigs){
-    AddDropdownToggle('digs_dropdown', digs[label], label);
-}
-
-for(let label in xwires){
-    AddDropdownToggle('wires_dropdown', wires[label], label);
-}
+truth_trajs.then(truth_trajs => add_tracks(truth_trajs, truth, false));
+truth_trajs.then(truth_trajs => add_tracks(truth_trajs, chargedTruth, true));
 
 
 let controls = new OrbitControls(camera, renderer.domElement);
 
-controls.target = com;
+// Look at the center of the scene once we know where it is
+let gAutoPositionCamera = true;
+com.then(com => {
+    controls.target = com;
 
-camera.translateX(1000);
-camera.lookAt(com);
+    // I would like to skip this whole function, but apparently the restoration
+    // sequence misses something. It's not too bad to have the target reset to
+    // the COM though.
+    if(gAutoPositionCamera) camera.translateX(-1000);
 
-controls.update();
+    controls.update();
+
+    requestAnimationFrame(animate);
+});
 
 function ProjectToScreenPixels(r)
 {
@@ -750,7 +904,7 @@ function PaintAxes()
     }
 
     let layer = new THREE.Layers();
-    for(let i = 0; i <= 4; ++i){
+    for(let i = 0; i < kNLayers; ++i){
         layer.set(i);
         if(camera.layers.test(layer)){
             if(gAxesType == AXES_WIRECM){
@@ -779,6 +933,74 @@ function PaintLabels(div)
     }
 }
 
+let gSaveCamera = false;
+
+function SaveCameraAndControls()
+{
+    if(!gSaveCamera) return; // Allow a chance to load first
+
+    let store = window.sessionStorage;
+    store.camera_fov = camera.fov;
+    store.camera_near = camera.near;
+    store.camera_far = camera.far;
+    store.camera_position_x = camera.position.x;
+    store.camera_position_y = camera.position.y;
+    store.camera_position_z = camera.position.z;
+    store.camera_up_x = camera.up.x;
+    store.camera_up_y = camera.up.y;
+    store.camera_up_z = camera.up.z;
+//    store.controls_target_x = controls.target.x;
+//    store.controls_target_y = controls.target.y;
+//    store.controls_target_z = controls.target.z;
+
+    store.camera_layers_mask = camera.layers.mask;
+
+    store.controls_screenSpacePanning = controls.screenSpacePanning;
+    store.controls_enableRotate = controls.enableRotate;
+    store.controls_mouseButtons_LEFT   = controls.mouseButtons.LEFT;
+    store.controls_mouseButtons_MIDDLE = controls.mouseButtons.MIDDLE;
+    store.controls_mouseButtons_RIGHT  = controls.mouseButtons.RIGHT;
+}
+
+function LoadCameraAndControls()
+{
+    gSaveCamera = true; // OK to start saving state now
+
+    let store = window.sessionStorage;
+
+    if(!store.camera_fov) return; // info not in session store
+
+    gAutoPositionCamera = false; // don't auto-position - it will fight with what we load
+
+    camera.fov = parseFloat(store.camera_fov);
+    camera.near = parseFloat(store.camera_near);
+    camera.far = parseFloat(store.camera_far);
+    camera.position.set(parseFloat(store.camera_position_x),
+                        parseFloat(store.camera_position_y),
+                        parseFloat(store.camera_position_z));
+    camera.up.set(parseFloat(store.camera_up_x),
+                  parseFloat(store.camera_up_y),
+                  parseFloat(store.camera_up_z));
+
+    camera.layers.mask = parseInt(store.camera_layers_mask);
+
+    controls.screenSpacePanning = (store.controls_screenSpacePanning == 'true');
+    controls.enableRotate = (store.controls_enableRotate == 'true');
+
+    controls.mouseButtons = {
+        LEFT:   parseInt(store.controls_mouseButtons_LEFT),
+        MIDDLE: parseInt(store.controls_mouseButtons_MIDDLE),
+        RIGHT:  parseInt(store.controls_mouseButtons_RIGHT)
+    };
+
+    // controls.target.set(parseFloat(store.controls_target_x),
+    //                     parseFloat(store.controls_target_y),
+    //                     parseFloat(store.controls_target_z));
+
+    camera.updateProjectionMatrix();
+    controls.update();
+}
+
 function animate() {
     if(gAnimReentrant) return;
     gAnimReentrant = true;
@@ -804,54 +1026,34 @@ function animate() {
     PaintAxes();
     if(opdetlabels_div.style.display != "none") PaintLabels(opdetlabels_div);
     if(tpclabels_div.style.display != "none") PaintLabels(tpclabels_div);
+    for(let label of flashlabels_div.children){
+        if(label.style.display != "none") PaintLabels(label);
+    }
 
     gAnimReentrant = false;
+
+    SaveCameraAndControls();
 }
 
 function SetVisibility(col, state, elem, str)
 {
-    col.visible = state;
+    window.sessionStorage[elem.id] = state;
+
+    // GL objects
+    if(col.visible != undefined) col.visible = state;
+    // DOM objects
+    if(col.style != undefined) col.style.display = state ? 'initial' : 'none';
+
     // Tick and Cross emojis respectively
     elem.innerHTML = (state ? '&#x2705 ' : '&#x274c ')+str;
-}
 
-function SetVisibilityById(col, state, id, str)
-{
-    SetVisibility(col, state, document.getElementById(id), str);
-}
-
-function Toggle(col, id, str){
-    SetVisibilityById(col, !col.visible, id, str);
     requestAnimationFrame(animate);
 }
 
-function SetVisibilityLabel(col, state, elem, str)
-{
-    col.style.display = state ? "initial" : "none";
-    // Tick and Cross emojis respectively
-    elem.innerHTML = (state ? '&#x2705 ' : '&#x274c ')+str;
+function Toggle(col, elem, str){
+    if(col.visible != undefined) SetVisibility(col, !col.visible, elem, str);
+    if(col.style != undefined) SetVisibility(col, col.style.display == 'none', elem, str);
 }
-
-function SetVisibilityByIdLabel(col, state, id, str)
-{
-    SetVisibilityLabel(col, state, document.getElementById(id), str);
-}
-
-function ToggleLabel(col, id, str){
-    SetVisibilityByIdLabel(col,
-                           col.style.display == "none",
-                           id, str);
-    requestAnimationFrame(animate);
-}
-
-// TODO - would be better to have this javascript look up the buttons in the
-// HTML and attach the handlers to them.
-window.ToggleAllTruth = function(){Toggle(truth, 'allTruth', 'All');}
-window.ToggleChargedTruth = function(){Toggle(chargedTruth, 'chargedTruth', 'Charged');}
-window.ToggleCryos = function(){Toggle(cryogroup, 'cryos', 'Cryostats');}
-window.ToggleAPAs = function(){Toggle(apas, 'apas', 'APAs');}
-window.ToggleOpDets = function(){Toggle(opdetgroup, 'opdets', 'OpDets');}
-
 
 AllViews();
 ThreeDControls();
@@ -859,31 +1061,24 @@ ThreeDControls();
 // Try to pre-load all textures - doesn't work
 //renderer.compile(scene, camera);
 
-//SetVisibilityById(digs, false, 'rawdigits', 'RawDigits');
-//SetVisibilityById(wires, false, 'wires', 'Wires');
-SetVisibilityById(truth, true, 'allTruth', 'All');
-SetVisibilityById(chargedTruth, false, 'chargedTruth', 'Charged');
-
-SetVisibilityById(cryogroup, true, 'cryos', 'Cryostats');
-SetVisibilityById(apas, true, 'apas', 'APAs');
-SetVisibilityById(opdetgroup, false, 'opdets', 'OpDets');
-
 let animStart = null;
 let animFunc = null;
 
-window.NoView = function(){camera.layers.set(5); requestAnimationFrame(animate);}
+window.NoView = function(){camera.layers.set(kNoView); requestAnimationFrame(animate);}
 
 // TODO these only really do what you expect when already in 3D mode. May want
 // to "re-diagonalize" this functionality.
-window.ZView  = function(){camera.layers.set(2); requestAnimationFrame(animate);}
-window.UView  = function(){camera.layers.set(0); requestAnimationFrame(animate);}
-window.VView  = function(){camera.layers.set(1); requestAnimationFrame(animate);}
-window.UVView = function(){camera.layers.set(3); requestAnimationFrame(animate);}
-window.VUView = function(){camera.layers.set(4); requestAnimationFrame(animate);}
+window.ZView  = function(){camera.layers.set(kZ); requestAnimationFrame(animate);}
+window.YView  = function(){camera.layers.set(kY); requestAnimationFrame(animate);}
+window.UView  = function(){camera.layers.set(kU); requestAnimationFrame(animate);}
+window.VView  = function(){camera.layers.set(kV); requestAnimationFrame(animate);}
+window.UVView = function(){camera.layers.set(kUV); requestAnimationFrame(animate);}
+window.VUView = function(){camera.layers.set(kVU); requestAnimationFrame(animate);}
 
 // Remains as a free function so others can call it
 function AllViews(){
-    camera.layers.enable(0); camera.layers.enable(1); camera.layers.enable(2);
+    for(let v = 0; v < kNViews; ++v) camera.layers.enable(v);
+    requestAnimationFrame(animate);
 }
 window.AllViews = AllViews;
 
@@ -987,13 +1182,13 @@ function TwoDControls(){
         LEFT: THREE.MOUSE.PAN,
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: null
-    }
+    };
 
     // Seems to hang the touch controls entirely :(
     //controls.touches = {
     //    ONE: THREE.TOUCH.DOLLY_PAN,
     //    TWO: THREE.TOUCH.ROTATE
-    //}
+    //};
 
     controls.update();
 }
@@ -1007,28 +1202,46 @@ function ThreeDControls(){
         LEFT: THREE.MOUSE.ROTATE,
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: THREE.MOUSE.PAN
-    }
+    };
 
     controls.update();
 }
 
 window.ZView2D = function(){
-    camera.layers.enable(2);
+    camera.layers.enable(kZ);
     AnimateTo(new THREE.Vector3(0, 1, 0),
               new THREE.Vector3(1, 0, 0),
               1e-6, ZView);
     TwoDControls();
 }
 
+window.YView2D = function(){
+    camera.layers.enable(kY);
+    AnimateTo(new THREE.Vector3(0, 0, -1),
+              new THREE.Vector3(1, 0, 0),
+              1e-6, YView);
+    TwoDControls();
+}
+
 window.UVView2D = function(){
-    camera.layers.enable(3);
+    camera.layers.enable(kUV);
     AnimateTo(vperp, new THREE.Vector3(1, 0, 0), 1e-6, UVView);
     TwoDControls();
 }
 
 window.VUView2D = function(){
-    camera.layers.enable(4);
+    camera.layers.enable(kVU);
     AnimateTo(uperp, new THREE.Vector3(1, 0, 0), 1e-6, VUView);
+    TwoDControls();
+}
+
+window.SideView2D = function(){
+    AnimateTo(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 1, 0), 1e-6, NoView);
+    TwoDControls();
+}
+
+window.FrontView2D = function(){
+    AnimateTo(new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 1, 0), 1e-6, NoView);
     TwoDControls();
 }
 
@@ -1041,43 +1254,20 @@ window.Orbit = function()
     requestAnimationFrame(animate);
 }
 
-window.NoAxes = function()
+function SetAxesType(type)
 {
-    gAxesType = AXES_NONE;
+    gAxesType = type;
+    window.sessionStorage.axestype = type;
     requestAnimationFrame(animate);
 }
 
-window.PhysicalAxes = function()
-{
-    gAxesType = AXES_CMCM;
-    requestAnimationFrame(animate);
-}
+window.NoAxes       = function(){SetAxesType(AXES_NONE);}
+window.PhysicalAxes = function(){SetAxesType(AXES_CMCM);}
+window.WireCmAxes   = function(){SetAxesType(AXES_WIRECM);}
+window.WireTickAxes = function(){SetAxesType(AXES_WIRETICK);}
 
-window.WireCmAxes = function()
-{
-    gAxesType = AXES_WIRECM;
-    requestAnimationFrame(animate);
-}
-
-window.WireTickAxes = function()
-{
-    gAxesType = AXES_WIRETICK;
-    requestAnimationFrame(animate);
-}
-
-window.OpDetLabels = function()
-{
-    ToggleLabel(opdetlabels_div, 'opdetlabels', 'OpDets');
-}
-// default
-SetVisibilityByIdLabel(opdetlabels_div, false, 'opdetlabels', 'OpDets')
-
-window.TPCLabels = function()
-{
-    ToggleLabel(tpclabels_div, 'tpclabels', 'TPCs');
-}
-// default
-SetVisibilityByIdLabel(tpclabels_div, false, 'tpclabels', 'TPCs');
+AddDropdownToggle('labels_dropdown', opdetlabels_div, 'OpDets', false);
+AddDropdownToggle('labels_dropdown', tpclabels_div, 'TPCs', false);
 
 function OnClick()
 {
@@ -1095,6 +1285,8 @@ window.Theme = function(theme)
     if(theme == 'bluetheme') renderer.setClearColor(new THREE.Color(0, 0, 99./255));
 
     requestAnimationFrame(animate);
+
+    window.sessionStorage.theme = theme;
 }
 
 
@@ -1118,8 +1310,6 @@ window.addEventListener('unload', function(event){renderer.dispose();});
 controls.addEventListener('change', animate);
 window.addEventListener('resize', animate);
 
-FinalizeTextures();
-
 animate();
 
 // Amazingly these dominate render times, and we never change any objects'
@@ -1127,4 +1317,6 @@ animate();
 scene.matrixAutoUpdate = false;
 scene.autoUpdate = false;
 
-console.log(renderer.info);
+LoadCameraAndControls();
+
+if(window.sessionStorage.axestype) SetAxesType(parseInt(window.sessionStorage.axestype));

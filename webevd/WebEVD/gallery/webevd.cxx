@@ -12,6 +12,7 @@
 #include "lardata/DetectorInfoServices/DetectorPropertiesService.h"
 
 #include "webevd/WebEVD/WebEVDServer.h"
+#include "webevd/WebEVD/ThreadsafeGalleryEvent.h"
 
 #include "webevd/WebEVD/IEventSource.h"
 
@@ -193,7 +194,7 @@ int main(int argc, char** argv)
   // input file geometry configuration. Don't know how to do this in code yet
   // system(("config_dumper -S -f Geometry "+filenames[0]).c_str());
 
-  evd::WebEVDServer<gallery::Event> server;
+  evd::WebEVDServer<evd::ThreadsafeGalleryEvent> server;
 
   std::string fclConfig = "#include \"services_dune.fcl\"\n";
   if(isFD){
@@ -237,7 +238,8 @@ int main(int argc, char** argv)
     evt = src.FirstEvent(filenames[0], &next);
 
   while(evt){
-    const evd::Result res = server.serve(*evt, geom, detprop);
+    evd::ThreadsafeGalleryEvent tsevt(evt);
+    const evd::Result res = server.serve(tsevt, geom, detprop);
 
     switch(res.code){
     case evd::kNEXT:

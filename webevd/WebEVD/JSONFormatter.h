@@ -28,8 +28,12 @@ public:
 
   JSONFormatter& operator<<(double x)
   {
-    if(isnan(x)) fStream << "NaN";
-    else if(isinf(x)) fStream << "Infinity";
+    // "NaN" and "Infinity" are the javascript syntax, but JSON doesn't include
+    // these concepts at all. Our options are to send a string, a null, or a
+    // number that is unrepresentable and will become Infinity again. I don't
+    // know any way to play the same trick with a NaN.
+    if(isnan(x)) fStream << "1e999";
+    else if(isinf(x)) fStream << "1e999";
     else fStream << x;
     return *this;
   }

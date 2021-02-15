@@ -6,6 +6,8 @@
 
 #include "webevd/WebEVD/JSONFormatter.h"
 
+#include "webevd/WebEVD/ThreadsafeGalleryEvent.h"
+
 #include <string>
 
 #include "fhiclcpp/ParameterSet.h"
@@ -474,11 +476,9 @@ JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
 
 // ----------------------------------------------------------------------------
 template<class TProd, class TEvt> void
-SerializeProduct(const TEvt& evt,
-                 JSONFormatter& json,
-                 const std::string& label = "")
+SerializeProduct(const TEvt& evt, JSONFormatter& json)
 {
-  if(!label.empty()) json << "var " << label << " = {\n"; else json << "{";
+  json << "{";
 
   const std::vector<art::InputTag> tags = evt.template getInputTags<std::vector<TProd>>();
 
@@ -495,7 +495,8 @@ SerializeProduct(const TEvt& evt,
     }
     json << "\n";
   }
-  if(!label.empty()) json << "};\n\n"; else json << "}";
+
+  json << "}";
 }
 
 // ----------------------------------------------------------------------------
@@ -523,7 +524,7 @@ template<class T> void SerializeEventID(const T& evt, JSONFormatter& json)
 }
 
 // ----------------------------------------------------------------------------
-void SerializeEventID(const gallery::Event& evt, JSONFormatter& json)
+void SerializeEventID(const ThreadsafeGalleryEvent& evt, JSONFormatter& json)
 {
   SerializeEventID(evt.eventAuxiliary(), json);
 }
@@ -1036,6 +1037,8 @@ serve(const T& evt,
 }
 
 template class WebEVDServer<art::Event>;
-template class WebEVDServer<gallery::Event>;
+// Don't provide an instantiation for gallery::Event. Callers must wrap it in
+// the threadsafe wrapper.
+template class WebEVDServer<ThreadsafeGalleryEvent>;
 
 } // namespace

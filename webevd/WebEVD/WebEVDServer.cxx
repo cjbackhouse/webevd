@@ -8,6 +8,8 @@
 
 #include "webevd/WebEVD/ThreadsafeGalleryEvent.h"
 
+#include "webevd/WebEVD/TruthText.h"
+
 #include <string>
 
 #include "fhiclcpp/ParameterSet.h"
@@ -24,6 +26,7 @@
 #include "lardataobj/RecoBase/Vertex.h"
 
 #include "nusimdata/SimulationBase/MCParticle.h"
+#include "nusimdata/SimulationBase/MCTruth.h"
 
 #include "lardataobj/RawData/RawDigit.h"
 #include "lardataobj/RawData/raw.h" // Uncompress()
@@ -359,6 +362,12 @@ JSONFormatter& operator<<(JSONFormatter& json, const recob::Vertex& vtx)
   return json << TVector3(vtx.position().x(),
                           vtx.position().y(),
                           vtx.position().z());
+}
+
+// ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const simb::MCTruth& mct)
+{
+  return json << "\"" << MCTruthShortText(mct) << "\"";
 }
 
 // ----------------------------------------------------------------------------
@@ -726,6 +735,7 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
   else if(doc == "/spacepoints.json") SerializeProduct<recob::SpacePoint>(*evt, json);
   else if(doc == "/vtxs.json")        SerializeProduct<recob::Vertex>(*evt, json);
   else if(doc == "/trajs.json")       SerializeProductByLabel<simb::MCParticle>(*evt, "largeant", json);
+  else if(doc == "/mctruth.json")     SerializeProduct<simb::MCTruth>(*evt, json);
   else if(doc == "/opflashes.json")   SerializeProduct<recob::OpFlash>(*evt, json);
   else if(doc == "/hits.json")        SerializeHits(*evt, geom, json);
   else if(doc == "/geom.json")        SerializeGeometry(geom, *detprop, json);

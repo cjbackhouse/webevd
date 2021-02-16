@@ -179,6 +179,8 @@ async function handle_hits(hits)
             planegroup.setAttribute('class', 'hits/'+label);
 
             for(let hit of hits[label][plane]){
+                if(!isFinite(hit.tick) || !isFinite(hit.rms)) continue;
+
                 let poly = new_svg_elem('polyline');
                 poly.setAttribute('stroke', 'red');
                 poly.setAttribute('fill', 'none');

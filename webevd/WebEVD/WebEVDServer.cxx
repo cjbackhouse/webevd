@@ -457,10 +457,10 @@ JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
       const int texdy = ((b-&v.arena.data[dataidx]->front())/4)/PNGArena::kArenaSize;
 
       os << "{"
-         << "\"x\": " << ix*PNGArena::kBlockSize << ", "
-         << "\"y\": " << iy*PNGArena::kBlockSize*gStride << ", "
-         << "\"dx\": " << PNGArena::kBlockSize << ", "
-         << "\"dy\": " << PNGArena::kBlockSize*gStride << ", "
+         << "\"x\": " << ix*PNGArena::kBlockSize/double(gStride) << ", "
+         << "\"y\": " << iy*PNGArena::kBlockSize << ", "
+         << "\"dx\": " << PNGArena::kBlockSize/double(gStride) << ", "
+         << "\"dy\": " << PNGArena::kBlockSize << ", "
          << "\"fname\": \"" << v.arena.name << "_" << dataidx << "\", "
          << "\"texdim\": " << PNGArena::kArenaSize << ", "
          << "\"u\": " << texdx << ", "
@@ -869,7 +869,7 @@ protected:
           const unsigned int Nw = fGeom->Nwires(plane);
 
           if(fImgs[tag].count(plane) == 0){
-            fImgs[tag].emplace(plane, PNGView(fArena, Nw, dig.Samples()));
+            fImgs[tag].emplace(plane, PNGView(fArena, Nw*gStride, dig.Samples()));
           }
 
           PNGView& bytes = fImgs[tag].find(plane)->second;
@@ -877,25 +877,23 @@ protected:
           raw::RawDigit::ADCvector_t adcs(dig.Samples());
           raw::Uncompress(dig.ADCs(), adcs, dig.Compression());
 
-          for(unsigned int tick = 0; tick < adcs.size(); tick += gStride){
-            double avgadc = 0;
-            const int nadc = std::min(gStride, (unsigned int)adcs.size()-tick);
-            for(int i = 0; i < nadc; ++i){
-              const int adc = adcs[tick+i] ? int(adcs[tick+i])-dig.GetPedestal() : 0;
-              avgadc += double(adc)/nadc;
-            }
+          for(unsigned int tick = 0; tick < adcs.size(); ++tick){
+            const int adc = adcs[tick] ? int(adcs[tick])-dig.GetPedestal() : 0;
 
-            if(avgadc != 0){
-              // alpha
-              bytes(wire.Wire-w0.Wire, tick/gStride, 3) = std::min(abs(int(avgadc)), 255);
-              if(avgadc > 0){
-                // red
-                bytes(wire.Wire-w0.Wire, tick/gStride, 0) = 255;
-              }
-              else{
-                // blue
-                bytes(wire.Wire-w0.Wire, tick/gStride, 2) = 255;
-              }
+            if(adc != 0){
+              for(unsigned int dx = 0; dx < gStride; ++dx){
+                const int x = gStride*(wire.Wire-w0.Wire)+dx;
+                // alpha
+                bytes(x, tick, 3) = std::min(abs(adc), 255);
+                if(adc > 0){
+                  // red
+                  bytes(x, tick, 0) = 255;
+                }
+                else{
+                  // blue
+                  bytes(x, tick, 2) = 255;
+                }
+              } // end for dx
             }
           } // end for tick
         } // end for wire
@@ -955,23 +953,24 @@ protected:
           const unsigned int Nw = fGeom->Nwires(plane);
 
           if(fImgs[tag].count(plane) == 0){
-            fImgs[tag].emplace(plane, PNGView(fArena, Nw, rbwire.NSignal()/gStride));
+            fImgs[tag].emplace(plane, PNGView(fArena, Nw*gStride, rbwire.NSignal()));
           }
 
           PNGView& bytes = fImgs[tag].find(plane)->second;
 
           const auto adcs = rbwire.Signal();
-          for(unsigned int tick = 0; tick < adcs.size(); tick += gStride){
-            double avgadc = 0;
-            int nadc = std::min(gStride, (unsigned int)adcs.size()-tick);
-            for(int i = 0; i < nadc; ++i) avgadc += double(adcs[tick+i])/nadc;
+          for(unsigned int tick = 0; tick < adcs.size(); ++tick){
+            const int adc = adcs[tick];
 
-            if(avgadc <= 0) continue;
+            if(adc <= 0) continue;
 
-            // green channel
-            bytes(wire.Wire-w0.Wire, tick/gStride, 1) = 128; // dark green
-            // alpha channel
-            bytes(wire.Wire-w0.Wire, tick/gStride, 3) = std::max(0, std::min(int(10*avgadc), 255));
+            for(unsigned int dx = 0; dx < gStride; ++dx){
+              const int x = gStride*(wire.Wire-w0.Wire)+dx;
+              // green channel
+              bytes(x, tick, 1) = 128; // dark green
+              // alpha channel
+              bytes(x, tick, 3) = std::max(0, std::min(int(10*adc), 255));
+            } // end for dx
           } // end for tick
         } // end for wire
       } // end for rbwire

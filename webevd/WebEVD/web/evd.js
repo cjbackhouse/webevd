@@ -48,6 +48,11 @@ import {OrbitControls} from "https://cdn.jsdelivr.net/npm/three@v0.110.0/example
 
 // Kick off the fetching of all the different JSONs
 let geom = fetch("geom.json").then(response => response.json());
+// Extract the individual geometry pieces
+let planes = geom.then(geom => geom.planes);
+let cryos = geom.then(geom => geom.cryos);
+let opdets = geom.then(geom => geom.opdets);
+
 let truth_trajs = fetch("trajs.json").then(response => response.json());
 let xhits = fetch("hits.json").then(response => response.json());
 let tracks = fetch("tracks.json").then(response => response.json());
@@ -56,11 +61,7 @@ let reco_vtxs = fetch("vtxs.json").then(response => response.json());
 let xdigs = fetch("digs.json").then(response => response.json());
 let xwires = fetch("wires.json").then(response => response.json());
 let opflashes = fetch("opflashes.json").then(response => response.json());
-
-// Extract the individual geometry pieces
-let planes = geom.then(geom => geom.planes);
-let cryos = geom.then(geom => geom.cryos);
-let opdets = geom.then(geom => geom.opdets);
+let mctruth = fetch("mctruth.json").then(response => response.json());
 
 let gAnimReentrant = false;
 
@@ -214,6 +215,7 @@ scene.add(chargedTruth);
 
 AddDropdownToggle('truth_dropdown', truth, 'All', true);
 AddDropdownToggle('truth_dropdown', chargedTruth, 'Charged', false);
+AddDropdownToggle('truth_dropdown', document.getElementById('mctruth'), 'Text', false);
 
 let uperp = null;
 let vperp = null;
@@ -606,6 +608,18 @@ async function handle_flashes(flashes_promise)
 }
 
 handle_flashes(opflashes);
+
+mctruth.then(mctruth => {
+    let str = '';
+    for(let label in mctruth){
+        for(let truth of mctruth[label]){
+            if(str != '') str += '<br>';
+            str += truth;
+        }
+    }
+
+    document.getElementById('mctruth').innerHTML = str;
+});
 
 let cryogroup = new THREE.Group();
 AddDropdownToggle('physical_dropdown', cryogroup, 'Cryostats', true);

@@ -8,6 +8,8 @@
 
 #include "webevd/WebEVD/ThreadsafeGalleryEvent.h"
 
+#include "webevd/WebEVD/TruthText.h"
+
 #include <string>
 
 #include "fhiclcpp/ParameterSet.h"
@@ -24,6 +26,7 @@
 #include "lardataobj/RecoBase/Vertex.h"
 
 #include "nusimdata/SimulationBase/MCParticle.h"
+#include "nusimdata/SimulationBase/MCTruth.h"
 
 #include "lardataobj/RawData/RawDigit.h"
 #include "lardataobj/RawData/raw.h" // Uncompress()
@@ -370,6 +373,12 @@ JSONFormatter& operator<<(JSONFormatter& json, const recob::Vertex& vtx)
 }
 
 // ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const simb::MCTruth& mct)
+{
+  return json << "\"" << MCTruthShortText(mct) << "\"";
+}
+
+// ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const recob::SpacePoint& sp)
 {
   return json << TVector3(sp.XYZ());
@@ -677,7 +686,7 @@ template<class T> void SerializeDigitTraces(const T& evt,
   // [tag][plane][wire index][t0]
   std::map<art::InputTag, std::map<geo::PlaneID, std::map<int, std::map<int, std::vector<short>>>>> traces;
 
-  for(art::InputTag tag: evt.template getInputTags<raw::RawDigit>()){
+  for(art::InputTag tag: evt.template getInputTags<std::vector<raw::RawDigit>>()){
     typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
     evt.getByLabel(tag, digs);
 
@@ -704,7 +713,7 @@ template<class T> void SerializeWireTraces(const T& evt,
   // [tag][plane][wire][t0]
   std::map<art::InputTag, std::map<geo::PlaneID, std::map<int, std::map<int, std::vector<float>>>>> traces;
 
-  for(art::InputTag tag: evt.template getInputTags<recob::Wire>()){
+  for(art::InputTag tag: evt.template getInputTags<std::vector<recob::Wire>>()){
     typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
     evt.getByLabel(tag, wires);
 
@@ -734,6 +743,7 @@ template<class T> void _HandleGetJSON(std::string doc, int sock, const T* evt, c
   else if(doc == "/spacepoints.json") SerializeProduct<recob::SpacePoint>(*evt, json);
   else if(doc == "/vtxs.json")        SerializeProduct<recob::Vertex>(*evt, json);
   else if(doc == "/trajs.json")       SerializeProductByLabel<simb::MCParticle>(*evt, "largeant", json);
+  else if(doc == "/mctruth.json")     SerializeProduct<simb::MCTruth>(*evt, json);
   else if(doc == "/opflashes.json")   SerializeProduct<recob::OpFlash>(*evt, json);
   else if(doc == "/hits.json")        SerializeHits(*evt, geom, json);
   else if(doc == "/geom.json")        SerializeGeometry(geom, *detprop, json);

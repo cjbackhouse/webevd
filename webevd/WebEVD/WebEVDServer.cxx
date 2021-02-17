@@ -881,7 +881,7 @@ protected:
             double avgadc = 0;
             const int nadc = std::min(gStride, (unsigned int)adcs.size()-tick);
             for(int i = 0; i < nadc; ++i){
-              const int adc = adcs[tick+1] ? int(adcs[tick+1])-dig.GetPedestal() : 0;
+              const int adc = adcs[tick+i] ? int(adcs[tick+i])-dig.GetPedestal() : 0;
               avgadc += double(adc)/nadc;
             }
 

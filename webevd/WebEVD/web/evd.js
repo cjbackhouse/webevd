@@ -166,7 +166,7 @@ let gmaxtexdim = 0;
 function TextureMaterial(fname, texdim){
     if(fname in gtexmats) return gtexmats[fname].mat;
 
-    // Make the material a transparent solid colour until the texture loads
+    // Make the material a transparent solid color until the texture loads
     let mat = new THREE.MeshBasicMaterial( { color: 'white', opacity: .1, side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
     gtexmats[fname] = {mat: mat, texdim: texdim};
 
@@ -726,45 +726,43 @@ spacepoints.then(spacepoints => {
     }
 }); // end then (spacepoints)
 
-// Consistent colouring for each PDG.
+// Consistent coloring for each PDG.
 // Declared outside the function to ensure consistency across the many times
 // add_tracks is run.
-let colour_map = {};
-let colours = ['blue', 'skyblue', 'orange', 'magenta', 'green', 'purple', 'pink', 'red', 'violet', 'yellow']
-let neutral_particles = [-1, 22, 111, 2112, 311]
+let color_map = {};
+let colors = ['blue', 'skyblue', 'orange', 'magenta', 'green', 'purple', 'pink', 'red', 'violet', 'yellow'];
+let neutral_particles = [22, 111, 2112, 311];
 
-function is_neutral(pdg) {
-    if (neutral_particles.includes(pdg))
-        return true;
-    else if (pdg.length >= 10) // Nuclei
-        return true;
+function is_neutral(pdg)
+{
+    if(neutral_particles.includes(pdg)) return true;
+    if(pdg.length >= 10) return true; // nuclei
 
     return false;
 }
 
-function add_tracks(trajs, group, must_be_charged){
-    let i = 0;
+function add_tracks(trajs, group, must_be_charged)
+{
+    let colIdx = 0;
     for(let track of trajs){
         let col = 'white';
         let track_pdg = 'pdg' in track ? track.pdg : -1;
 
-        if (is_neutral(track_pdg) && must_be_charged)
-            continue;
+        if(is_neutral(track_pdg) && must_be_charged) continue;
 
-        if (track_pdg in colour_map)
-            col = colour_map[track_pdg];
-        else if (track_pdg != -1){
-            if (is_neutral(track_pdg))
-                col = 'grey';
-            else
-                col = colours[i % colours.length];
-
-            colour_map[track_pdg] = col;
-        } else {
-            col = colours[i % colours.length];
+        if(track_pdg in color_map){
+            col = color_map[track_pdg];
         }
+        else{
+            if(is_neutral(track_pdg))
+                col = 'grey';
+            else{
+                col = colors[colIdx % colors.length];
+                colIdx += 1;
+            }
 
-        i += 1;
+            color_map[track_pdg] = col;
+        }
 
         let trkgeom = new THREE.BufferGeometry();
         trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(track.positions.flat()), 3));

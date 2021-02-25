@@ -765,11 +765,9 @@ function add_tracks(trajs, group, must_be_charged){
         }
 
         i += 1;
-        let ptarr = [];
-        for(let pt of track.positions) ptarr = ptarr.concat(pt);
 
         let trkgeom = new THREE.BufferGeometry();
-        trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
+        trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(track.positions.flat()), 3));
 
         let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
         let trkline = new THREE.Line(trkgeom, mat_trk);

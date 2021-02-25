@@ -367,6 +367,11 @@ JSONFormatter& operator<<(JSONFormatter& json, const recob::Vertex& vtx)
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const simb::MCTruth& mct)
 {
+  // Don't show MCTruth for cosmic rays, which can be extremely
+  // lengthy. Ideally we should exclude them from the list entirely, but this
+  // requires less change to the structure of the code.
+  if(mct.Origin() == simb::kCosmicRay) return json << "\"\"";
+
   return json << "\"" << MCTruthShortText(mct) << "\"";
 }
 

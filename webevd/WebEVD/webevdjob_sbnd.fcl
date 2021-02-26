@@ -19,6 +19,9 @@ services:
 services.BackTrackerService: @erase
 services.PhotonBackTrackerService: @erase
 
+# Convert the above settings to 3-drift
+#include "3drift_services_sbnd.fcl"
+
 physics:
 {
   analyzers:

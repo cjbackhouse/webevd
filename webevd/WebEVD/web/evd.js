@@ -217,8 +217,10 @@ AddDropdownToggle('truth_dropdown', truth, 'All', true);
 AddDropdownToggle('truth_dropdown', chargedTruth, 'Charged', false);
 AddDropdownToggle('truth_dropdown', document.getElementById('mctruth'), 'Text', false);
 
-let uperp = null;
-let vperp = null;
+let uvperp = null;
+let vuperp = null;
+let anyu = false;
+let anyv = false;
 let anyy = false;
 let anyz = false;
 
@@ -330,20 +332,24 @@ planes.then(planes => {
             apas.add(line);
         }
 
-        // Learn something for the camera
-        if(plane.view == kU){
-            uperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
-        }
-        if(plane.view == kV){
-            // This ordering happens to give us beam left-to-right
-            vperp = ArrToVec(plane.normal).cross(ArrToVec(plane.across));
-        }
-        if(plane.view == kY) anyy = true;
-        if(plane.view == kZ) anyz = true;
-
         // Projected plane views (where the digits and wires live)
 
         let pg = new PlaneGeom(plane);
+
+
+        // Learn something for the camera
+        if(pg.uvlayer == kUV){
+            uvperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
+        }
+        if(pg.uvlayer == kVU){
+            // This ordering happens to give us beam left-to-right
+            vuperp = ArrToVec(plane.normal).cross(ArrToVec(plane.across));
+        }
+        if(plane.view == kU) anyu = true;
+        if(plane.view == kV) anyv = true;
+        if(plane.view == kY) anyy = true;
+        if(plane.view == kZ) anyz = true;
+
 
         let vtxs = [];
         push_square_vtxs(pg.c, pg.a, pg.d, vtxs);
@@ -355,11 +361,6 @@ planes.then(planes => {
         let line = new THREE.LineSegments( edges, mat_lin );
 
         outlines.add(line);
-
-        let uvlayer = plane.view;
-        if(plane.view == kU || plane.view == kV){
-            if(pg.a.z/pg.a.y > 0) uvlayer = kUV; else uvlayer = kVU;
-        }
 
         line.layers.set(plane.view);
         line.layers.enable(pg.uvlayer);
@@ -396,13 +397,17 @@ planes.then(planes => {
 
     // Disable any buttons that are irrelevant for the current geometry
 
-    if(uperp == undefined) document.getElementById('uview_button').style.display = 'none';
-    if(vperp == undefined) document.getElementById('vview_button').style.display = 'none';
+    console.log(anyu, anyv, anyy, anyz, uvperp, vuperp);
 
-    if(uperp == undefined && vperp == undefined){
+    if(!anyu) document.getElementById('uview_button').style.display = 'none';
+    if(!anyv) document.getElementById('vview_button').style.display = 'none';
+
+    if(uvperp == undefined){
         document.getElementById('uvview_button').style.display = 'none';
-        document.getElementById('vuview_button').style.display = 'none';
         document.getElementById('uvview2d_button').style.display = 'none';
+    }
+    if(vuperp == undefined){
+        document.getElementById('vuview_button').style.display = 'none';
         document.getElementById('vuview2d_button').style.display = 'none';
     }
 
@@ -1247,13 +1252,13 @@ window.YView2D = function(){
 
 window.UVView2D = function(){
     camera.layers.enable(kUV);
-    AnimateTo(vperp, new THREE.Vector3(1, 0, 0), 1e-6, UVView);
+    AnimateTo(uvperp, new THREE.Vector3(1, 0, 0), 1e-6, UVView);
     TwoDControls();
 }
 
 window.VUView2D = function(){
     camera.layers.enable(kVU);
-    AnimateTo(uperp, new THREE.Vector3(1, 0, 0), 1e-6, VUView);
+    AnimateTo(vuperp, new THREE.Vector3(1, 0, 0), 1e-6, VUView);
     TwoDControls();
 }
 

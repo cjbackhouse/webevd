@@ -220,6 +220,7 @@ AddDropdownToggle('truth_dropdown', document.getElementById('mctruth'), 'Text', 
 let uperp = null;
 let vperp = null;
 let anyy = false;
+let anyz = false;
 
 function push_square_vtxs(c, du, dv, vtxs){
     let p1 = c.clone();
@@ -296,8 +297,8 @@ class PlaneGeom{
         this.c.set(plane.tick_origin, this.c.y, this.c.z);
         this.c.add(this.d); // center in the drift direction too
 
-        this.uvlayer = kZ;
-        if(plane.view != kZ){
+        this.uvlayer = plane.view;
+        if(plane.view == kU || plane.view == kV){
             if(this.a.z/this.a.y > 0) this.uvlayer = kUV; else this.uvlayer = kVU;
         }
     }
@@ -311,12 +312,12 @@ planes.then(planes => {
     for(let key in planes){
         let plane = planes[key];
 
-        if(plane.view == kZ){ // collection only for physical APAs
+        { // physical APAs
             let vtxs = [];
             let c = ArrToVec(plane.center);
-            let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
-            let d = ArrToVec(plane.wiredir).multiplyScalar(plane.depth/2.);
-            push_square_vtxs(c, a, d, vtxs);
+            let w = ArrToVec(plane.widthdir).multiplyScalar(plane.width/2.);
+            let d = ArrToVec(plane.depthdir).multiplyScalar(plane.depth/2.);
+            push_square_vtxs(c, w, d, vtxs);
 
             let geom = new THREE.BufferGeometry();
             geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
@@ -338,6 +339,9 @@ planes.then(planes => {
             vperp = ArrToVec(plane.normal).cross(ArrToVec(plane.across));
         }
         if(plane.view == kY) anyy = true;
+        if(plane.view == kZ) anyz = true;
+
+        // Projected plane views (where the digits and wires live)
 
         let pg = new PlaneGeom(plane);
 
@@ -362,7 +366,7 @@ planes.then(planes => {
 
 
 
-        if(plane.view == kZ){ // collection
+        if(plane.view != kU && plane.view != kV){ // collection
             let div = document.createElement('div');
             div.className = 'label';
             // Cut off the plane number, we want the name of the whole APA/TPC
@@ -391,9 +395,11 @@ planes.then(planes => {
 
 
     // Disable any buttons that are irrelevant for the current geometry
+
+    if(uperp == undefined) document.getElementById('uview_button').style.display = 'none';
+    if(vperp == undefined) document.getElementById('vview_button').style.display = 'none';
+
     if(uperp == undefined && vperp == undefined){
-        document.getElementById('uview_button').style.display = 'none';
-        document.getElementById('vview_button').style.display = 'none';
         document.getElementById('uvview_button').style.display = 'none';
         document.getElementById('vuview_button').style.display = 'none';
         document.getElementById('uvview2d_button').style.display = 'none';
@@ -404,6 +410,12 @@ planes.then(planes => {
         document.getElementById('yview_button').style.display = 'none';
         document.getElementById('yview2d_button').style.display = 'none';
     }
+
+    if(!anyz){
+        document.getElementById('zview_button').style.display = 'none';
+        document.getElementById('zview2d_button').style.display = 'none';
+    }
+
 }); // end then (planes)
 
 async function handle_digs_or_wires(planes_promise, dws_promise, tgt, dropdown, texprefix){
@@ -1228,7 +1240,7 @@ window.ZView2D = function(){
 window.YView2D = function(){
     camera.layers.enable(kY);
     AnimateTo(new THREE.Vector3(0, 0, -1),
-              new THREE.Vector3(1, 0, 0),
+              new THREE.Vector3(0, 1, 0),
               1e-6, YView);
     TwoDControls();
 }

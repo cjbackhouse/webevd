@@ -324,6 +324,12 @@ bool endswith(const std::string& s, const std::string& suffix)
 }
 
 // ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const TVector3& v)
+{
+  return json << std::vector<double>{v.X(), v.Y(), v.Z()};
+}
+
+// ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const geo::Point_t& pt)
 {
   return json << std::vector<double>{pt.X(), pt.Y(), pt.Z()};
@@ -340,22 +346,22 @@ std::string ToString(const art::InputTag& tag)
 }
 
 // ----------------------------------------------------------------------------
-JSONFormatter& operator<<(JSONFormatter& json, const art::InputTag& t)
+JSONFormatter& operator<<(JSONFormatter& json, const art::InputTag& tag)
 {
-  return json << "\"" << ToString(t) << "\"";
+  return json << ToString(tag);
 }
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetID& id)
 {
-  return json << "\"" << std::string(id) << "\"";
+  return json << std::string(id);
 }
 
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const geo::PlaneID& plane)
 {
-  return json << "\"" << std::string(plane) << "\"";
+  return json << std::string(plane);
 }
 
 // ----------------------------------------------------------------------------
@@ -376,7 +382,7 @@ JSONFormatter& operator<<(JSONFormatter& json, const recob::Vertex& vtx)
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const simb::MCTruth& mct)
 {
-  return json << "\"" << MCTruthShortText(mct) << "\"";
+  return json << MCTruthShortText(mct);
 }
 
 // ----------------------------------------------------------------------------

@@ -7,8 +7,6 @@
 #include <string>
 #include <variant>
 
-#include "TVector3.h"
-
 namespace evd
 {
 
@@ -21,9 +19,14 @@ public:
   template<class T> JSONFormatter& operator<<(const T& x)
   {
     static_assert(std::is_arithmetic_v<T> ||
-                  std::is_enum_v<T> ||
-                  std::is_same_v<T, std::string>);
+                  std::is_enum_v<T>);
     fStream << x;
+    return *this;
+  }
+
+  JSONFormatter& operator<<(const std::string& s)
+  {
+    fStream << "\"" << s << "\"";
     return *this;
   }
 
@@ -47,11 +50,8 @@ public:
     return *this;
   }
 
-  JSONFormatter& operator<<(const char* x)
-  {
-    fStream << x;
-    return *this;
-  }
+  // No-one should be trying to write un-formatted strings
+  JSONFormatter& operator<<(const char* x) = delete;
 
   // Reify all pointers
   template<class T> JSONFormatter& operator<<(const T* x)
@@ -63,8 +63,8 @@ public:
   {
     fStream << "[";
     for(const T& x: v){
-      (*this) << x;
-      if(&x != &v.back()) (*this) << ", ";
+      *this << x;
+      if(&x != &v.back()) fStream << ", ";
     }
     fStream << "]";
     return *this;
@@ -76,45 +76,21 @@ public:
     fStream << "{\n";
     unsigned int n = 0;
     for(auto& it: m){
-      (*this) << "  " << it.first << ": " << it.second;
+      fStream << "  ";
+      if constexpr(std::is_same_v<T, int>){
+        // JSON dicts can't be indexed by integer
+        *this << std::to_string(it.first);
+      }
+      else{
+        *this << it.first;
+      }
+      fStream << ": ";
+      *this << it.second;
       ++n;
-      if(n != m.size()) (*this) << ",\n";
+      if(n != m.size()) fStream << ",\n";
     }
     fStream << "\n}";
     return *this;
-  }
-
-  template<class T>
-  JSONFormatter& operator<<(const std::map<std::string, T>& m)
-  {
-    fStream << "{\n";
-    unsigned int n = 0;
-    for(auto& it: m){
-      (*this) << "  \"" << it.first << "\": " << it.second;
-      ++n;
-      if(n != m.size()) (*this) << ",\n";
-    }
-    fStream << "\n}";
-    return *this;
-  }
-
-  template<class T>
-  JSONFormatter& operator<<(const std::map<int, T>& m)
-  {
-    fStream << "{\n";
-    unsigned int n = 0;
-    for(auto& it: m){
-      (*this) << "  \"" << it.first << "\": " << it.second;
-      ++n;
-      if(n != m.size()) (*this) << ",\n";
-    }
-    fStream << "\n}";
-    return *this;
-  }
-
-  JSONFormatter& operator<<(const TVector3& v)
-  {
-    return *this << std::vector<double>{v.X(), v.Y(), v.Z()};
   }
 
 protected:
@@ -133,13 +109,7 @@ public:
                                       const Us&... vals)
     : Dict(vals...)
   {
-    if constexpr (std::is_same_v<U, std::string>){
-      // TODO this is a real hack
-      (*this)[key] = "\""+val+"\"";
-    }
-    else{
-      (*this)[key] = val;
-    }
+    (*this)[key] = val;
   }
 };
 

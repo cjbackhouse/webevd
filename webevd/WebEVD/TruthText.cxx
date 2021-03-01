@@ -105,9 +105,7 @@ namespace evd
   // -------------------------------------------------------------------------
   std::string bar(const std::string& x)
   {
-    // NB we escape the quote marks in the CSS because we know this is going to
-    // be served as CSS and we don't sanitize it there.
-    return "<span style=\\\"text-decoration:overline\\\">"+x+"</span>";
+    return "<span style=\"text-decoration:overline\">"+x+"</span>";
   }
 
   // -------------------------------------------------------------------------

@@ -26,7 +26,7 @@ public:
 
   JSONFormatter& operator<<(const std::string& s)
   {
-    fStream << "\"" << s << "\"";
+    fStream << "\"" << Escape(s) << "\"";
     return *this;
   }
 
@@ -94,6 +94,25 @@ public:
   }
 
 protected:
+  std::string Escape(std::string s)
+  {
+    // These are dumb O(N^2) loops, but there are no sensible functions for
+    // this in the STL, so writing an efficient version would be a big fiddly
+    // loop.
+
+    // escape backslashes to double backslashes
+    while(s.find("\\") != std::string::npos){
+      s.replace(s.find("\\"), 1, "\\\\");
+    }
+
+    // escape quote marks
+    while(s.find("\"") != std::string::npos) {
+      s.replace(s.find("\""), 1, "\\\"");
+    }
+
+    return s;
+  }
+
   std::ostream& fStream;
 };
 

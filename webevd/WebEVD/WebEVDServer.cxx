@@ -330,20 +330,25 @@ JSONFormatter& operator<<(JSONFormatter& json, const geo::Point_t& pt)
 }
 
 // ----------------------------------------------------------------------------
+
+std::string ToString(const art::InputTag& tag)
+{
+  std::string ret = tag.label();
+  if(!tag.instance().empty()) ret += ":"+tag.instance();
+  if(!tag.process().empty()) ret += ":"+tag.process();
+  return ret;
+}
+
+// ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const art::InputTag& t)
 {
-  json << "\"" << t.label();
-  if(!t.instance().empty()) json << ":" << t.instance();
-  if(!t.process().empty()) json << ":" << t.process();
-  json << "\"";
-  return json;
+  return json << "\"" << ToString(t) << "\"";
 }
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetID& id)
 {
-  json << "\"" << std::string(id) << "\"";
-  return json;
+  return json << "\"" << std::string(id) << "\"";
 }
 
 
@@ -440,15 +445,12 @@ JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetGeo& opdet)
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const PNGView& v)
 {
-  bool first = true;
-  json << "{\"blocks\": [\n";
+  std::vector<Dict<int, std::string>> blocks;
+
   for(unsigned int ix = 0; ix < v.blocks.size(); ++ix){
     for(unsigned int iy = 0; iy < v.blocks[ix].size(); ++iy){
       const png_byte* b = v.blocks[ix][iy];
       if(!b) continue;
-
-      if(!first) json << ",\n";
-      first = false;
 
       int dataidx = 0;
       for(unsigned int d = 0; d < v.arena.data.size(); ++d){
@@ -462,45 +464,36 @@ JSONFormatter& operator<<(JSONFormatter& json, const PNGView& v)
       const int texdx = ((b-&v.arena.data[dataidx]->front())/4)%PNGArena::kArenaSize;
       const int texdy = ((b-&v.arena.data[dataidx]->front())/4)/PNGArena::kArenaSize;
 
-      json << Dict<int, std::string>("x", ix*PNGArena::kBlockSize,
-                                     "y", iy*PNGArena::kBlockSize,
-                                     "dx", PNGArena::kBlockSize,
-                                     "dy", PNGArena::kBlockSize,
-                                     "fname", v.arena.name+"_"+std::to_string(dataidx),
-                                     "texdim", PNGArena::kArenaSize,
-                                     "u", texdx,
-                                     "v", texdy,
-                                     "du", PNGArena::kBlockSize,
-                                     "dv", PNGArena::kBlockSize);
+      blocks.emplace_back("x", ix*PNGArena::kBlockSize,
+                          "y", iy*PNGArena::kBlockSize,
+                          "dx", PNGArena::kBlockSize,
+                          "dy", PNGArena::kBlockSize,
+                          "fname", v.arena.name+"_"+std::to_string(dataidx),
+                          "texdim", PNGArena::kArenaSize,
+                          "u", texdx,
+                          "v", texdy,
+                          "du", PNGArena::kBlockSize,
+                          "dv", PNGArena::kBlockSize);
     }
   }
-  json << "\n]}";
-  return json;
+
+  return json << Dict<decltype(blocks)>("blocks", blocks);
 }
 
 // ----------------------------------------------------------------------------
 template<class TProd, class TEvt> void
 SerializeProduct(const TEvt& evt, JSONFormatter& json)
 {
-  json << "{";
+  Dict<const std::vector<TProd>*> dict;
 
-  const std::vector<art::InputTag> tags = evt.template getInputTags<std::vector<TProd>>();
-
-  for(const art::InputTag& tag: tags){
-    json << "  " << tag << ": ";
-
+  for(const art::InputTag& tag: evt.template getInputTags<std::vector<TProd>>()){
     typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
     evt.getByLabel(tag, prods);
 
-    json << *prods;
-
-    if(tag != tags.back()){
-      json << ",";
-    }
-    json << "\n";
+    dict[ToString(tag)] = prods.product();
   }
 
-  json << "}";
+  json << dict;
 }
 
 // ----------------------------------------------------------------------------
@@ -516,7 +509,7 @@ SerializeProductByLabel(const TEvt& evt,
     json << *prods;
   }
   else{
-    json << "[]";
+    json << std::vector<int>();
   }
 }
 

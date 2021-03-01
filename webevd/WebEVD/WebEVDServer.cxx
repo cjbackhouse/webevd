@@ -535,48 +535,32 @@ void SerializeEventID(const ThreadsafeGalleryEvent& evt, JSONFormatter& json)
 }
 
 // ----------------------------------------------------------------------------
-void SerializePlanes(const geo::GeometryCore* geom,
-                     const detinfo::DetectorPropertiesData& detprop,
-                     JSONFormatter& json)
+Dict<Dict<int, double, TVector3>> SerializePlanes(const geo::GeometryCore* geom,
+                                                  const detinfo::DetectorPropertiesData& detprop)
 {
-  bool first = true;
+  Dict<Dict<int, double, TVector3>> ret;
 
-  json << "  \"planes\": {\n";
   for(geo::PlaneID plane: geom->IteratePlaneIDs()){
     const geo::PlaneGeo& planegeo = geom->Plane(plane);
-    const int view = planegeo.View();
-    const unsigned int nwires = planegeo.Nwires();
-    const double pitch = planegeo.WirePitch();
-    const TVector3 c = planegeo.GetCenter();
-
-    const TVector3 d = planegeo.GetIncreasingWireDirection();
-    const TVector3 n = planegeo.GetNormalDirection();
-
-    const TVector3 wiredir = planegeo.GetWireDirection();
-    const double depth = planegeo.Depth(); // really height
 
     const double tick_origin = detprop.ConvertTicksToX(0, plane);
     const double tick_pitch = detprop.ConvertTicksToX(1, plane) - tick_origin;
 
-    const int maxTick = detprop.NumberTimeSamples();
-
-    if(!first) json << ",\n";
-    first = false;
-
-    json << "    " << plane << ": ";
-    json << Dict<int, unsigned int, double, TVector3>("view", view,
-                                                      "nwires", nwires,
-                                                      "pitch", pitch,
-                                                      "nticks", maxTick,
-                                                      "tick_origin", tick_origin,
-                                                      "tick_pitch", tick_pitch,
-                                                      "center", c,
-                                                      "across", d,
-                                                      "wiredir", wiredir,
-                                                      "depth", depth,
-                                                      "normal", n);
+    ret[std::string(plane)] = Dict<int, double, TVector3>
+      ("view", int(planegeo.View()),
+       "nwires", int(planegeo.Nwires()),
+       "pitch", planegeo.WirePitch(),
+       "nticks", int(detprop.NumberTimeSamples()),
+       "tick_origin", tick_origin,
+       "tick_pitch", tick_pitch,
+       "center", planegeo.GetCenter(),
+       "across", planegeo.GetIncreasingWireDirection(),
+       "wiredir", planegeo.GetWireDirection(),
+       "depth", planegeo.Depth(),
+       "normal", planegeo.GetNormalDirection());
   }
-  json << "\n  }";
+
+  return ret;
 }
 
 // ----------------------------------------------------------------------------
@@ -584,24 +568,19 @@ void SerializeGeometry(const geo::GeometryCore* geom,
                        const detinfo::DetectorPropertiesData& detprop,
                        JSONFormatter& json)
 {
-  json << "{\n";
-  SerializePlanes(geom, detprop, json);
-  json << ",\n\n";
+  const auto planes = SerializePlanes(geom, detprop);
 
-  json << "  \"cryos\": [\n";
-  for(unsigned int i = 0; i < geom->Ncryostats(); ++i){
-    json << "    " << geom->Cryostat(i);
-    if(i != geom->Ncryostats()-1) json << ",\n"; else json << "\n";
-  }
-  json << "  ],\n\n";
+  std::vector<const geo::CryostatGeo*> cryos;
+  for(const geo::CryostatGeo& cryo: geom->IterateCryostats()) cryos.push_back(&cryo);
 
-  json << "  \"opdets\": [\n";
-  for(unsigned int i = 0; i < geom->NOpDets(); ++i){
-    json << "    " << geom->OpDetGeoFromOpDet(i);
-    if(i != geom->NOpDets()-1) json << ",\n"; else json << "\n";
-  }
-  json << "  ]\n";
-  json << "}\n";
+  std::vector<const geo::OpDetGeo*> opdets;
+  for(unsigned int i = 0; i < geom->NOpDets(); ++i) opdets.push_back(&geom->OpDetGeoFromOpDet(i)); // IterateOpDets() doesn't seem to exist
+
+  json << Dict<decltype(&planes),
+               std::vector<const geo::CryostatGeo*>,
+               std::vector<const geo::OpDetGeo*>>("planes", &planes,
+                                                  "cryos", cryos,
+                                                  "opdets", opdets);
 }
 
 // ----------------------------------------------------------------------------

@@ -53,6 +53,12 @@ public:
     return *this;
   }
 
+  // Reify all pointers
+  template<class T> JSONFormatter& operator<<(const T* x)
+  {
+    return *this << *x;
+  }
+
   template<class T> JSONFormatter& operator<<(const std::vector<T>& v)
   {
     fStream << "[";
@@ -120,6 +126,8 @@ protected:
 template<class... Ts> class Dict: public std::map<std::string, std::variant<Ts...>>
 {
 public:
+  Dict(){}
+
   // Convenience constructor, alternate keys and values
   template<class U, class... Us> Dict(const std::string& key, const U& val,
                                       const Us&... vals)
@@ -133,9 +141,6 @@ public:
       (*this)[key] = val;
     }
   }
-
-protected:
-  Dict(){}
 };
 
 template<class... Ts> JSONFormatter& operator<<(JSONFormatter& json, const std::variant<Ts...>& x)

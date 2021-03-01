@@ -324,6 +324,12 @@ bool endswith(const std::string& s, const std::string& suffix)
 }
 
 // ----------------------------------------------------------------------------
+JSONFormatter& operator<<(JSONFormatter& json, const geo::Point_t& pt)
+{
+  return json << std::vector<double>{pt.X(), pt.Y(), pt.Z()};
+}
+
+// ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const art::InputTag& t)
 {
   json << "\"" << t.label();
@@ -350,18 +356,16 @@ JSONFormatter& operator<<(JSONFormatter& json, const geo::PlaneID& plane)
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const recob::Hit& hit)
 {
-  return json << "{\"wire\": " << geo::WireID(hit.WireID()).Wire
-              << ", \"tick\": " << hit.PeakTime()
-              << ", \"rms\": " << hit.RMS()
-              << ", \"peakamp\": " << hit.PeakAmplitude() << "}";
+  return json << Dict<unsigned int, double>("wire", geo::WireID(hit.WireID()).Wire,
+                                            "tick", hit.PeakTime(),
+                                            "rms", hit.RMS(),
+                                            "peakamp", hit.PeakAmplitude());
 }
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const recob::Vertex& vtx)
 {
-  return json << TVector3(vtx.position().x(),
-                          vtx.position().y(),
-                          vtx.position().z());
+  return json << vtx.position();
 }
 
 // ----------------------------------------------------------------------------
@@ -373,84 +377,77 @@ JSONFormatter& operator<<(JSONFormatter& json, const simb::MCTruth& mct)
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const recob::SpacePoint& sp)
 {
-  return json << TVector3(sp.XYZ());
+  return json << sp.position();
 }
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const recob::Track& track)
 {
-  std::vector<TVector3> pts;
+  std::vector<geo::Point_t> pts;
 
   const recob::TrackTrajectory& traj = track.Trajectory();
   for(unsigned int j = traj.FirstValidPoint(); j <= traj.LastValidPoint(); ++j){
-    if(!traj.HasValidPoint(j)) continue;
-    const geo::Point_t pt = traj.LocationAtPoint(j);
-    pts.emplace_back(pt.X(), pt.Y(), pt.Z());
+    if(traj.HasValidPoint(j)) pts.push_back(traj.LocationAtPoint(j));
   }
 
-  return json << "{ \"positions\": " << pts << " }";
+  return json << Dict<std::vector<geo::Point_t>>("positions", pts);
 }
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const simb::MCParticle& part)
 {
   const int apdg = abs(part.PdgCode());
-  if(apdg == 12 || apdg == 14 || apdg == 16) return json << "{ \"pdg\": " << apdg << ", \"positions\": [] }"; // decay neutrinos
   std::vector<TVector3> pts;
-  for(unsigned int j = 0; j < part.NumberTrajectoryPoints(); ++j){
-    pts.emplace_back(part.Vx(j), part.Vy(j), part.Vz(j));
+  if(apdg != 12 && apdg != 14 && apdg != 16){ // skip decay neutrinos
+    for(unsigned int j = 0; j < part.NumberTrajectoryPoints(); ++j){
+      pts.emplace_back(part.Vx(j), part.Vy(j), part.Vz(j));
+    }
   }
 
-  return json << "{ \"pdg\": " << apdg << ", \"positions\": " << pts << " }";
+  return json << Dict<int, std::vector<TVector3>>("pdg", apdg,
+                                                  "positions", pts);
 }
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const recob::OpFlash& flash)
 {
-  json << std::map<std::string, double>{
-    {"tcenter", flash.Time()},
-    {"twidth", flash.TimeWidth()},
-    {"ycenter", flash.YCenter()},
-    {"ywidth", flash.YWidth()},
-    {"zcenter", flash.ZCenter()},
-    {"zwidth", flash.ZWidth()},
-    {"totpe", flash.TotalPE()}
-  };
-
-  return json;
+  return json << Dict<double>("tcenter", flash.Time(),
+                              "twidth", flash.TimeWidth(),
+                              "ycenter", flash.YCenter(),
+                              "ywidth", flash.YWidth(),
+                              "zcenter", flash.ZCenter(),
+                              "zwidth", flash.ZWidth(),
+                              "totpe", flash.TotalPE());
 }
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const geo::CryostatGeo& cryo)
 {
-  const TVector3 r0(cryo.MinX(), cryo.MinY(), cryo.MinZ());
-  const TVector3 r1(cryo.MaxX(), cryo.MaxY(), cryo.MaxZ());
-  return json << "{ \"min\": "  << r0 << ", \"max\": " << r1 << " }";
+  return json << Dict<geo::Point_t>("min", cryo.BoundingBox().Min(),
+                                    "max", cryo.BoundingBox().Max());
 }
 
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const geo::OpDetGeo& opdet)
 {
-  return json << "{ \"name\": " << opdet.ID() << ", "
-              << "\"center\": " << TVector3(opdet.GetCenter().X(),
-                                            opdet.GetCenter().Y(),
-                                            opdet.GetCenter().Z()) << ", "
-              << "\"length\": " << opdet.Length() << ", "
-              << "\"width\": " << opdet.Width() << ", "
-              << "\"height\": " << opdet.Height() << " }";
+  return json << Dict<geo::OpDetID, geo::Point_t, double>("name", opdet.ID(),
+                                                          "center", opdet.GetCenter(),
+                                                          "length", opdet.Length(),
+                                                          "width", opdet.Width(),
+                                                          "height", opdet.Height());
 }
 
 // ----------------------------------------------------------------------------
-JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
+JSONFormatter& operator<<(JSONFormatter& json, const PNGView& v)
 {
   bool first = true;
-  os << "{\"blocks\": [\n";
+  json << "{\"blocks\": [\n";
   for(unsigned int ix = 0; ix < v.blocks.size(); ++ix){
     for(unsigned int iy = 0; iy < v.blocks[ix].size(); ++iy){
       const png_byte* b = v.blocks[ix][iy];
       if(!b) continue;
 
-      if(!first) os << ",\n";
+      if(!first) json << ",\n";
       first = false;
 
       int dataidx = 0;
@@ -465,22 +462,20 @@ JSONFormatter& operator<<(JSONFormatter& os, const PNGView& v)
       const int texdx = ((b-&v.arena.data[dataidx]->front())/4)%PNGArena::kArenaSize;
       const int texdy = ((b-&v.arena.data[dataidx]->front())/4)/PNGArena::kArenaSize;
 
-      os << "{"
-         << "\"x\": " << ix*PNGArena::kBlockSize << ", "
-         << "\"y\": " << iy*PNGArena::kBlockSize << ", "
-         << "\"dx\": " << PNGArena::kBlockSize << ", "
-         << "\"dy\": " << PNGArena::kBlockSize << ", "
-         << "\"fname\": \"" << v.arena.name << "_" << dataidx << "\", "
-         << "\"texdim\": " << PNGArena::kArenaSize << ", "
-         << "\"u\": " << texdx << ", "
-         << "\"v\": " << texdy << ", "
-         << "\"du\": " << PNGArena::kBlockSize << ", "
-         << "\"dv\": " << PNGArena::kBlockSize
-         << "}";
+      json << Dict<int, std::string>("x", ix*PNGArena::kBlockSize,
+                                     "y", iy*PNGArena::kBlockSize,
+                                     "dx", PNGArena::kBlockSize,
+                                     "dy", PNGArena::kBlockSize,
+                                     "fname", v.arena.name+"_"+std::to_string(dataidx),
+                                     "texdim", PNGArena::kArenaSize,
+                                     "u", texdx,
+                                     "v", texdy,
+                                     "du", PNGArena::kBlockSize,
+                                     "dv", PNGArena::kBlockSize);
     }
   }
-  os << "\n]}";
-  return os;
+  json << "\n]}";
+  return json;
 }
 
 // ----------------------------------------------------------------------------
@@ -528,8 +523,9 @@ SerializeProductByLabel(const TEvt& evt,
 // ----------------------------------------------------------------------------
 template<class T> void SerializeEventID(const T& evt, JSONFormatter& json)
 {
-  typedef std::map<std::string, int> EIdMap;
-  json << EIdMap({{"run", evt.run()}, {"subrun", evt.subRun()}, {"evt", evt.event()}});
+  json << Dict<int>("run", evt.run(),
+                    "subrun", evt.subRun(),
+                    "evt", evt.event());
 }
 
 // ----------------------------------------------------------------------------
@@ -567,18 +563,18 @@ void SerializePlanes(const geo::GeometryCore* geom,
     if(!first) json << ",\n";
     first = false;
 
-    json << "    " << plane << ": {"
-         << "\"view\": " << view << ", "
-         << "\"nwires\": " << nwires << ", "
-         << "\"pitch\": " << pitch << ", "
-         << "\"nticks\": " << maxTick << ", "
-         << "\"tick_origin\": " << tick_origin << ", "
-         << "\"tick_pitch\": " << tick_pitch << ", "
-         << "\"center\": " << c << ", "
-         << "\"across\": " << d << ", "
-         << "\"wiredir\": " << wiredir << ", "
-         << "\"depth\": " << depth << ", "
-         << "\"normal\": " << n << "}";
+    json << "    " << plane << ": ";
+    json << Dict<int, unsigned int, double, TVector3>("view", view,
+                                                      "nwires", nwires,
+                                                      "pitch", pitch,
+                                                      "nticks", maxTick,
+                                                      "tick_origin", tick_origin,
+                                                      "tick_pitch", tick_pitch,
+                                                      "center", c,
+                                                      "across", d,
+                                                      "wiredir", wiredir,
+                                                      "depth", depth,
+                                                      "normal", n);
   }
   json << "\n  }";
 }

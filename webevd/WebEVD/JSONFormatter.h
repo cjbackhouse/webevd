@@ -5,6 +5,7 @@
 #include <ostream>
 #include <map>
 #include <string>
+#include <variant>
 
 #include "TVector3.h"
 
@@ -107,16 +108,49 @@ public:
 
   JSONFormatter& operator<<(const TVector3& v)
   {
-    *this << "["
-          << v.X() << ", "
-          << v.Y() << ", "
-          << v.Z() << "]";
-    return *this;
+    return *this << std::vector<double>{v.X(), v.Y(), v.Z()};
   }
 
 protected:
   std::ostream& fStream;
 };
+
+// A model of the JSON dictionary type. A map from strings to any (specified)
+// type.
+template<class... Ts> class Dict: public std::map<std::string, std::variant<Ts...>>
+{
+public:
+  // Convenience constructor, alternate keys and values
+  template<class U, class... Us> Dict(const std::string& key, const U& val,
+                                      const Us&... vals)
+    : Dict(vals...)
+  {
+    if constexpr (std::is_same_v<U, std::string>){
+      // TODO this is a real hack
+      (*this)[key] = "\""+val+"\"";
+    }
+    else{
+      (*this)[key] = val;
+    }
+  }
+
+protected:
+  Dict(){}
+};
+
+template<class... Ts> JSONFormatter& operator<<(JSONFormatter& json, const std::variant<Ts...>& x)
+{
+  // Convert the variant to whatever type it actually has and pass it to json
+  std::visit([&](auto&& arg){json << arg;}, x);
+  return json;
+}
+
+
+template<class... Ts> JSONFormatter& operator<<(JSONFormatter& json, const Dict<Ts...>& dict)
+{
+  // Print a Dict as if it was the map it inherits from
+  return json << std::map<std::string, std::variant<Ts...>>(dict);
+}
 
 } // namespace
 

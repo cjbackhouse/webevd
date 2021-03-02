@@ -166,7 +166,7 @@ let gmaxtexdim = 0;
 function TextureMaterial(fname, texdim){
     if(fname in gtexmats) return gtexmats[fname].mat;
 
-    // Make the material a transparent solid colour until the texture loads
+    // Make the material a transparent solid color until the texture loads
     let mat = new THREE.MeshBasicMaterial( { color: 'white', opacity: .1, side: THREE.DoubleSide, transparent: true, alphaTest: 1/512.} );
     gtexmats[fname] = {mat: mat, texdim: texdim};
 
@@ -217,9 +217,12 @@ AddDropdownToggle('truth_dropdown', truth, 'All', true);
 AddDropdownToggle('truth_dropdown', chargedTruth, 'Charged', false);
 AddDropdownToggle('truth_dropdown', document.getElementById('mctruth'), 'Text', false);
 
-let uperp = null;
-let vperp = null;
+let uvperp = null;
+let vuperp = null;
+let anyu = false;
+let anyv = false;
 let anyy = false;
+let anyz = false;
 
 function push_square_vtxs(c, du, dv, vtxs){
     let p1 = c.clone();
@@ -296,8 +299,8 @@ class PlaneGeom{
         this.c.set(plane.tick_origin, this.c.y, this.c.z);
         this.c.add(this.d); // center in the drift direction too
 
-        this.uvlayer = kZ;
-        if(plane.view != kZ){
+        this.uvlayer = plane.view;
+        if(plane.view == kU || plane.view == kV){
             if(this.a.z/this.a.y > 0) this.uvlayer = kUV; else this.uvlayer = kVU;
         }
     }
@@ -311,12 +314,12 @@ planes.then(planes => {
     for(let key in planes){
         let plane = planes[key];
 
-        if(plane.view == kZ){ // collection only for physical APAs
+        { // physical APAs
             let vtxs = [];
             let c = ArrToVec(plane.center);
-            let a = ArrToVec(plane.across).multiplyScalar(plane.nwires*plane.pitch/2.);
-            let d = ArrToVec(plane.wiredir).multiplyScalar(plane.depth/2.);
-            push_square_vtxs(c, a, d, vtxs);
+            let w = ArrToVec(plane.widthdir).multiplyScalar(plane.width/2.);
+            let d = ArrToVec(plane.depthdir).multiplyScalar(plane.depth/2.);
+            push_square_vtxs(c, w, d, vtxs);
 
             let geom = new THREE.BufferGeometry();
             geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vtxs), 3));
@@ -329,17 +332,24 @@ planes.then(planes => {
             apas.add(line);
         }
 
-        // Learn something for the camera
-        if(plane.view == kU){
-            uperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
-        }
-        if(plane.view == kV){
-            // This ordering happens to give us beam left-to-right
-            vperp = ArrToVec(plane.normal).cross(ArrToVec(plane.across));
-        }
-        if(plane.view == kY) anyy = true;
+        // Projected plane views (where the digits and wires live)
 
         let pg = new PlaneGeom(plane);
+
+
+        // Learn something for the camera
+        if(pg.uvlayer == kUV){
+            uvperp = ArrToVec(plane.across).cross(ArrToVec(plane.normal));
+        }
+        if(pg.uvlayer == kVU){
+            // This ordering happens to give us beam left-to-right
+            vuperp = ArrToVec(plane.normal).cross(ArrToVec(plane.across));
+        }
+        if(plane.view == kU) anyu = true;
+        if(plane.view == kV) anyv = true;
+        if(plane.view == kY) anyy = true;
+        if(plane.view == kZ) anyz = true;
+
 
         let vtxs = [];
         push_square_vtxs(pg.c, pg.a, pg.d, vtxs);
@@ -352,17 +362,12 @@ planes.then(planes => {
 
         outlines.add(line);
 
-        let uvlayer = plane.view;
-        if(plane.view == kU || plane.view == kV){
-            if(pg.a.z/pg.a.y > 0) uvlayer = kUV; else uvlayer = kVU;
-        }
-
         line.layers.set(plane.view);
         line.layers.enable(pg.uvlayer);
 
 
 
-        if(plane.view == kZ){ // collection
+        if(plane.view != kU && plane.view != kV){ // collection
             let div = document.createElement('div');
             div.className = 'label';
             // Cut off the plane number, we want the name of the whole APA/TPC
@@ -391,12 +396,18 @@ planes.then(planes => {
 
 
     // Disable any buttons that are irrelevant for the current geometry
-    if(uperp == undefined && vperp == undefined){
-        document.getElementById('uview_button').style.display = 'none';
-        document.getElementById('vview_button').style.display = 'none';
+
+    console.log(anyu, anyv, anyy, anyz, uvperp, vuperp);
+
+    if(!anyu) document.getElementById('uview_button').style.display = 'none';
+    if(!anyv) document.getElementById('vview_button').style.display = 'none';
+
+    if(uvperp == undefined){
         document.getElementById('uvview_button').style.display = 'none';
-        document.getElementById('vuview_button').style.display = 'none';
         document.getElementById('uvview2d_button').style.display = 'none';
+    }
+    if(vuperp == undefined){
+        document.getElementById('vuview_button').style.display = 'none';
         document.getElementById('vuview2d_button').style.display = 'none';
     }
 
@@ -404,6 +415,12 @@ planes.then(planes => {
         document.getElementById('yview_button').style.display = 'none';
         document.getElementById('yview2d_button').style.display = 'none';
     }
+
+    if(!anyz){
+        document.getElementById('zview_button').style.display = 'none';
+        document.getElementById('zview2d_button').style.display = 'none';
+    }
+
 }); // end then (planes)
 
 async function handle_digs_or_wires(planes_promise, dws_promise, tgt, dropdown, texprefix){
@@ -726,50 +743,46 @@ spacepoints.then(spacepoints => {
     }
 }); // end then (spacepoints)
 
-// Consistent colouring for each PDG.
+// Consistent coloring for each PDG.
 // Declared outside the function to ensure consistency across the many times
 // add_tracks is run.
-let colour_map = {};
-let colours = ['blue', 'skyblue', 'orange', 'magenta', 'green', 'purple', 'pink', 'red', 'violet', 'yellow']
-let neutral_particles = [-1, 22, 111, 2112, 311]
+let color_map = {};
+let colors = ['blue', 'skyblue', 'orange', 'magenta', 'green', 'purple', 'pink', 'red', 'violet', 'yellow'];
+let neutral_particles = [22, 111, 2112, 311];
 
-function is_neutral(pdg) {
-    if (neutral_particles.includes(pdg))
-        return true;
-    else if (pdg.length >= 10) // Nuclei
-        return true;
+function is_neutral(pdg)
+{
+    if(neutral_particles.includes(pdg)) return true;
+    if(pdg.length >= 10) return true; // nuclei
 
     return false;
 }
 
-function add_tracks(trajs, group, must_be_charged){
-    let i = 0;
+function add_tracks(trajs, group, must_be_charged)
+{
+    let colIdx = 0;
     for(let track of trajs){
         let col = 'white';
         let track_pdg = 'pdg' in track ? track.pdg : -1;
 
-        if (is_neutral(track_pdg) && must_be_charged)
-            continue;
+        if(is_neutral(track_pdg) && must_be_charged) continue;
 
-        if (track_pdg in colour_map)
-            col = colour_map[track_pdg];
-        else if (track_pdg != -1){
-            if (is_neutral(track_pdg))
+        if(track_pdg in color_map){
+            col = color_map[track_pdg];
+        }
+        else{
+            if(is_neutral(track_pdg))
                 col = 'grey';
-            else
-                col = colours[i % colours.length];
+            else{
+                col = colors[colIdx % colors.length];
+                colIdx += 1;
+            }
 
-            colour_map[track_pdg] = col;
-        } else {
-            col = colours[i % colours.length];
+            color_map[track_pdg] = col;
         }
 
-        i += 1;
-        let ptarr = [];
-        for(let pt of track.positions) ptarr = ptarr.concat(pt);
-
         let trkgeom = new THREE.BufferGeometry();
-        trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ptarr), 3));
+        trkgeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(track.positions.flat()), 3));
 
         let mat_trk = new THREE.LineBasicMaterial({color: col, linewidth: 2});
         let trkline = new THREE.Line(trkgeom, mat_trk);
@@ -1232,20 +1245,20 @@ window.ZView2D = function(){
 window.YView2D = function(){
     camera.layers.enable(kY);
     AnimateTo(new THREE.Vector3(0, 0, -1),
-              new THREE.Vector3(1, 0, 0),
+              new THREE.Vector3(0, 1, 0),
               1e-6, YView);
     TwoDControls();
 }
 
 window.UVView2D = function(){
     camera.layers.enable(kUV);
-    AnimateTo(vperp, new THREE.Vector3(1, 0, 0), 1e-6, UVView);
+    AnimateTo(uvperp, new THREE.Vector3(1, 0, 0), 1e-6, UVView);
     TwoDControls();
 }
 
 window.VUView2D = function(){
     camera.layers.enable(kVU);
-    AnimateTo(uperp, new THREE.Vector3(1, 0, 0), 1e-6, VUView);
+    AnimateTo(vuperp, new THREE.Vector3(1, 0, 0), 1e-6, VUView);
     TwoDControls();
 }
 

@@ -382,6 +382,11 @@ JSONFormatter& operator<<(JSONFormatter& json, const recob::Vertex& vtx)
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const simb::MCTruth& mct)
 {
+  // Don't show MCTruth for cosmic rays, which can be extremely
+  // lengthy. Ideally we should exclude them from the list entirely, but this
+  // requires less change to the structure of the code.
+  if(mct.Origin() == simb::kCosmicRay) return json << std::string();
+
   return json << MCTruthShortText(mct);
 }
 
@@ -556,6 +561,9 @@ Dict<Dict<int, double, TVector3>> SerializePlanes(const geo::GeometryCore* geom,
        "across", planegeo.GetIncreasingWireDirection(),
        "wiredir", planegeo.GetWireDirection(),
        "depth", planegeo.Depth(),
+       "width", planegeo.Width(),
+       "depthdir", planegeo.DepthDir(),
+       "widthdir", planegeo.WidthDir(),
        "normal", planegeo.GetNormalDirection());
   }
 

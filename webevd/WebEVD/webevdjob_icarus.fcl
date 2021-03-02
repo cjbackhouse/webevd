@@ -1,0 +1,30 @@
+#include "services_common_icarus.fcl"
+
+#include "WebEVD.fcl"
+
+process_name: WebEVD
+
+source:
+{
+  module_type: RootInput
+}
+
+services:
+{
+  @table::icarus_common_services
+  InputSeeker: {}
+}
+
+# Faster
+services.BackTrackerService: @erase
+services.PhotonBackTrackerService: @erase
+
+physics:
+{
+  analyzers:
+  {
+    evd: @local::standard_webevd
+  }
+
+  evd_path: [ evd ]
+}

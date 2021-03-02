@@ -367,6 +367,11 @@ JSONFormatter& operator<<(JSONFormatter& json, const recob::Vertex& vtx)
 // ----------------------------------------------------------------------------
 JSONFormatter& operator<<(JSONFormatter& json, const simb::MCTruth& mct)
 {
+  // Don't show MCTruth for cosmic rays, which can be extremely
+  // lengthy. Ideally we should exclude them from the list entirely, but this
+  // requires less change to the structure of the code.
+  if(mct.Origin() == simb::kCosmicRay) return json << "\"\"";
+
   return json << "\"" << MCTruthShortText(mct) << "\"";
 }
 
@@ -555,9 +560,12 @@ void SerializePlanes(const geo::GeometryCore* geom,
 
     const TVector3 d = planegeo.GetIncreasingWireDirection();
     const TVector3 n = planegeo.GetNormalDirection();
-
     const TVector3 wiredir = planegeo.GetWireDirection();
-    const double depth = planegeo.Depth(); // really height
+
+    const double depth = planegeo.Depth();
+    const double width = planegeo.Width();
+    const TVector3 depthdir = planegeo.DepthDir();
+    const TVector3 widthdir = planegeo.WidthDir();
 
     const double tick_origin = detprop.ConvertTicksToX(0, plane);
     const double tick_pitch = detprop.ConvertTicksToX(1, plane) - tick_origin;
@@ -578,6 +586,9 @@ void SerializePlanes(const geo::GeometryCore* geom,
          << "\"across\": " << d << ", "
          << "\"wiredir\": " << wiredir << ", "
          << "\"depth\": " << depth << ", "
+         << "\"width\": " << width << ", "
+         << "\"depthdir\": " << depthdir << ", "
+         << "\"widthdir\": " << widthdir << ", "
          << "\"normal\": " << n << "}";
   }
   json << "\n  }";

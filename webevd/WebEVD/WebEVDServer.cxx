@@ -500,10 +500,8 @@ SerializeProduct(const TEvt& evt, JSONFormatter& json)
     json << "  " << tag << ": ";
 
     typename TEvt::template HandleT<std::vector<TProd>> prods; // deduce handle type
-    evt.getByLabel(tag, prods);
-
-    // This can happen in case of dropped prroducts
-    if(!prods.isValid()) continue;
+    // This can fail in the case of dropped products
+    if(!evt.getByLabel(tag, prods)) continue;
 
     json << *prods;
 
@@ -630,10 +628,8 @@ SerializeHits(const T& evt, const geo::GeometryCore* geom, JSONFormatter& json)
 
   for(art::InputTag tag: evt.template getInputTags<std::vector<recob::Hit>>()){
     typename T::template HandleT<std::vector<recob::Hit>> hits; // deduce handle type
-    evt.getByLabel(tag, hits);
-
-    // This can happen in case of dropped prroducts
-    if(!hits.isValid()) continue;
+    // This can fail in the case of dropped products
+    if(!evt.getByLabel(tag, hits)) continue;
 
     for(const recob::Hit& hit: *hits){
       // Would possibly be right for disambiguated hits?
@@ -697,10 +693,8 @@ template<class T> void SerializeDigitTraces(const T& evt,
 
   for(art::InputTag tag: evt.template getInputTags<std::vector<raw::RawDigit>>()){
     typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
-    evt.getByLabel(tag, digs);
-
-    // This can happen in case of dropped prroducts
-    if(!digs.isValid()) continue;
+    // This can fail in the case of dropped products
+    if(!evt.getByLabel(tag, digs)) continue;
 
     for(const raw::RawDigit& dig: *digs){
       for(geo::WireID wire: geom->ChannelToWire(dig.Channel())){
@@ -727,10 +721,8 @@ template<class T> void SerializeWireTraces(const T& evt,
 
   for(art::InputTag tag: evt.template getInputTags<std::vector<recob::Wire>>()){
     typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
-    evt.getByLabel(tag, wires);
-
-    // This can happen in case of dropped prroducts
-    if(!wires.isValid()) continue;
+    // This can fail in the case of dropped products
+    if(!evt.getByLabel(tag, wires)) continue;
 
     for(const recob::Wire& rbwire: *wires){
       // Place all wire traces on the first wire (== channel) they are found on
@@ -890,10 +882,8 @@ protected:
 
     for(art::InputTag tag: fEvt->template getInputTags<std::vector<raw::RawDigit>>()){
       typename T::template HandleT<std::vector<raw::RawDigit>> digs; // deduce handle type
-      fEvt->getByLabel(tag, digs);
-
-      // This can happen in case of dropped prroducts
-      if(!digs.isValid()) continue;
+      // This can fail in the case of dropped products
+      if(!fEvt->getByLabel(tag, digs)) continue;
 
       for(const raw::RawDigit& dig: *digs){
         for(geo::WireID wire: fGeom->ChannelToWire(dig.Channel())){
@@ -974,10 +964,8 @@ protected:
 
     for(art::InputTag tag: fEvt->template getInputTags<std::vector<recob::Wire>>()){
       typename T::template HandleT<std::vector<recob::Wire>> wires; // deduce handle type
-      fEvt->getByLabel(tag, wires);
-
-      // This can happen in case of dropped prroducts
-      if(!wires.isValid()) continue;
+      // This can fail in the case of dropped products
+      if(!fEvt->getByLabel(tag, wires)) continue;
 
       for(const recob::Wire& rbwire: *wires){
         for(geo::WireID wire: fGeom->ChannelToWire(rbwire.Channel())){
